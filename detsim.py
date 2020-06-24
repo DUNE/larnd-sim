@@ -10,6 +10,7 @@ import skimage.draw
 import scipy.ndimage
 import scipy.stats
 import scipy.signal
+from tqdm import tqdm_notebook as progress_bar
 
 from shapely.geometry import MultiLineString, LineString
 
@@ -24,10 +25,16 @@ TPC_PARAMS = {
     'vdrift': 0.153812, # u.cm / u.us,
     'lifetime': 10e3, # u.us,
     'tpcBorders': ((-150, 150), (-150, 150), (-150, 150)), # u.cm,
-    'timeInterval': (0, 300),
+    'timeInterval': (0, 3000),
     'longDiff': 6.2e-6, # u.cm * u.cm / u.us,
     'tranDiff': 16.3e-6 # u.cm
 }
+
+
+def sigmoid(t, t0, t_rise=1):
+    result = 1 / (1 + np.exp(-(t-t0)/t_rise))
+    return result
+
 
 class Quenching(torch.nn.Module):
     """
@@ -116,15 +123,29 @@ class Drifting(torch.nn.Module):
 
         return x
 
+class Pixel:
+    def __init__(self, id, charge, current):
+        self.id = id
+        self.charge = charge
+        self.current = current
 
 
 class TPC:
+    """This class implements the detector simulation of a pixelated LArTPC.
+    It calculates the charge deposited on each pixel.
 
-    def __init__(self, x_sampling, y_sampling, t_sampling, n_pixels=20, **kwargs):
+    Args:
+        n_pixels (int): number of pixels that tile the anode
+        t_sampling (float): time sampling
+        **kwargs: dictionary containing the tensor indeces
 
-        self.x_sampling = x_sampling
-        self.y_sampling = y_sampling
-        self.t_sampling = t_sampling
+    Attributes:
+        n_pixels (int): number of pixels that tile the anode
+        x_start (float): starting x coordinate of the TPC
+        x_end (float): ending x coordinate of the TPC
+    """
+    def __init__(self, n_pixels=50, t_sampling=0.1, **kwargs):
+
         self.n_pixels = n_pixels
 
         self.x_start = TPC_PARAMS['tpcBorders'][0][0]
@@ -139,12 +160,16 @@ class TPC:
         self.t_end = TPC_PARAMS['timeInterval'][1]
         t_length = self.t_end - self.t_start
 
-        self.anode_x = np.linspace(self.x_start, self.x_end, int(x_length/x_sampling))
-        self.anode_y = np.linspace(self.y_start, self.y_end, int(y_length/y_sampling))
-        self.anode_t = np.linspace(self.t_start, self.t_end, int(t_length/t_sampling))
+        self.x_sampling = x_length/n_pixels/4
+        self.y_sampling = y_length/n_pixels/4
+        self.t_sampling = t_sampling
 
-        self.tpc = np.zeros((int(x_length / x_sampling),
-                             int(y_length / y_sampling),
+        self.anode_x = np.linspace(self.x_start, self.x_end, int(x_length/self.x_sampling))
+        self.anode_y = np.linspace(self.y_start, self.y_end, int(y_length/self.y_sampling))
+        self.anode_t = np.linspace(self.t_start, self.t_end, int(t_length/self.t_sampling))
+
+        self.tpc = np.zeros((int(x_length / self.x_sampling),
+                             int(y_length / self.y_sampling),
                              int(t_length / t_sampling)))
 
         self.ixStart = kwargs['x_start']
@@ -162,11 +187,13 @@ class TPC:
         self.x_pixel_size = x_length / n_pixels
         self.y_pixel_size = y_length / n_pixels
 
-        x_range = np.linspace(0, self.x_pixel_size, int(self.x_pixel_size/x_sampling))
-        y_range = np.linspace(0, self.y_pixel_size, int(self.y_pixel_size/y_sampling))
+        x_range = np.linspace(0, self.x_pixel_size, int(self.x_pixel_size/self.x_sampling))
+        y_range = np.linspace(0, self.y_pixel_size, int(self.y_pixel_size/self.y_sampling))
 
         x_r, y_r, t_r = np.meshgrid(x_range, y_range, self.anode_t)
         self.inducedCurrent = self.currentResponse(x_r, y_r, t_r, t0=t_length/2)
+        self.activePixelsIDs = []
+        self.activePixels = []
 
     @staticmethod
     def currentResponse(x, y, t, A=1, B=5, t0=0):
@@ -176,11 +203,21 @@ class TPC:
 
         return result
 
-    def drawTrack(self, track):
+    def activePixelsResponse(self):
+        for p in progress_bar(self.activePixelsIDs, desc='Calculating pixels response...'):
+            result = self.calculatePixelResponse(p)
+            if result is not False:
+                self.activePixels.append(Pixel(p, result[0], result[1]))
+
+    def depositTrackCharge(self, track):
         t = track
 
-        x1, y1, t1 = t[self.ixStart], t[self.iyStart], t[self.itStart]
-        x2, y2, t2 = t[self.ixEnd], t[self.iyEnd], t[self.itEnd]
+        x1, y1, t1 = t[self.ixStart].numpy() // self.x_sampling * self.x_sampling, \
+                     t[self.iyStart].numpy() // self.x_sampling * self.x_sampling, \
+                     t[self.itStart]
+        x2, y2, t2 = t[self.ixEnd].numpy() // self.x_sampling * self.x_sampling, \
+                     t[self.iyEnd].numpy() // self.x_sampling * self.x_sampling, \
+                     t[self.itEnd]
 
         x_size = math.ceil((x2-x1)/self.x_sampling)
         y_size = math.ceil((y2-y1)/self.y_sampling)
@@ -210,9 +247,13 @@ class TPC:
         y_bin = np.digitize(y1, self.anode_y)
         t_bin = np.digitize(t1, self.anode_t)
 
-        self.tpc[x_bin-1:x_bin+x_size+2*math.ceil(1/self.x_sampling),
-                 y_bin-1:y_bin+y_size+2*math.ceil(1/self.y_sampling),
-                 t_bin-1:t_bin+t_size+2*math.ceil(1/self.t_sampling)] = img
+        self.tpc[x_bin-math.ceil(1/self.x_sampling):x_bin+x_size+math.ceil(1/self.x_sampling)+1,
+                 y_bin-math.ceil(1/self.y_sampling):y_bin+y_size+math.ceil(1/self.y_sampling)+1,
+                 t_bin-math.ceil(1/self.t_sampling):t_bin+t_size+math.ceil(1/self.t_sampling)+1] = img
+
+        pixelsIDs = self.getPixels(track)
+
+        self.activePixelsIDs.extend(pixelsIDs)
 
         return img
 
@@ -231,7 +272,7 @@ class TPC:
 
         grid = MultiLineString(lines)
 
-        xx = np.linspace(track[self.ixStart], track[self.ixEnd], int(track[self.ixEnd]-track[self.ixStart])*100)
+        xx = np.linspace(track[self.ixStart], track[self.ixEnd], int(track[self.ixEnd]-track[self.ixStart])*1000)
         m = (track[self.iyEnd] - track[self.iyStart]) / (track[self.ixEnd] - track[self.ixStart])
         q = (track[self.ixEnd] * track[self.iyStart] - track[self.ixStart] * track[self.iyEnd]) / (track[self.ixEnd] - track[self.ixStart])
         yy = m * xx + q
@@ -245,7 +286,6 @@ class TPC:
             means_y.append(np.mean(y))
 
         binned = scipy.stats.binned_statistic_2d(means_x, means_y, means_x, 'count', bins=[binx, biny])
-
         activePixels = np.nonzero(binned[0])
 
         xx, yy = activePixels
@@ -255,72 +295,25 @@ class TPC:
             neighbors = (x, y), \
                         (x, y + 1), (x + 1, y), \
                         (x, y - 1), (x - 1, y), \
-                        (x + 1, y + 1), (x - 1, y - 1)
-
+                        (x + 1, y + 1), (x - 1, y - 1), \
+                        (x + 1, y - 1), (x - 1, y + 1)
             for ne in neighbors:
                 if ne not in involvedPixels:
                     involvedPixels.append(ne)
 
         return involvedPixels
 
-    def pixelResponse(self, pixel):
+    def calculatePixelResponse(self, pixel):
         x, y = pixel
-        px_bin = int(self.x_pixel_size / self.x_sampling)
-        py_bin = int(self.y_pixel_size / self.y_sampling)
+        px_bin = int(round(self.x_pixel_size / self.x_sampling, 2))
+        py_bin = int(round(self.y_pixel_size / self.y_sampling, 2))
         tpcSlice = self.tpc[x * px_bin:(x + 1) * px_bin, y * py_bin:(y + 1) * py_bin]
-
-        conv3d = scipy.signal.fftconvolve(self.inducedCurrent, tpcSlice, mode='same')
-        depCharge = tpcSlice.sum(axis=0).sum(axis=0)
-        indCurrent = conv3d.sum(axis=0).sum(axis=0)
-
-        return depCharge, indCurrent
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    import pickle
-
-    tracks = pickle.load(open('tracks.p', 'rb'))
-    tracks['t'] = 0
-    tracks['t_start'] = 0
-    tracks['t_end'] = 0
-
-    tracks['dx'] = np.sqrt(pow(tracks['x_end']-tracks['x_start'], 2) +
-                        pow(tracks['y_end']-tracks['y_start'], 2) +
-                        pow(tracks['z_end']-tracks['z_start'], 2))
-    tracks['x'] = (tracks['x_end']+tracks['x_start'])/2
-    tracks['y'] = (tracks['y_end']+tracks['y_start'])/2
-    tracks['z'] = (tracks['z_end']+tracks['z_start'])/2
-    tracks['dE'] = np.abs(tracks['dE'])*1e3
-    tracks['dEdx'] = tracks['dE']/tracks['dx']
-    tracks['NElectrons'] = 0
-    tracks['longDiff'] = 0
-    tracks['tranDiff'] = 0
-
-    indeces = {c:i for i, c, in enumerate(tracks.columns)}
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    track_tensor = torch.tensor(tracks.values).to(device)
-
-    quenching = Quenching(**indeces)
-    quenchedTracks = quenching(track_tensor)
-
-    drifting = Drifting(**indeces)
-    driftedTracks = drifting(quenchedTracks)
-
-    selectedTracks = driftedTracks[driftedTracks[:, indeces['trackID']] < 100]
-
-    tpc = TPC(0.5, 0.5, 0.05, **indeces)
-    tpc.drawTrack(selectedTracks[0])
-
-    pixels = tpc.getPixels(driftedTracks[0])
-    for p in pixels:
-        depCharge, indCurrent = tpc.pixelResponse(p)
-
-        t_sampling = 0.05
-        anode_t = np.linspace(0, 300, int(300 / t_sampling))
-        if depCharge.any():
-            fig, ax = plt.subplots(1, 1)
-            ax.plot(anode_t, depCharge*1e4)
-            ax.plot(anode_t, indCurrent)
-            ax.set_xlim(200, 300)
+        if tpcSlice.any():
+            depCharge = tpcSlice.sum(axis=0).sum(axis=0)
+            conv3d = scipy.signal.fftconvolve(self.inducedCurrent, tpcSlice, mode='same') * self.x_sampling * self.y_sampling * self.t_sampling
+            indCurrent = conv3d.sum(axis=0).sum(axis=0)
+            # feeResponse = scipy.signal.fftconvolve(sigmoid(self.anode_t, (self.t_end-self.t_start)/2, 1), indCurrent, mode='same') * self.t_sampling
+            # voltage = np.gradient(feeResponse, self.t_sampling)
+            return depCharge, indCurrent
+        else:
+            return False
