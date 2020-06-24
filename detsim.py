@@ -140,7 +140,7 @@ class TPC:
         **kwargs: dictionary containing the tensor indeces
 
     Attributes:
-        n_pixels (int): number of pixels that tile the anode
+        n_pixels (int): number of pixels per axis that tile the anode
         x_start (float): starting x coordinate of the TPC
         x_end (float): ending x coordinate of the TPC
     """
@@ -317,3 +317,8 @@ class TPC:
             return depCharge, indCurrent
         else:
             return False
+
+    def getPixelFromCoordinates(self, x, y):
+        x_pixel = np.linspace(self.x_start, self.x_end, self.n_pixels)
+        y_pixel = np.linspace(self.y_start, self.y_end, self.n_pixels)
+        return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
