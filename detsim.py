@@ -3,17 +3,15 @@
 Detector simulation module
 """
 
-import math
 import torch
 import numpy as np
-import skimage.draw
-import scipy.ndimage
 import scipy.stats
-import scipy.signal
+
+from math import pi, sqrt
+from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
 
 from shapely.geometry import MultiLineString, LineString
-
 
 PHYSICAL_PARAMS = {
     'MeVToElectrons': 4.237e+04,
@@ -32,8 +30,54 @@ TPC_PARAMS = {
 
 
 def sigmoid(t, t0, t_rise=1):
+    """Sigmoid function for FEE response"""
     result = 1 / (1 + np.exp(-(t-t0)/t_rise))
     return result
+
+
+class TrackCharge:
+    """Track charge deposition"""
+
+    def __init__(self, Q, xs, xe, ys, ye, zs, ze, sigmas):
+        self.Deltax = xe-xs
+        self.Deltay = ye-ys
+        self.Deltaz = ze-zs
+
+        self.xs = xs
+        self.ys = ys
+        self.zs = zs
+        self.xe = xe
+        self.ye = ye
+        self.ze = ze
+
+        self.Deltar = np.sqrt(self.Deltax**2+self.Deltay**2+self.Deltaz**2)
+        self.sigmas = sigmas
+        self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(2*pi*2*pi*2*pi))
+
+        self.a = ((self.Deltax/self.Deltar)**2/(2*sigmas[0]**2) + \
+                  (self.Deltay/self.Deltar)**2/(2*sigmas[1]**2) + \
+                  (self.Deltaz/self.Deltar)**2/(2*sigmas[2]**2))
+
+    def _b(self, x, y, z):
+        return -((x-self.xs)/(self.sigmas[0]**2)*(self.Deltax/self.Deltar) + \
+                 (y-self.ys)/(self.sigmas[1]**2)*(self.Deltay/self.Deltar) + \
+                 (z-self.zs)/(self.sigmas[2]**2)*(self.Deltaz/self.Deltar))
+
+    def rho(self, x, y, z):
+        """Charge distribution in space"""
+        b = self._b(x, y, z)
+        sqrt_a_2 = 2*np.sqrt(self.a)
+
+        expo = np.exp(b*b/(4*self.a) - \
+                      ((x-self.xs)**2/(2*self.sigmas[0]*self.sigmas[0]) + \
+                       (y-self.ys)**2/(2*self.sigmas[1]*self.sigmas[1]) + \
+                       (z-self.zs)**2/(2*self.sigmas[2]*self.sigmas[2])))
+
+        integral = sqrt(pi) * \
+                   (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2)) / \
+                   sqrt_a_2
+
+        return integral*expo*self.factor
 
 
 class Quenching(torch.nn.Module):
@@ -60,7 +104,8 @@ class Quenching(torch.nn.Module):
         add_columns = torch.nn.ZeroPad2d((0, 1, 0, 0))
         x = add_columns(x)
 
-        recomb = torch.log(PHYSICAL_PARAMS['alpha'] + PHYSICAL_PARAMS['beta'] * x[:, self.idEdx]) / (PHYSICAL_PARAMS['beta'] * x[:, self.idEdx])
+        recomb = torch.log(PHYSICAL_PARAMS['alpha'] + PHYSICAL_PARAMS['beta'] * x[:, self.idEdx]) \
+                 / (PHYSICAL_PARAMS['beta'] * x[:, self.idEdx])
         recomb = torch.where(recomb <= 0, torch.zeros_like(recomb), recomb)
         recomb = torch.where(torch.isnan(recomb), torch.zeros_like(recomb), recomb)
         x[:, self.iNElectrons] = PHYSICAL_PARAMS['MeVToElectrons'] * x[:, self.idE] * recomb
@@ -118,18 +163,17 @@ class Drifting(torch.nn.Module):
         x[:, self.iLongDiff] = torch.sqrt(driftTime) * TPC_PARAMS['longDiff']
         x[:, self.iTranDiff] = torch.sqrt(driftTime) * TPC_PARAMS['tranDiff']
         x[:, self.it] += driftTime + x[:, self.iTranDiff] / TPC_PARAMS['vdrift']
-        x[:, self.itStart] += driftStart + x[:, self.iTranDiff] / TPC_PARAMS['vdrift']
-        x[:, self.itEnd] += driftEnd + x[:, self.iTranDiff] / TPC_PARAMS['vdrift']
+        x[:, self.itStart] += (driftStart + x[:, self.iTranDiff]) / TPC_PARAMS['vdrift']
+        x[:, self.itEnd] += (driftEnd + x[:, self.iTranDiff]) / TPC_PARAMS['vdrift']
 
         return x
 
 class PixelSignal:
-    def __init__(self, id, charge, current, time_interval):
-        self.id = id
-        self.charge = charge
+    """Signal induced on pixel at a given time interval"""
+    def __init__(self, pID, current, time_interval):
+        self.id = pID
         self.current = current
         self.time_interval = time_interval
-
 
 class TPC:
     """This class implements the detector simulation of a pixelated LArTPC.
@@ -184,6 +228,7 @@ class TPC:
         self.iNElectrons = kwargs['NElectrons']
         self.iLongDiff = kwargs['longDiff']
         self.iTranDiff = kwargs['tranDiff']
+        self.iTrackID = kwargs['trackID']
 
         self.x_pixel_size = x_length / n_pixels
         self.y_pixel_size = y_length / n_pixels
@@ -194,97 +239,111 @@ class TPC:
         self.activePixels = {}
 
     @staticmethod
-    def currentResponse(x, y, t, A=1, B=5, t0=0):
-        distance = 1#np.sqrt((x-pixel_size/2)**2+(y-pixel_size/2)**2)
-        result = np.heaviside(-t + t0, 0.5) * A * np.exp((1 + distance) * (t - t0) / B)
+    def currentResponse(t, A=1, B=5, t0=0):
+        """Current response parametrization"""
+        result = np.heaviside(-t + t0, 0.5) * A * np.exp((t - t0) / B)
         result = np.nan_to_num(result)
 
         return result
 
+    @staticmethod
+    def distanceAttenuation(distances, t, B=5, t0=0):
+        """Attenuation of the signal"""
+        return np.exp(np.outer(distances, t-t0) / B)
 
-    def depositTrackCharge(self, track):
-        t = track
+    def getZInterval(self, track, pID):
+        """Here we calculate the interval in Z for the pixel pID
+        using the impact factor"""
+        xs, xe = track[self.ixStart], track[self.ixEnd]
+        ys, ye = track[self.iyStart], track[self.iyEnd]
+        zs, ze = track[self.izStart], track[self.izEnd]
+        length = np.sqrt((xe - xs)**2 + (ye - ys)**2 + (ze - zs)**2)
+        trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-        # Ugly rounding procedure to avoid floating-point error FIXME
-        x1, y1, t1 = round(t[self.ixStart].numpy() // self.x_sampling * self.x_sampling, 1), \
-                     round(t[self.iyStart].numpy() // self.x_sampling * self.x_sampling, 1), \
-                     round(t[self.itStart].numpy() // self.t_sampling * self.t_sampling, 1)
-        x2, y2, t2 = round(t[self.ixEnd].numpy() // self.x_sampling * self.x_sampling, 1), \
-                     round(t[self.iyEnd].numpy() // self.x_sampling * self.x_sampling, 1), \
-                     round(t[self.itEnd].numpy() // self.t_sampling * self.t_sampling, 1)
+        x_p = pID[0]*self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size/2
+        y_p = pID[1]*self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size/2
 
-        x_size = math.ceil((x2-x1)/self.x_sampling)
-        y_size = math.ceil((y2-y1)/self.y_sampling)
-        t_size = math.ceil((t2-t1)/self.t_sampling)
+        m = (ye - ys) / (xe - xs)
+        q = (xe * ys - xs * ye) / (xe - xs)
 
+        a, b, c = m, -1, q
+
+        x_poca = (b*(b*x_p-a*y_p) - a*c)/(a*a+b*b)
+        l = (x_poca-xs)/trackDir[0]
+
+        doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
+        tolerance = 1.5*np.sqrt(self.x_pixel_size**2+self.y_pixel_size**2)
+        plusDeltaZ, minusDeltaZ = 0, 0
+
+        if tolerance > doca:
+            length2D = np.sqrt((xe-xs)**2+(ye-ys)**2)
+            dir2D = (xe-xs)/length2D, (ye-ys)/length2D
+            deltaL2D = np.sqrt(tolerance**2-doca**2)
+            x_plusDeltaL = x_poca + deltaL2D*dir2D[0]
+            x_minusDeltaL = x_poca - deltaL2D*dir2D[0]
+            plusDeltaL = (x_plusDeltaL - xs)/trackDir[0]
+            minusDeltaL = (x_minusDeltaL - xs)/trackDir[0]
+            plusDeltaZ = min(zs + trackDir[2] * plusDeltaL, ze)
+            minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL)
+
+        return minusDeltaZ, plusDeltaZ
+
+    def calculateCurrent(self, track):
         pixelsIDs = self.getPixels(track)
-        pixel_sampling = (self.x_end-self.x_start) / self.n_pixels
 
-        firstPixel = np.min(pixelsIDs,axis=0)
-        lastPixel = np.max(pixelsIDs,axis=0)
+        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
+        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
+        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        length = np.sqrt((xe-xs)**2+(ye-ys)**2+(ze-zs)**2)
+        direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-        x1_pixel, y1_pixel = firstPixel * pixel_sampling + self.x_start
-        x2_pixel, y2_pixel = lastPixel * pixel_sampling + self.x_start
+        trackCharge = TrackCharge(track[self.iNElectrons].numpy(),
+                                  xs, xe,
+                                  ys, ye,
+                                  zs, ze,
+                                  sigmas=[track[self.iTranDiff].item()*100,
+                                          track[self.iTranDiff].item()*100,
+                                          track[self.iLongDiff].item()*100])
 
-        padding_left = int(round((x1-x1_pixel)/self.x_sampling))
-        padding_right = int(round((x2_pixel-x2)/self.x_sampling))
-        padding_bottom = int(round((y1-y1_pixel)/self.y_sampling))
-        padding_top = int(round((y2_pixel-y2)/self.y_sampling))
-        padding_before = padding_after = math.ceil(2/self.t_sampling)
+        x = np.linspace((xe+xs)/2 - self.x_pixel_size * 2, (xe + xs) / 2 + self.x_pixel_size * 2, 10)
+        y = np.linspace((ye+ys)/2 - self.x_pixel_size * 2, (ye + ys) / 2 + self.x_pixel_size * 2, 10)
+        z = (ze+zs)/2
 
-        t_start = np.digitize(t1, self.anode_t)
-        t_end = np.digitize(t2, self.anode_t)
+        xv, yv, zv = np.meshgrid(x, y, z)
+        weights = trackCharge.rho(xv, yv, zv)
+        weights_flat = weights.ravel()
 
-        line = skimage.draw.line_nd((0, 0, 0),
-                                    ((x2 - x1) / self.x_sampling,
-                                     (y2 - y1) / self.y_sampling,
-                                     t_start - t_end),
-                                    endpoint=True)
+        t_start = int(track[self.itStart]-20)
+        t_end = int(track[self.itEnd]+20)
+        t_length = (t_end-t_start) // self.t_sampling * self.t_sampling
+        time_interval = np.linspace(t_start, t_end, int(t_length/self.t_sampling))
 
-        img = np.zeros((x_size + 1, y_size + 1, t_size + 1),
-                       dtype=np.float32)
+        for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
+            pID = (pixelID[0], pixelID[1])
+            z_start, z_end = self.getZInterval(track, pID)
+            signal = np.zeros_like(time_interval)
 
-        img[line] = t[self.iNElectrons]/len(line[0])
+            x_p = pID[0] * self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size / 2
+            y_p = pID[1] * self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
 
-        img = np.pad(img,
-                     ((padding_left, padding_right),
-                      (padding_bottom, padding_top),
-                      (padding_before, padding_after)),
-                     mode='constant')
+            for z in np.linspace(z_start, z_end, int((z_end-z_start)*10)):
+                t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
+                l = (z - zs) / direction[2]
+                x = xs + direction[0] * l
+                y = ys + direction[1] * l
+                x = np.linspace(x - self.x_pixel_size * 2, x + self.x_pixel_size * 2, 10)
+                y = np.linspace(y - self.y_pixel_size * 2, y + self.y_pixel_size * 2, 10)
+                xv, yv = np.meshgrid(x, y)
+                signals = np.outer(weights_flat, self.currentResponse(time_interval, t0=t0))
+                distances = np.sqrt((xv - x_p)**2 + (yv - y_p)**2)
+                signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
+                signal += np.sum(signals, axis=0)
 
-        img = scipy.ndimage.gaussian_filter(img, sigma=(t[self.iTranDiff].item()*2000,
-                                                        t[self.iTranDiff].item()*2000,
-                                                        t[self.iLongDiff].item()*1000))
+            if pID in self.activePixels:
+                self.activePixels[pID].append(PixelSignal(pID, signal, (t_start, t_end)))
+            else:
+                self.activePixels[pID] = [PixelSignal(pID, signal, (t_start, t_end))]
 
-        t_start -= padding_before
-        t_end += padding_after
-        pixel_size_sampling = self.x_pixel_size/self.x_sampling
-
-        for p in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
-            ix1 = int((p[0]-firstPixel[0])*pixel_size_sampling)
-            ix2 = int((p[0]+1-firstPixel[0])*pixel_size_sampling)
-            iy1 = int((p[1]-firstPixel[1])*pixel_size_sampling)
-            iy2 = int((p[1]+1-firstPixel[1])*pixel_size_sampling)
-
-            img_slice = img[ix1:ix2, iy1:iy2]
-            pixelID = (p[0], p[1])
-
-            if img_slice.any():
-                dep_charge = img_slice.sum(axis=0).sum(axis=0)
-
-                t_range = np.linspace(0, img.shape[2], img.shape[2])
-                x_r, y_r, t_r = np.meshgrid(self.x_pixel_range, self.y_pixel_range, t_range)
-
-                response = self.currentResponse(x_r, y_r, t_r, t0=img.shape[2]/2)
-                conv3d = scipy.signal.fftconvolve(response, img_slice, mode='same') * self.x_sampling * self.y_sampling * self.t_sampling
-
-                ind_current = conv3d.sum(axis=0).sum(axis=0)
-                if pixelID in self.activePixels:
-                    self.activePixels[pixelID].append(PixelSignal(pixelID, dep_charge, ind_current, (t_start, t_end)))
-                else:
-                    self.activePixels[pixelID] = [PixelSignal(pixelID, dep_charge, ind_current, (t_start, t_end))]
-
-        return img
 
     def getPixels(self, track):
         n = self.n_pixels+1
@@ -334,14 +393,12 @@ class TPC:
 
     def getPixelResponse(self, pixelID):
         pixelSignals = self.activePixels[pixelID]
-        charge = np.zeros_like(self.anode_t)
         current = np.zeros_like(self.anode_t)
 
         for signal in pixelSignals:
-            charge[signal.time_interval[0]:signal.time_interval[1]+1] += signal.charge
-            current[signal.time_interval[0]:signal.time_interval[1]+1] += signal.current
+            current[(self.anode_t >= signal.time_interval[0]) & (self.anode_t <= signal.time_interval[1])] += signal.current
 
-        return charge, current
+        return current
 
     def getPixelFromCoordinates(self, x, y):
         x_pixel = np.linspace(self.x_start, self.x_end, self.n_pixels)
