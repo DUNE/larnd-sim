@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import scipy.stats
 
-from math import pi, sqrt
+from math import pi, sqrt, ceil
 from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
 
@@ -254,10 +254,10 @@ class TPC:
     def getZInterval(self, track, pID):
         """Here we calculate the interval in Z for the pixel pID
         using the impact factor"""
-        xs, xe = track[self.ixStart], track[self.ixEnd]
-        ys, ye = track[self.iyStart], track[self.iyEnd]
-        zs, ze = track[self.izStart], track[self.izEnd]
-        length = np.sqrt((xe - xs)**2 + (ye - ys)**2 + (ze - zs)**2)
+        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
+        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
+        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        length = np.sqrt((xe - xs)*(xe - xs) + (ye - ys)*(ye - ys) + (ze - zs)*(ze - zs))
         trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
         x_p = pID[0]*self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size/2
@@ -294,6 +294,7 @@ class TPC:
         xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
         ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
         zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+
         length = np.sqrt((xe-xs)**2+(ye-ys)**2+(ze-zs)**2)
         direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
@@ -305,13 +306,15 @@ class TPC:
                                           track[self.iTranDiff].item()*100,
                                           track[self.iLongDiff].item()*100])
 
+        endcap_size = 3*track[self.iLongDiff].item()*100
         x = np.linspace((xe+xs)/2 - self.x_pixel_size * 2, (xe + xs) / 2 + self.x_pixel_size * 2, 10)
         y = np.linspace((ye+ys)/2 - self.x_pixel_size * 2, (ye + ys) / 2 + self.x_pixel_size * 2, 10)
         z = (ze+zs)/2
 
+        z_sampling = self.t_sampling * TPC_PARAMS['vdrift']
         xv, yv, zv = np.meshgrid(x, y, z)
         weights = trackCharge.rho(xv, yv, zv)
-        weights_flat = weights.ravel()
+        weights_bulk = weights.ravel()
 
         t_start = int(track[self.itStart]-20)
         t_end = int(track[self.itEnd]+20)
@@ -326,24 +329,37 @@ class TPC:
             x_p = pID[0] * self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size / 2
             y_p = pID[1] * self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
 
-            for z in np.linspace(z_start, z_end, int((z_end-z_start)*10)):
-                t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
+            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
+            for z in z_range:
                 l = (z - zs) / direction[2]
-                x = xs + direction[0] * l
-                y = ys + direction[1] * l
-                x = np.linspace(x - self.x_pixel_size * 2, x + self.x_pixel_size * 2, 10)
-                y = np.linspace(y - self.y_pixel_size * 2, y + self.y_pixel_size * 2, 10)
-                xv, yv = np.meshgrid(x, y)
-                signals = np.outer(weights_flat, self.currentResponse(time_interval, t0=t0))
-                distances = np.sqrt((xv - x_p)**2 + (yv - y_p)**2)
-                signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
-                signal += np.sum(signals, axis=0)
+                xl = xs + l * direction[0]
+                yl = ys + l * direction[1]
+                xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
+                yy = np.linspace(yl - self.x_pixel_size * 2, yl + self.x_pixel_size * 2, 10)
+                xv, yv, zv = np.meshgrid(xx, yy, z)
+
+                weights_slice = weights_bulk
+
+                if z < zs + endcap_size:
+                    weights_slice = trackCharge.rho(xv, yv, zv).ravel()
+                elif z > ze - endcap_size:
+                    weights_slice = trackCharge.rho(xv, yv, zv).ravel()
+
+                signals = self._getSlicesSignal(x_p, y_p, z, weights_slice, xv, yv, time_interval)
+                signal += np.sum(signals, axis=0) * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
 
             if pID in self.activePixels:
                 self.activePixels[pID].append(PixelSignal(pID, signal, (t_start, t_end)))
             else:
                 self.activePixels[pID] = [PixelSignal(pID, signal, (t_start, t_end))]
 
+    def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
+        t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
+        signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
+        distances = np.sqrt((xv - x_p)**2 + (yv - y_p)**2)
+        signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
+
+        return signals
 
     def getPixels(self, track):
         n = self.n_pixels+1
@@ -360,7 +376,7 @@ class TPC:
 
         grid = MultiLineString(lines)
 
-        xx = np.linspace(track[self.ixStart], track[self.ixEnd], int(track[self.ixEnd]-track[self.ixStart])*1000)
+        xx = np.linspace(track[self.ixStart], track[self.ixEnd], int((track[self.ixEnd]-track[self.ixStart])/self.x_sampling))
         m = (track[self.iyEnd] - track[self.iyStart]) / (track[self.ixEnd] - track[self.ixStart])
         q = (track[self.ixEnd] * track[self.iyStart] - track[self.ixStart] * track[self.iyEnd]) / (track[self.ixEnd] - track[self.ixStart])
         yy = m * xx + q
