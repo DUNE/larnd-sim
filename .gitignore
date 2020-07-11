@@ -1,7 +1,7 @@
 *.egg-info
 build
 dist
-*.ipynb*
+*.ipynb_checkpoints*
 __pycache__
 *.mypy_cache
 *.virtual_documents
