@@ -10,7 +10,7 @@ import scipy.stats
 from math import pi, sqrt, ceil
 from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
-
+import skimage.draw
 from shapely.geometry import MultiLineString, LineString
 
 PHYSICAL_PARAMS = {
@@ -330,6 +330,9 @@ class TPC:
             y_p = pID[1] * self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
 
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
+            if len(z_range) == 1:
+                continue
+
             for z in z_range:
                 l = (z - zs) / direction[2]
                 xl = xs + l * direction[0]
@@ -362,35 +365,16 @@ class TPC:
         return signals
 
     def getPixels(self, track):
-        n = self.n_pixels+1
+        s = (track[self.ixStart], track[self.iyStart])
+        e = (track[self.ixEnd], track[self.iyEnd])
 
-        lines = []
-        binx = np.linspace(self.x_start, self.x_end, n)
-        biny = np.linspace(self.y_start, self.y_end, n)
+        start_pixel =  (int((s[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
+                        int((s[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
 
-        for x in binx:
-            lines.append(((x, self.y_start), (x, self.y_end)))
+        end_pixel = (int((e[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
+                     int((e[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
 
-        for y in biny:
-            lines.append(((self.x_start, y), (self.x_end, y)))
-
-        grid = MultiLineString(lines)
-
-        xx = np.linspace(track[self.ixStart], track[self.ixEnd], int((track[self.ixEnd]-track[self.ixStart])/self.x_sampling))
-        m = (track[self.iyEnd] - track[self.iyStart]) / (track[self.ixEnd] - track[self.ixStart])
-        q = (track[self.ixEnd] * track[self.iyStart] - track[self.ixStart] * track[self.iyEnd]) / (track[self.ixEnd] - track[self.ixStart])
-        yy = m * xx + q
-
-        line = LineString(np.c_[xx, yy])
-        means_x = []
-        means_y = []
-        for segment in line.difference(grid):
-            x, y = segment.xy
-            means_x.append(np.mean(x))
-            means_y.append(np.mean(y))
-
-        binned = scipy.stats.binned_statistic_2d(means_x, means_y, means_x, 'count', bins=[binx, biny])
-        activePixels = np.nonzero(binned[0])
+        activePixels = skimage.draw.line(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1])
 
         xx, yy = activePixels
         involvedPixels = []
@@ -406,6 +390,7 @@ class TPC:
                     involvedPixels.append(ne)
 
         return np.array(involvedPixels)
+
 
     def getPixelResponse(self, pixelID):
         pixelSignals = self.activePixels[pixelID]
