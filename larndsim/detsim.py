@@ -11,23 +11,8 @@ from math import pi, sqrt, ceil
 from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
 import skimage.draw
-from shapely.geometry import MultiLineString, LineString
 
-PHYSICAL_PARAMS = {
-    'MeVToElectrons': 4.237e+04,
-    'alpha': 0.847,
-    'beta': 0.2061
-}
-
-TPC_PARAMS = {
-    'vdrift': 0.153812, # u.cm / u.us,
-    'lifetime': 10e3, # u.us,
-    'tpcBorders': ((-150, 150), (-150, 150), (-150, 150)), # u.cm,
-    'timeInterval': (0, 3000),
-    'longDiff': 6.2e-6, # u.cm * u.cm / u.us,
-    'tranDiff': 16.3e-6 # u.cm
-}
-
+from . consts import TPC_PARAMS, PHYSICAL_PARAMS
 
 def sigmoid(t, t0, t_rise=1):
     """Sigmoid function for FEE response"""
