@@ -35,18 +35,20 @@ class TrackCharge:
         self.ye = ye
         self.ze = ze
 
-        self.Deltar = np.sqrt(self.Deltax**2+self.Deltay**2+self.Deltaz**2)
+        self.Deltar = np.sqrt(self.Deltax * self.Deltax + \
+                              self.Deltay * self.Deltay + \
+                              self.Deltaz * self.Deltaz)
         self.sigmas = sigmas
-        self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(2*pi*2*pi*2*pi))
+        self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
 
-        self.a = ((self.Deltax/self.Deltar)**2/(2*sigmas[0]**2) + \
-                  (self.Deltay/self.Deltar)**2/(2*sigmas[1]**2) + \
-                  (self.Deltaz/self.Deltar)**2/(2*sigmas[2]**2))
+        self.a = ((self.Deltax/self.Deltar) * (self.Deltax/self.Deltar) / (2*sigmas[0]*sigmas[0]) + \
+                  (self.Deltay/self.Deltar) * (self.Deltay/self.Deltar) / (2*sigmas[1]*sigmas[1]) + \
+                  (self.Deltaz/self.Deltar) * (self.Deltaz/self.Deltar) / (2*sigmas[2]*sigmas[2]))
 
     def _b(self, x, y, z):
-        return -((x-self.xs)/(self.sigmas[0]**2)*(self.Deltax/self.Deltar) + \
-                 (y-self.ys)/(self.sigmas[1]**2)*(self.Deltay/self.Deltar) + \
-                 (z-self.zs)/(self.sigmas[2]**2)*(self.Deltaz/self.Deltar))
+        return -((x-self.xs) / (self.sigmas[0]*self.sigmas[0]) * (self.Deltax/self.Deltar) + \
+                 (y-self.ys) / (self.sigmas[1]*self.sigmas[1]) * (self.Deltay/self.Deltar) + \
+                 (z-self.zs) / (self.sigmas[2]*self.sigmas[2]) * (self.Deltaz/self.Deltar))
 
     def rho(self, x, y, z):
         """Charge distribution in space"""
@@ -54,9 +56,9 @@ class TrackCharge:
         sqrt_a_2 = 2*np.sqrt(self.a)
 
         expo = np.exp(b*b/(4*self.a) - \
-                      ((x-self.xs)**2/(2*self.sigmas[0]*self.sigmas[0]) + \
-                       (y-self.ys)**2/(2*self.sigmas[1]*self.sigmas[1]) + \
-                       (z-self.zs)**2/(2*self.sigmas[2]*self.sigmas[2])))
+                      ((x-self.xs)*(x-self.xs)/(2*self.sigmas[0]*self.sigmas[0]) + \
+                       (y-self.ys)*(y-self.ys)/(2*self.sigmas[1]*self.sigmas[1]) + \
+                       (z-self.zs)*(z-self.zs)/(2*self.sigmas[2]*self.sigmas[2])))
 
         integral = sqrt(pi) * \
                    (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2)) / \
@@ -257,13 +259,13 @@ class TPC:
         l = (x_poca-xs)/trackDir[0]
 
         doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
-        tolerance = 1.5*np.sqrt(self.x_pixel_size**2+self.y_pixel_size**2)
+        tolerance = 1.5*np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2)
         plusDeltaZ, minusDeltaZ = 0, 0
 
         if tolerance > doca:
-            length2D = np.sqrt((xe-xs)**2+(ye-ys)**2)
+            length2D = np.sqrt((xe-xs)**2 + (ye-ys)**2)
             dir2D = (xe-xs)/length2D, (ye-ys)/length2D
-            deltaL2D = np.sqrt(tolerance**2-doca**2)
+            deltaL2D = np.sqrt(tolerance**2 - doca**2)
             x_plusDeltaL = x_poca + deltaL2D*dir2D[0]
             x_minusDeltaL = x_poca - deltaL2D*dir2D[0]
             plusDeltaL = (x_plusDeltaL - xs)/trackDir[0]
@@ -280,7 +282,7 @@ class TPC:
         ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
         zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
 
-        length = np.sqrt((xe-xs)**2+(ye-ys)**2+(ze-zs)**2)
+        length = np.sqrt((xe-xs)*(xe-xs) + (ye-ys)*(ye-ys) + (ze-zs)*(ze-zs))
         direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
         trackCharge = TrackCharge(track[self.iNElectrons].numpy(),
@@ -344,7 +346,7 @@ class TPC:
     def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
         signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
-        distances = np.sqrt((xv - x_p)**2 + (yv - y_p)**2)
+        distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
         signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
 
         return signals
@@ -353,13 +355,14 @@ class TPC:
         s = (track[self.ixStart], track[self.iyStart])
         e = (track[self.ixEnd], track[self.iyEnd])
 
-        start_pixel =  (int((s[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
-                        int((s[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
+        start_pixel = (int((s[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
+                       int((s[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
 
         end_pixel = (int((e[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
                      int((e[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
 
-        activePixels = skimage.draw.line(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1])
+        activePixels = skimage.draw.line(start_pixel[0], start_pixel[1],
+                                         end_pixel[0], end_pixel[1])
 
         xx, yy = activePixels
         involvedPixels = []
