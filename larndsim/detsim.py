@@ -303,10 +303,10 @@ class TPC:
         weights = trackCharge.rho(xv, yv, zv)
         weights_bulk = weights.ravel()
 
-        t_start = int(track[self.itStart]-20)
-        t_end = int(track[self.itEnd]+20)
-        t_length = (t_end-t_start) // self.t_sampling * self.t_sampling
-        time_interval = np.linspace(t_start, t_end, int(t_length/self.t_sampling))
+        t_start = (track[self.itStart].numpy()-20) // self.t_sampling * self.t_sampling
+        t_end = (track[self.itEnd].numpy()+20) // self.t_sampling * self.t_sampling
+        t_length = t_end-t_start
+        time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 
         for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
             pID = (pixelID[0], pixelID[1])
@@ -317,6 +317,7 @@ class TPC:
             y_p = pID[1] * self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
 
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
+
             if len(z_range) == 1:
                 continue
 
