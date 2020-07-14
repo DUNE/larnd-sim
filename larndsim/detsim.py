@@ -228,7 +228,7 @@ class TPC:
     @staticmethod
     def currentResponse(t, A=1, B=5, t0=0):
         """Current response parametrization"""
-        result = np.heaviside(-t + t0, 0.5) * A * np.exp((t - t0) / B)
+        result = np.heaviside((-t.T + t0).T, 0.5) * A * np.exp((t.T - t0).T / B)
         result = np.nan_to_num(result)
 
         return result
@@ -236,7 +236,7 @@ class TPC:
     @staticmethod
     def distanceAttenuation(distances, t, B=5, t0=0):
         """Attenuation of the signal"""
-        return np.exp(np.outer(distances, t-t0) / B)
+        return np.exp(np.outer(distances, ((t.T-t0).T) / B))
 
     def getZInterval(self, track, pID):
         """Here we calculate the interval in Z for the pixel pID
@@ -295,7 +295,7 @@ class TPC:
 
         endcap_size = 3*track[self.iLongDiff].item()*100
         x = np.linspace((xe+xs)/2 - self.x_pixel_size * 2, (xe + xs) / 2 + self.x_pixel_size * 2, 10)
-        y = np.linspace((ye+ys)/2 - self.x_pixel_size * 2, (ye + ys) / 2 + self.x_pixel_size * 2, 10)
+        y = np.linspace((ye+ys)/2 - self.y_pixel_size * 2, (ye + ys) / 2 + self.y_pixel_size * 2, 10)
         z = (ze+zs)/2
 
         z_sampling = self.t_sampling * TPC_PARAMS['vdrift']
@@ -326,7 +326,7 @@ class TPC:
                 xl = xs + l * direction[0]
                 yl = ys + l * direction[1]
                 xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
-                yy = np.linspace(yl - self.x_pixel_size * 2, yl + self.x_pixel_size * 2, 10)
+                yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, 10)
                 xv, yv, zv = np.meshgrid(xx, yy, z)
 
                 weights_slice = weights_bulk
@@ -344,10 +344,12 @@ class TPC:
             else:
                 self.activePixels[pID] = [PixelSignal(pID, signal, (t_start, t_end))]
 
+
     def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
         signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
         distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
+
         signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
 
         return signals
