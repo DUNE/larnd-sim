@@ -39,11 +39,20 @@ class TrackCharge:
                               self.Deltay * self.Deltay + \
                               self.Deltaz * self.Deltaz)
         self.sigmas = sigmas
+        self.Q = Q
         self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
 
         self.a = ((self.Deltax/self.Deltar) * (self.Deltax/self.Deltar) / (2*sigmas[0]*sigmas[0]) + \
                   (self.Deltay/self.Deltar) * (self.Deltay/self.Deltar) / (2*sigmas[1]*sigmas[1]) + \
                   (self.Deltaz/self.Deltar) * (self.Deltaz/self.Deltar) / (2*sigmas[2]*sigmas[2]))
+
+    def __repr__(self):
+        instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f), (%f, %f), (%f, %f)\nsigmas (%f, %f, %f)" % \
+                               (self.__class__.__name__, id(self),
+                                self.Q,
+                                self.xs, self.xe, self.ys, self.ye, self.zs, self.ze,
+                                *self.sigmas)
+        return instanceDescription
 
     def _b(self, x, y, z):
         return -((x-self.xs) / (self.sigmas[0]*self.sigmas[0]) * (self.Deltax/self.Deltar) + \
