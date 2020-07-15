@@ -13,9 +13,9 @@ from tqdm import tqdm_notebook as progress_bar
 import skimage.draw
 import numba as nb
 
-import consts
-import drifting
-import quenching
+from . import consts
+from . import drifting
+from . import quenching
 #from . consts import TPC_PARAMS, PHYSICAL_PARAMS
 
 def sigmoid(t, t0, t_rise=1):
@@ -168,9 +168,9 @@ class TPC:
     def getZInterval(self, track, pID):
         """Here we calculate the interval in Z for the pixel pID
         using the impact factor"""
-        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
-        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
-        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        xs, xe = track[self.ixStart], track[self.ixEnd]
+        ys, ye = track[self.iyStart], track[self.iyEnd]
+        zs, ze = track[self.izStart], track[self.izEnd]
         length = np.sqrt((xe - xs)*(xe - xs) + (ye - ys)*(ye - ys) + (ze - zs)*(ze - zs))
         trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
@@ -205,14 +205,14 @@ class TPC:
     def calculateCurrent(self, track):
         pixelsIDs = self.getPixels(track)
 
-        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
-        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
-        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        xs, xe = track[self.ixStart], track[self.ixEnd]
+        ys, ye = track[self.iyStart], track[self.iyEnd]
+        zs, ze = track[self.izStart], track[self.izEnd]
 
         length = np.sqrt((xe-xs)*(xe-xs) + (ye-ys)*(ye-ys) + (ze-zs)*(ze-zs))
         direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-        trackCharge = TrackCharge(track[self.iNElectrons].numpy(),
+        trackCharge = TrackCharge(track[self.iNElectrons],
                                   xs, xe,
                                   ys, ye,
                                   zs, ze,
@@ -230,8 +230,8 @@ class TPC:
         weights = trackCharge.rho(xv, yv, zv)
         weights_bulk = weights.ravel()
 
-        t_start = (track[self.itStart].numpy()-20) // self.t_sampling * self.t_sampling
-        t_end = (track[self.itEnd].numpy()+20) // self.t_sampling * self.t_sampling
+        t_start = (track[self.itStart]-20) // self.t_sampling * self.t_sampling
+        t_end = (track[self.itEnd]+20) // self.t_sampling * self.t_sampling
         t_length = t_end-t_start
         time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 

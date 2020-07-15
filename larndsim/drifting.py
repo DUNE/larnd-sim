@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 
-import consts
+from . import consts
 
 '''
 Module to implement the propagation of the
@@ -12,7 +12,7 @@ electrons towards the anode.
 def Drift(NElectrons, z, zStart, zEnd, t, tStart, tEnd, longDiff, tranDiff):
     '''    
     CPU Drift function
-     '''       
+    '''
     zAnode = consts.tpcZStart
 
     for index in range(NElectrons.shape[0]): 
