@@ -322,8 +322,8 @@ class TPC:
             z_start, z_end = self.getZInterval(track, pID)
             signal = np.zeros_like(time_interval)
 
-            x_p = pID[0] * self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size / 2
-            y_p = pID[1] * self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
+            x_p = pID[0] * self.x_pixel_size + TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size / 2
+            y_p = pID[1] * self.y_pixel_size + TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
 
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
 
