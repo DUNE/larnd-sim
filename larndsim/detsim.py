@@ -340,9 +340,7 @@ class TPC:
 
                 weights_slice = weights_bulk
 
-                if z < zs + endcap_size:
-                    weights_slice = trackCharge.rho(xv, yv, zv).ravel()
-                elif z > ze - endcap_size:
+                if (z < zs + endcap_size) or (z > ze - endcap_size):
                     weights_slice = trackCharge.rho(xv, yv, zv).ravel()
 
                 signals = self._getSlicesSignal(x_p, y_p, z, weights_slice, xv, yv, time_interval)
