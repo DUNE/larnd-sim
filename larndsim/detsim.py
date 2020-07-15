@@ -3,7 +3,6 @@
 Detector simulation module
 """
 
-import torch
 import numpy as np
 import scipy.stats
 
@@ -12,7 +11,10 @@ from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
 import skimage.draw
 
-from . consts import TPC_PARAMS, PHYSICAL_PARAMS
+from . import consts
+from . import drifting
+from . import quenching
+#from . consts import TPC_PARAMS, PHYSICAL_PARAMS
 
 def sigmoid(t, t0, t_rise=1):
     """Sigmoid function for FEE response"""
@@ -76,94 +78,8 @@ class TrackCharge:
         return integral*expo*self.factor
 
 
-class Quenching(torch.nn.Module):
-    """
-    PyTorch module which implements the quenching of the electrons
-    in the TPC.
-    """
-    def __init__(self, **kwargs):
-        super(Quenching, self).__init__()
 
-        self.idEdx = kwargs['dEdx']
-        self.idE = kwargs['dE']
-        self.iNElectrons = kwargs['NElectrons']
-
-    def forward(self, x):
-        """The number of electrons ionized by the track segment is calculated
-        taking into account the recombination.
-
-        Returns":
-            x: a new tensor with an additional column for the number of ionized
-            electrons
-        """
-
-        add_columns = torch.nn.ZeroPad2d((0, 1, 0, 0))
-        x = add_columns(x)
-
-        recomb = torch.log(PHYSICAL_PARAMS['alpha'] + PHYSICAL_PARAMS['beta'] * x[:, self.idEdx]) \
-                 / (PHYSICAL_PARAMS['beta'] * x[:, self.idEdx])
-        recomb = torch.where(recomb <= 0, torch.zeros_like(recomb), recomb)
-        recomb = torch.where(torch.isnan(recomb), torch.zeros_like(recomb), recomb)
-        x[:, self.iNElectrons] = PHYSICAL_PARAMS['MeVToElectrons'] * x[:, self.idE] * recomb
-        return x
-
-
-class Drifting(torch.nn.Module):
-    """
-    PyTorch module which implements the propagation of the
-    electrons towards the anode.
-    """
-
-    def __init__(self, **kwargs):
-        super(Drifting, self).__init__()
-
-        self.iz = kwargs['z']
-        self.izStart = kwargs['z_start']
-        self.izEnd = kwargs['z_end']
-        self.it = kwargs['t']
-        self.itStart = kwargs['t_start']
-        self.itEnd = kwargs['t_end']
-        self.iNElectrons = kwargs['NElectrons']
-        self.iLongDiff = kwargs['longDiff']
-        self.iTranDiff = kwargs['tranDiff']
-
-
-    def forward(self, x):
-        """The z coordinate of the track segment is set to
-        the z coordinate of the anode.
-        The number of electrons is corrected by the electron lifetime.
-        The longitudinal and transverse diffusion factors are calculated.
-        The time is set to the drift time, calculated taking into account the transverse
-        diffusion factor
-
-        Returns:
-            x: a new tensor with 2 additional column, for the longitudinal
-            diffusion and transverse diffusion coefficients
-        """
-
-        add_columns = torch.nn.ZeroPad2d((0, 2, 0, 0))
-        x = add_columns(x)
-
-        zStart = TPC_PARAMS['tpcBorders'][2][0]
-
-        driftDistance = torch.abs(x[:, self.iz] - zStart)
-        driftStart = torch.abs(x[:, self.izStart] - zStart)
-        driftEnd = torch.abs(x[:, self.izEnd] - zStart)
-
-        driftTime = driftDistance / TPC_PARAMS['vdrift']
-        x[:, self.iz] = zStart
-
-        lifetime = torch.exp(-driftTime / TPC_PARAMS['lifetime'])
-        x[:, self.iNElectrons] = x[:, self.iNElectrons] * lifetime
-
-        x[:, self.iLongDiff] = torch.sqrt(driftTime) * TPC_PARAMS['longDiff']
-        x[:, self.iTranDiff] = torch.sqrt(driftTime) * TPC_PARAMS['tranDiff']
-        x[:, self.it] += driftTime + x[:, self.iTranDiff] / TPC_PARAMS['vdrift']
-        x[:, self.itStart] += (driftStart + x[:, self.iTranDiff]) / TPC_PARAMS['vdrift']
-        x[:, self.itEnd] += (driftEnd + x[:, self.iTranDiff]) / TPC_PARAMS['vdrift']
-
-        return x
-
+    
 class PixelSignal:
     """Signal induced on pixel at a given time interval"""
     def __init__(self, pID, current, time_interval):
@@ -189,16 +105,16 @@ class TPC:
 
         self.n_pixels = n_pixels
 
-        self.x_start = TPC_PARAMS['tpcBorders'][0][0]
-        self.x_end = TPC_PARAMS['tpcBorders'][0][1]
+        self.x_start = consts.tpcBorders[0][0]
+        self.x_end = consts.tpcBorders[0][1]
         x_length = self.x_end - self.x_start
 
-        self.y_start = TPC_PARAMS['tpcBorders'][1][0]
-        self.y_end = TPC_PARAMS['tpcBorders'][1][1]
+        self.y_start = consts.tpcBorders[1][0]
+        self.y_end = consts.tpcBorders[1][1]
         y_length = self.y_end - self.y_start
 
-        self.t_start = TPC_PARAMS['timeInterval'][0]
-        self.t_end = TPC_PARAMS['timeInterval'][1]
+        self.t_start = consts.timeInterval[0]
+        self.t_end = consts.timeInterval[1]
         t_length = self.t_end - self.t_start
 
         self.x_sampling = x_length/n_pixels/4
@@ -250,14 +166,14 @@ class TPC:
     def getZInterval(self, track, pID):
         """Here we calculate the interval in Z for the pixel pID
         using the impact factor"""
-        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
-        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
-        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        xs, xe = track[self.ixStart], track[self.ixEnd]
+        ys, ye = track[self.iyStart], track[self.iyEnd]
+        zs, ze = track[self.izStart], track[self.izEnd]
         length = np.sqrt((xe - xs)*(xe - xs) + (ye - ys)*(ye - ys) + (ze - zs)*(ze - zs))
         trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-        x_p = pID[0]*self.x_pixel_size+TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size/2
-        y_p = pID[1]*self.y_pixel_size+TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size/2
+        x_p = pID[0]*self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size/2
+        y_p = pID[1]*self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size/2
 
         m = (ye - ys) / (xe - xs)
         q = (xe * ys - xs * ye) / (xe - xs)
@@ -287,14 +203,14 @@ class TPC:
     def calculateCurrent(self, track):
         pixelsIDs = self.getPixels(track)
 
-        xs, xe = track[self.ixStart].numpy(), track[self.ixEnd].numpy()
-        ys, ye = track[self.iyStart].numpy(), track[self.iyEnd].numpy()
-        zs, ze = track[self.izStart].numpy(), track[self.izEnd].numpy()
+        xs, xe = track[self.ixStart], track[self.ixEnd]
+        ys, ye = track[self.iyStart], track[self.iyEnd]
+        zs, ze = track[self.izStart], track[self.izEnd]
 
         length = np.sqrt((xe-xs)*(xe-xs) + (ye-ys)*(ye-ys) + (ze-zs)*(ze-zs))
         direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-        trackCharge = TrackCharge(track[self.iNElectrons].numpy(),
+        trackCharge = TrackCharge(track[self.iNElectrons],
                                   xs, xe,
                                   ys, ye,
                                   zs, ze,
@@ -307,13 +223,13 @@ class TPC:
         y = np.linspace((ye+ys)/2 - self.y_pixel_size * 2, (ye + ys) / 2 + self.y_pixel_size * 2, 10)
         z = (ze+zs)/2
 
-        z_sampling = self.t_sampling * TPC_PARAMS['vdrift']
+        z_sampling = self.t_sampling * consts.vdrift
         xv, yv, zv = np.meshgrid(x, y, z)
         weights = trackCharge.rho(xv, yv, zv)
         weights_bulk = weights.ravel()
 
-        t_start = (track[self.itStart].numpy()-20) // self.t_sampling * self.t_sampling
-        t_end = (track[self.itEnd].numpy()+20) // self.t_sampling * self.t_sampling
+        t_start = (track[self.itStart]-20) // self.t_sampling * self.t_sampling
+        t_end = (track[self.itEnd]+20) // self.t_sampling * self.t_sampling
         t_length = t_end-t_start
         time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 
@@ -322,8 +238,8 @@ class TPC:
             z_start, z_end = self.getZInterval(track, pID)
             signal = np.zeros_like(time_interval)
 
-            x_p = pID[0] * self.x_pixel_size + TPC_PARAMS['tpcBorders'][0][0] + self.x_pixel_size / 2
-            y_p = pID[1] * self.y_pixel_size + TPC_PARAMS['tpcBorders'][1][0] + self.y_pixel_size / 2
+            x_p = pID[0] * self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size / 2
+            y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
 
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
 
@@ -353,7 +269,7 @@ class TPC:
 
 
     def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
-        t0 = (z - TPC_PARAMS['tpcBorders'][2][0]) / TPC_PARAMS['vdrift']
+        t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
         signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
         distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
 
@@ -365,11 +281,11 @@ class TPC:
         s = (track[self.ixStart], track[self.iyStart])
         e = (track[self.ixEnd], track[self.iyEnd])
 
-        start_pixel = (int((s[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
-                       int((s[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
+        start_pixel =  (int((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
+                        int((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
 
-        end_pixel = (int((e[0]-TPC_PARAMS['tpcBorders'][0][0]) // self.x_pixel_size),
-                     int((e[1]-TPC_PARAMS['tpcBorders'][1][0]) // self.y_pixel_size))
+        end_pixel = (int((e[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
+                     int((e[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
 
         activePixels = skimage.draw.line(start_pixel[0], start_pixel[1],
                                          end_pixel[0], end_pixel[1])
