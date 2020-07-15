@@ -1,3 +1,6 @@
   language: python
   script:
     - pytest tests/*.py
+
+notifications:
+  slack: dunescience:YHVWaOwO50UxV6GWSMWSjTVy
