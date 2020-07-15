@@ -3,3 +3,4 @@ scipy
 tqdm
 scikit-image
 pytest
+torch
