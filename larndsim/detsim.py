@@ -3,7 +3,6 @@
 Detector simulation module
 """
 
-import torch
 import numpy as np
 import scipy.stats
 
@@ -11,7 +10,6 @@ from math import pi, sqrt, ceil
 from scipy.special import erf
 from tqdm import tqdm_notebook as progress_bar
 import skimage.draw
-import numba as nb
 
 from . import consts
 from . import drifting
