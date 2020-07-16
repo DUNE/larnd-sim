@@ -1,20 +1,20 @@
 import numpy as np
 import numba as nb
-
+from math import log, isnan
 from . import consts
 
-@nb.njit
-def Quench(dEdx, dE, NElectrons):
+@nb.njit(parallel=True)
+def Quench(tracks, col):
     '''    
     CPU Quenching Kernel function
     '''       
-    for index in range(dE.shape[0]):    
-        recomb = np.log(consts.alpha + consts.beta * dEdx[index] \
-                        / (consts.beta * dEdx[index]))
+    for index in nb.prange(tracks.shape[0]):    
+        recomb = log(consts.alpha + consts.beta * tracks[index, col['dEdx']] \
+                        / (consts.beta * tracks[index, col['dEdx']]))
         if(recomb <= 0 or np.isnan(recomb)):
             recomb = 0
             
-        NElectrons[index] = recomb * dE[index] * consts.MeVToElectrons
+        tracks[index, col['NElectrons']] = recomb * tracks[index,col['dE']] * consts.MeVToElectrons
 
 
 
