@@ -1,6 +1,6 @@
 import numpy as np
 import numba as nb
-
+from math import fabs, exp, sqrt
 from . import consts
 
 '''
@@ -8,28 +8,27 @@ Module to implement the propagation of the
 electrons towards the anode.
 '''
 
-@nb.njit
-def Drift(NElectrons, z, zStart, zEnd, t, tStart, tEnd, longDiff, tranDiff):
-    '''    
+@nb.njit(parallel=True)
+def Drift(tracks, col):
+    '''
     CPU Drift function
     '''
     zAnode = consts.tpcZStart
 
-    for index in range(NElectrons.shape[0]): 
-        driftDistance = np.abs(z[index] - zAnode)
-        driftStart    = np.abs(zStart[index] - zAnode)
-        driftEnd      = np.abs(zEnd[index] - zAnode)
-        
-        driftTime     = driftDistance / consts.vdrift
-        z[index]      = zAnode
-        
-        lifetime          = np.exp(-driftTime / consts.lifetime)
-        NElectrons[index] = NElectrons[index] * lifetime
-        
-        longDiff[index] = np.sqrt(driftTime) * consts.longDiff
-        tranDiff[index] = np.sqrt(driftTime) * consts.tranDiff
-        t[index]       += driftTime + tranDiff[index]/ consts.vdrift
-        tStart[index]  += (driftStart + tranDiff[index])/ consts.vdrift
-        tEnd[index]    += (driftEnd + tranDiff[index]) / consts.vdrift
+    for index in nb.prange(tracks.shape[0]):
+        driftDistance        = fabs(tracks[index , col['z']] - zAnode)
+        driftStart           = fabs(tracks[index ,col['z_start']] - zAnode)
+        driftEnd             = fabs(tracks[index,col['z_end']] - zAnode)
 
-        
+        driftTime            = driftDistance / consts.vdrift
+        tracks[index,col['z']]   = zAnode
+
+        lifetime                     =  exp(-driftTime / consts.lifetime)
+        tracks[index,col['NElectrons']] *= lifetime
+
+        tracks[index , col['longDiff']] = sqrt(driftTime) * consts.longDiff
+        tracks[index , col['tranDiff']] = sqrt(driftTime) * consts.tranDiff
+        tracks[index , col['t']]       += driftTime    + tracks[index , col['tranDiff']]/ consts.vdrift
+        tracks[index , col['t_start']]  += (driftStart + tracks[index , col['tranDiff']])/ consts.vdrift
+        tracks[index , col['t_end']]    += (driftEnd   + tracks[index , col['tranDiff']]) / consts.vdrift
+
