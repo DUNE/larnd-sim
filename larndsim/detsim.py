@@ -38,9 +38,9 @@ class TrackCharge:
         self.Q = Q
         self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
 
-        self.a = ((self.Deltax/self.Deltar) * (self.Deltax/self.Deltar) / (2*sigmas[0]*sigmas[0]) + \
-                  (self.Deltay/self.Deltar) * (self.Deltay/self.Deltar) / (2*sigmas[1]*sigmas[1]) + \
-                  (self.Deltaz/self.Deltar) * (self.Deltaz/self.Deltar) / (2*sigmas[2]*sigmas[2]))
+        self.a = ((self.Deltax/self.Deltar) * (self.Deltax/self.Deltar) / (2*sigmas[0]*sigmas[0])
+                  + (self.Deltay/self.Deltar) * (self.Deltay/self.Deltar) / (2*sigmas[1]*sigmas[1])
+                  + (self.Deltaz/self.Deltar) * (self.Deltaz/self.Deltar) / (2*sigmas[2]*sigmas[2]))
 
     def __repr__(self):
         instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f), (%f, %f), (%f, %f)\nsigmas (%f, %f, %f)" % \
@@ -48,32 +48,34 @@ class TrackCharge:
                                 self.Q,
                                 self.xs, self.xe, self.ys, self.ye, self.zs, self.ze,
                                 *self.sigmas)
+
         return instanceDescription
 
     def _b(self, x, y, z):
-        return -((x-self.xs) / (self.sigmas[0]*self.sigmas[0]) * (self.Deltax/self.Deltar) + \
-                 (y-self.ys) / (self.sigmas[1]*self.sigmas[1]) * (self.Deltay/self.Deltar) + \
-                 (z-self.zs) / (self.sigmas[2]*self.sigmas[2]) * (self.Deltaz/self.Deltar))
+        return -((x-self.xs) / (self.sigmas[0]*self.sigmas[0]) * (self.Deltax/self.Deltar)
+                 + (y-self.ys) / (self.sigmas[1]*self.sigmas[1]) * (self.Deltay/self.Deltar)
+                 + (z-self.zs) / (self.sigmas[2]*self.sigmas[2]) * (self.Deltaz/self.Deltar))
 
     def rho(self, x, y, z):
         """Charge distribution in space"""
         b = self._b(x, y, z)
         sqrt_a_2 = 2*np.sqrt(self.a)
 
-        expo = np.exp(b*b/(4*self.a) - \
-                      ((x-self.xs)*(x-self.xs)/(2*self.sigmas[0]*self.sigmas[0]) + \
-                       (y-self.ys)*(y-self.ys)/(2*self.sigmas[1]*self.sigmas[1]) + \
-                       (z-self.zs)*(z-self.zs)/(2*self.sigmas[2]*self.sigmas[2])))
+        expo = np.exp(b*b/(4*self.a)
+                      - ((x-self.xs)*(x-self.xs)/(2*self.sigmas[0]*self.sigmas[0])
+                         + (y-self.ys)*(y-self.ys)/(2*self.sigmas[1]*self.sigmas[1])
+                         + (z-self.zs)*(z-self.zs)/(2*self.sigmas[2]*self.sigmas[2])))
 
-        integral = sqrt(pi) * \
-                   (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2)) / \
-                   sqrt_a_2
+        integral = (sqrt(pi)
+                    * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
+                    / sqrt_a_2)
 
         return integral*expo*self.factor
 
 
 class PixelSignal:
     """Signal induced on pixel at a given time interval"""
+
     def __init__(self, pID, current, time_interval):
         self.id = pID
         self.current = current
