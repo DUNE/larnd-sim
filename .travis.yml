@@ -3,4 +3,5 @@
     - pytest tests/*.py
 
 notifications:
-  slack: dunescience:YHVWaOwO50UxV6GWSMWSjTVy
+  slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
+  
