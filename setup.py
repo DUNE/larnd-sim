@@ -12,7 +12,7 @@ setuptools.setup(
     description="Simulation framework for the DUNE LArND",
     url="https://github.com/soleti/larnd-sim",
     packages=setuptools.find_packages(),
-    install_requires=["numpy >=1.18", "scipy >= 1.4.0"],
+    install_requires=["numpy", "scipy", "scikit-image", "tqdm", "pytest", "numba"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: by End-User Class :: Developers",
