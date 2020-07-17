@@ -14,12 +14,6 @@ import skimage.draw
 from . import consts
 from . import drifting
 from . import quenching
-#from . consts import TPC_PARAMS, PHYSICAL_PARAMS
-
-def sigmoid(t, t0, t_rise=1):
-    """Sigmoid function for FEE response"""
-    result = 1 / (1 + np.exp(-(t-t0)/t_rise))
-    return result
 
 
 class TrackCharge:
@@ -78,8 +72,6 @@ class TrackCharge:
         return integral*expo*self.factor
 
 
-
-    
 class PixelSignal:
     """Signal induced on pixel at a given time interval"""
     def __init__(self, pID, current, time_interval):
@@ -156,6 +148,12 @@ class TPC:
         result = np.heaviside((-t.T + t0).T, 0.5) * A * np.exp((t.T - t0).T / B)
         result = np.nan_to_num(result)
 
+        return result
+
+    @staticmethod
+    def sigmoid(t, t0, t_rise=1):
+        """Sigmoid function for FEE response"""
+        result = 1 / (1 + np.exp(-(t-t0)/t_rise))
         return result
 
     @staticmethod
@@ -267,7 +265,6 @@ class TPC:
             else:
                 self.activePixels[pID] = [PixelSignal(pID, signal, (t_start, t_end))]
 
-
     def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
         signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
@@ -304,7 +301,6 @@ class TPC:
                     involvedPixels.append(ne)
 
         return np.array(involvedPixels)
-
 
     def getPixelResponse(self, pixelID):
         pixelSignals = self.activePixels[pixelID]
