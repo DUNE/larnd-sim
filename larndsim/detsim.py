@@ -76,10 +76,20 @@ class TrackCharge:
 class PixelSignal:
     """Signal induced on pixel at a given time interval"""
 
-    def __init__(self, pID, current, time_interval):
+    def __init__(self, pID, trackID, current, time_interval):
         self.id = pID
+        self.trackID = trackID
         self.current = current
         self.time_interval = time_interval
+
+
+    def __repr__(self):
+        instanceDescription = "<%s instance at %s>\n\tPixel ID (%i, %i)\n\tTrack ID %i\n\tTime interval (%g, %g)\n\tCurrent integral %g" % \
+                              (self.__class__.__name__, id(self),
+                               *self.id, self.trackID, *self.time_interval, self.current.sum())
+
+        return instanceDescription
+
 
 class TPC:
     """This class implements the detector simulation of a pixelated LArTPC.
@@ -262,10 +272,11 @@ class TPC:
                 signals = self._getSlicesSignal(x_p, y_p, z, weights_slice, xv, yv, time_interval)
                 signal += np.sum(signals, axis=0) * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
 
+            pixelSignal = PixelSignal(pID, int(track[self.iTrackID]), signal, (t_start, t_end))
             if pID in self.activePixels:
-                self.activePixels[pID].append(PixelSignal(pID, signal, (t_start, t_end)))
+                self.activePixels[pID].append(pixelSignal)
             else:
-                self.activePixels[pID] = [PixelSignal(pID, signal, (t_start, t_end))]
+                self.activePixels[pID] = [pixelSignal]
 
     def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
@@ -280,8 +291,8 @@ class TPC:
         s = (track[self.ixStart], track[self.iyStart])
         e = (track[self.ixEnd], track[self.iyEnd])
 
-        start_pixel =  (int((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
-                        int((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
+        start_pixel = (int((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
+                       int((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
 
         end_pixel = (int((e[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
                      int((e[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
