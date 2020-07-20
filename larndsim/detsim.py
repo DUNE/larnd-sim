@@ -19,52 +19,44 @@ from . import quenching
 class TrackCharge:
     """Track charge deposition"""
 
-    def __init__(self, Q, xs, xe, ys, ye, zs, ze, sigmas):
-        self.Deltax = xe-xs
-        self.Deltay = ye-ys
-        self.Deltaz = ze-zs
+    def __init__(self, Q, startVector, endVector, sigmas):
+        segmentVector = endVector - startVector
+        self.startVector = startVector
+        self.endVector = endVector
+        self.segmentVector = segmentVector
 
-        self.xs = xs
-        self.ys = ys
-        self.zs = zs
-        self.xe = xe
-        self.ye = ye
-        self.ze = ze
-
-        self.Deltar = np.sqrt(self.Deltax * self.Deltax + \
-                              self.Deltay * self.Deltay + \
-                              self.Deltaz * self.Deltaz)
-        self.sigmas = sigmas
+        self.Deltar = np.linalg.norm(segmentVector)
+        self.sigmas = np.array(sigmas)
         self.Q = Q
-        self.factor = Q/self.Deltar*1/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
-
-        self.a = ((self.Deltax/self.Deltar) * (self.Deltax/self.Deltar) / (2*sigmas[0]*sigmas[0])
-                  + (self.Deltay/self.Deltar) * (self.Deltay/self.Deltar) / (2*sigmas[1]*sigmas[1])
-                  + (self.Deltaz/self.Deltar) * (self.Deltaz/self.Deltar) / (2*sigmas[2]*sigmas[2]))
+        self.factor = Q/self.Deltar*1/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
+        self.a = ((segmentVector/self.Deltar)**2 / (2*self.sigmas**2)).sum()
 
     def __repr__(self):
         instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f), (%f, %f), (%f, %f)\nsigmas (%f, %f, %f)" % \
                                (self.__class__.__name__, id(self),
                                 self.Q,
-                                self.xs, self.xe, self.ys, self.ye, self.zs, self.ze,
+                                self.startVector[0], self.endVector[0],
+                                self.startVector[1], self.endVector[1],
+                                self.startVector[2], self.endVector[2],
                                 *self.sigmas)
 
         return instanceDescription
 
     def _b(self, x, y, z):
-        return -((x-self.xs) / (self.sigmas[0]*self.sigmas[0]) * (self.Deltax/self.Deltar)
-                 + (y-self.ys) / (self.sigmas[1]*self.sigmas[1]) * (self.Deltay/self.Deltar)
-                 + (z-self.zs) / (self.sigmas[2]*self.sigmas[2]) * (self.Deltaz/self.Deltar))
+        positionVector = np.array([x,y,z])
+        b = -((positionVector.T - self.startVector) / self.sigmas**2 * self.segmentVector/self.Deltar).T
+
+        return b.sum(axis=0)
 
     def rho(self, x, y, z):
         """Charge distribution in space"""
         b = self._b(x, y, z)
         sqrt_a_2 = 2*np.sqrt(self.a)
 
-        expo = np.exp(b*b/(4*self.a)
-                      - ((x-self.xs)*(x-self.xs)/(2*self.sigmas[0]*self.sigmas[0])
-                         + (y-self.ys)*(y-self.ys)/(2*self.sigmas[1]*self.sigmas[1])
-                         + (z-self.zs)*(z-self.zs)/(2*self.sigmas[2]*self.sigmas[2])))
+        positionVector = np.array([x,y,z])
+        deltaVector = ((positionVector.T - self.startVector)**2 / (2*self.sigmas**2)).T
+
+        expo = np.exp(b*b/(4*self.a) - deltaVector.sum(axis=0))
 
         integral = (sqrt(pi)
                     * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
@@ -191,7 +183,6 @@ class TPC:
         a, b, c = m, -1, q
 
         x_poca = (b*(b*x_p-a*y_p) - a*c)/(a*a+b*b)
-        l = (x_poca-xs)/trackDir[0]
 
         doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
         tolerance = 1.5*np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2)
@@ -200,13 +191,16 @@ class TPC:
         if tolerance > doca:
             length2D = np.sqrt((xe-xs)**2 + (ye-ys)**2)
             dir2D = (xe-xs)/length2D, (ye-ys)/length2D
-            deltaL2D = np.sqrt(tolerance**2 - doca**2)
-            x_plusDeltaL = x_poca + deltaL2D*dir2D[0]
+            deltaL2D = np.sqrt(tolerance**2 - doca**2) # length along the track in 2D
+
+            x_plusDeltaL = x_poca + deltaL2D*dir2D[0] # x coordinates of the tolerance range
             x_minusDeltaL = x_poca - deltaL2D*dir2D[0]
-            plusDeltaL = (x_plusDeltaL - xs)/trackDir[0]
-            minusDeltaL = (x_minusDeltaL - xs)/trackDir[0]
-            plusDeltaZ = min(zs + trackDir[2] * plusDeltaL, ze)
-            minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL)
+
+            plusDeltaL = (x_plusDeltaL - xs)/trackDir[0] # length along the track in 3D
+            minusDeltaL = (x_minusDeltaL - xs)/trackDir[0] # of the tolerance range
+
+            plusDeltaZ = min(zs + trackDir[2] * plusDeltaL, ze) # z coordinates of the
+            minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL) # tolerance range
 
         return minusDeltaZ, plusDeltaZ
 
@@ -219,14 +213,14 @@ class TPC:
 
         length = np.sqrt((xe-xs)*(xe-xs) + (ye-ys)*(ye-ys) + (ze-zs)*(ze-zs))
         direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
+        sigmas = np.array([track[self.iTranDiff].item()*100,
+                           track[self.iTranDiff].item()*100,
+                           track[self.iLongDiff].item()*100])
 
         trackCharge = TrackCharge(track[self.iNElectrons],
-                                  xs, xe,
-                                  ys, ye,
-                                  zs, ze,
-                                  sigmas=[track[self.iTranDiff].item()*100,
-                                          track[self.iTranDiff].item()*100,
-                                          track[self.iLongDiff].item()*100])
+                                  np.array([xs, ys, zs]),
+                                  np.array([xe, ye, ze]),
+                                  sigmas=sigmas)
 
         endcap_size = 3*track[self.iLongDiff].item()*100
         x = np.linspace((xe+xs)/2 - self.x_pixel_size * 2, (xe + xs) / 2 + self.x_pixel_size * 2, 10)
