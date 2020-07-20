@@ -19,32 +19,28 @@ from . import quenching
 class TrackCharge:
     """Track charge deposition"""
 
-    def __init__(self, Q, startVector, endVector, sigmas):
-        segmentVector = endVector - startVector
-        self.startVector = startVector
-        self.endVector = endVector
-        self.segmentVector = segmentVector
+    def __init__(self, Q, start, end, sigmas):
+        segment = end - start
+        self.start = start
+        self.end = end
+        self.segment = segment
 
-        self.Deltar = np.linalg.norm(segmentVector)
+        self.Deltar = np.linalg.norm(segment)
         self.sigmas = np.array(sigmas)
         self.Q = Q
-        self.factor = Q/self.Deltar*1/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
-        self.a = ((segmentVector/self.Deltar)**2 / (2*self.sigmas**2)).sum()
+        self.factor = Q/self.Deltar/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
+        self.a = ((segment/self.Deltar)**2 / (2*self.sigmas**2)).sum()
 
     def __repr__(self):
-        instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f), (%f, %f), (%f, %f)\nsigmas (%f, %f, %f)" % \
+        instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f, %f), (%f, %f, %f)\nsigmas (%f, %f, %f)" % \
                                (self.__class__.__name__, id(self),
-                                self.Q,
-                                self.startVector[0], self.endVector[0],
-                                self.startVector[1], self.endVector[1],
-                                self.startVector[2], self.endVector[2],
-                                *self.sigmas)
+                                self.Q, *self.start, *self.end, *self.sigmas)
 
         return instanceDescription
 
     def _b(self, x, y, z):
-        positionVector = np.array([x,y,z])
-        b = -((positionVector.T - self.startVector) / self.sigmas**2 * self.segmentVector/self.Deltar).T
+        position = np.array([x, y, z])
+        b = -((position.T - self.start) / self.sigmas**2 * self.segment / self.Deltar).T
 
         return b.sum(axis=0)
 
@@ -53,8 +49,8 @@ class TrackCharge:
         b = self._b(x, y, z)
         sqrt_a_2 = 2*np.sqrt(self.a)
 
-        positionVector = np.array([x,y,z])
-        deltaVector = ((positionVector.T - self.startVector)**2 / (2*self.sigmas**2)).T
+        position = np.array([x,y,z])
+        deltaVector = ((position.T - self.start)**2 / (2*self.sigmas**2)).T
 
         expo = np.exp(b*b/(4*self.a) - deltaVector.sum(axis=0))
 
@@ -211,20 +207,28 @@ class TPC:
         ys, ye = track[self.iyStart], track[self.iyEnd]
         zs, ze = track[self.izStart], track[self.izEnd]
 
-        length = np.sqrt((xe-xs)*(xe-xs) + (ye-ys)*(ye-ys) + (ze-zs)*(ze-zs))
-        direction = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
+        start = np.array([xs, ys, zs])
+        end = np.array([xe, ye, ze])
+        segment = end - start
+        length = np.linalg.norm(segment)
+        direction = segment / length
+
         sigmas = np.array([track[self.iTranDiff].item()*100,
                            track[self.iTranDiff].item()*100,
                            track[self.iLongDiff].item()*100])
 
         trackCharge = TrackCharge(track[self.iNElectrons],
-                                  np.array([xs, ys, zs]),
-                                  np.array([xe, ye, ze]),
+                                  start,
+                                  end,
                                   sigmas=sigmas)
 
-        endcap_size = 3*track[self.iLongDiff].item()*100
-        x = np.linspace((xe+xs)/2 - self.x_pixel_size * 2, (xe + xs) / 2 + self.x_pixel_size * 2, 10)
-        y = np.linspace((ye+ys)/2 - self.y_pixel_size * 2, (ye + ys) / 2 + self.y_pixel_size * 2, 10)
+        endcap_size = 3 * track[self.iLongDiff].item() * 100
+        x = np.linspace((xe + xs) / 2 - self.x_pixel_size * 2,
+                        (xe + xs) / 2 + self.x_pixel_size * 2,
+                        10)
+        y = np.linspace((ye + ys) / 2 - self.y_pixel_size * 2,
+                        (ye + ys) / 2 + self.y_pixel_size * 2,
+                        10)
         z = (ze+zs)/2
 
         z_sampling = self.t_sampling * consts.vdrift
@@ -237,34 +241,44 @@ class TPC:
         t_length = t_end-t_start
         time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 
-        for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
+        weights_endcap = {}
+        zIntervals = {}
+        for pixelID in pixelsIDs:
             pID = (pixelID[0], pixelID[1])
             z_start, z_end = self.getZInterval(track, pID)
+            zIntervals[pID] = (z_start, z_end)
+
+            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
+            z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
+            for z in z_endcaps_range:
+                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
+                weights_endcap[z] = trackCharge.rho(xv, yv, zv)
+
+
+        for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
+            pID = (pixelID[0], pixelID[1])
+            z_start, z_end = zIntervals[pID]
+
             signal = np.zeros_like(time_interval)
 
             x_p = pID[0] * self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size / 2
             y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
 
-            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
+            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
 
-            if len(z_range) == 1:
+            if z_range.size <= 1:
                 continue
 
             for z in z_range:
-                l = (z - zs) / direction[2]
-                xl = xs + l * direction[0]
-                yl = ys + l * direction[1]
-                xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
-                yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, 10)
-                xv, yv, zv = np.meshgrid(xx, yy, z)
+                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
 
-                weights_slice = weights_bulk
+                weights = weights_bulk
+                if z >= ze - endcap_size or z <= zs + endcap_size:
+                    weights = weights_endcap[z]
 
-                if (z < zs + endcap_size) or (z > ze - endcap_size):
-                    weights_slice = trackCharge.rho(xv, yv, zv).ravel()
-
-                signals = self._getSlicesSignal(x_p, y_p, z, weights_slice, xv, yv, time_interval)
-                signal += np.sum(signals, axis=0) * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
+                signals = self._getSliceSignal(x_p, y_p, z, weights, xv, yv, time_interval)
+                signal += np.sum(signals, axis=0) \
+                          * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
 
             pixelSignal = PixelSignal(pID, int(track[self.iTrackID]), signal, (t_start, t_end))
             if pID in self.activePixels:
@@ -272,7 +286,17 @@ class TPC:
             else:
                 self.activePixels[pID] = [pixelSignal]
 
-    def _getSlicesSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
+    def _getSliceCoordinates(self, startVector, direction, z):
+        l = (z - startVector[2]) / direction[2]
+        xl = startVector[0] + l * direction[0]
+        yl = startVector[1] + l * direction[1]
+        xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
+        yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, 10)
+        xv, yv, zv = np.meshgrid(xx, yy, z)
+
+        return xv, yv, zv
+
+    def _getSliceSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
         signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
         distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
