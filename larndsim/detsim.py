@@ -45,7 +45,7 @@ class TrackCharge:
 
     def rho(self, x, y, z):
         """Charge distribution in space"""
-        position = np.array([x,y,z])
+        position = np.array([x, y, z])
         b = self._b(position)
         sqrt_a_2 = 2*np.sqrt(self.a)
 
@@ -96,29 +96,12 @@ class TPC:
 
         self.n_pixels = n_pixels
 
-        self.x_start = consts.tpcBorders[0][0]
-        self.x_end = consts.tpcBorders[0][1]
-        x_length = self.x_end - self.x_start
-
-        self.y_start = consts.tpcBorders[1][0]
-        self.y_end = consts.tpcBorders[1][1]
-        y_length = self.y_end - self.y_start
-
         self.t_start = consts.timeInterval[0]
         self.t_end = consts.timeInterval[1]
         t_length = self.t_end - self.t_start
 
-        self.x_sampling = x_length/n_pixels/4
-        self.y_sampling = y_length/n_pixels/4
         self.t_sampling = t_sampling
-
-        self.anode_x = np.linspace(self.x_start, self.x_end, int(x_length/self.x_sampling))
-        self.anode_y = np.linspace(self.y_start, self.y_end, int(y_length/self.y_sampling))
         self.anode_t = np.linspace(self.t_start, self.t_end, int(t_length/self.t_sampling))
-
-        self.tpc = np.zeros((int(x_length / self.x_sampling),
-                             int(y_length / self.y_sampling),
-                             int(t_length / t_sampling)))
 
         self.ixStart = kwargs['x_start']
         self.ixEnd = kwargs['x_end']
@@ -133,11 +116,8 @@ class TPC:
         self.iTranDiff = kwargs['tranDiff']
         self.iTrackID = kwargs['trackID']
 
-        self.x_pixel_size = x_length / n_pixels
-        self.y_pixel_size = y_length / n_pixels
-
-        self.x_pixel_range = np.linspace(0, self.x_pixel_size, int(self.x_pixel_size/self.x_sampling))
-        self.y_pixel_range = np.linspace(0, self.y_pixel_size, int(self.y_pixel_size/self.y_sampling))
+        self.x_pixel_size = (consts.tpcBorders[0][1]-consts.tpcBorders[0][0]) / n_pixels
+        self.y_pixel_size = (consts.tpcBorders[1][1]-consts.tpcBorders[1][0]) / n_pixels
 
         self.activePixels = {}
 
@@ -344,6 +324,6 @@ class TPC:
         return current
 
     def getPixelFromCoordinates(self, x, y):
-        x_pixel = np.linspace(self.x_start, self.x_end, self.n_pixels)
-        y_pixel = np.linspace(self.y_start, self.y_end, self.n_pixels)
+        x_pixel = np.linspace(consts.tpcBorders[0][0], consts.tpcBorders[0][1], self.n_pixels)
+        y_pixel = np.linspace(consts.tpcBorders[1][0], consts.tpcBorders[1][1], self.n_pixels)
         return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
