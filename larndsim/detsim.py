@@ -38,21 +38,20 @@ class TrackCharge:
 
         return instanceDescription
 
-    def _b(self, x, y, z):
-        position = np.array([x, y, z])
+    def _b(self, position):
         b = -((position.T - self.start) / self.sigmas**2 * self.segment / self.Deltar).T
 
         return b.sum(axis=0)
 
     def rho(self, x, y, z):
         """Charge distribution in space"""
-        b = self._b(x, y, z)
+        position = np.array([x,y,z])
+        b = self._b(position)
         sqrt_a_2 = 2*np.sqrt(self.a)
 
-        position = np.array([x,y,z])
-        deltaVector = ((position.T - self.start)**2 / (2*self.sigmas**2)).T
+        delta = ((position.T - self.start)**2 / (2*self.sigmas**2)).T
 
-        expo = np.exp(b*b/(4*self.a) - deltaVector.sum(axis=0))
+        expo = np.exp(b*b/(4*self.a) - delta.sum(axis=0))
 
         integral = (sqrt(pi)
                     * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
@@ -210,8 +209,10 @@ class TPC:
         start = np.array([xs, ys, zs])
         end = np.array([xe, ye, ze])
         segment = end - start
+
         length = np.linalg.norm(segment)
-        direction = segment / length
+
+        direction = segment/length
 
         sigmas = np.array([track[self.iTranDiff].item()*100,
                            track[self.iTranDiff].item()*100,
@@ -229,7 +230,7 @@ class TPC:
         y = np.linspace((ye + ys) / 2 - self.y_pixel_size * 2,
                         (ye + ys) / 2 + self.y_pixel_size * 2,
                         10)
-        z = (ze+zs)/2
+        z = (ze + zs) / 2
 
         z_sampling = self.t_sampling * consts.vdrift
         xv, yv, zv = np.meshgrid(x, y, z)
@@ -251,7 +252,7 @@ class TPC:
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
             z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
             for z in z_endcaps_range:
-                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
+                xv, yv, zv = self._getSliceCoordinates(start, direction, z)
                 weights_endcap[z] = trackCharge.rho(xv, yv, zv)
 
 
@@ -270,7 +271,7 @@ class TPC:
                 continue
 
             for z in z_range:
-                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
+                xv, yv, zv = self._getSliceCoordinates(start, direction, z)
 
                 weights = weights_bulk
                 if z >= ze - endcap_size or z <= zs + endcap_size:
