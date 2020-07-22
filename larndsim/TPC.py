@@ -28,7 +28,7 @@ t_length = t_end - t_start
 
 x_sampling = x_length/n_pixels/4
 y_sampling = y_length/n_pixels/4
-t_sampling = 1
+t_sampling = 0.5
 z_sampling = t_sampling * vdrift
 
 anode_x = np.linspace(x_start, x_end, int(x_length/x_sampling))

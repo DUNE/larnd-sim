@@ -63,12 +63,12 @@ def getChargeWeights(x,y,z,a,factor, start, sigmas, direction, Deltar):
                      y + TPC.y_pixel_size * 2,
                     10)
     xv, yv, zv = np.meshgrid(xx, yy, z)
-    weights = rho(xv, yv, zv, a, start,sigmas, direction, Deltar).ravel()
+    weights = rho(xv, yv, zv, a, factor, start, sigmas, direction, Deltar).ravel()
 
     return weights
 
 
-def rho(x, y, z, a, start, sigmas, direction, Deltar):
+def rho(x, y, z, a, factor, start, sigmas, direction, Deltar):
 
     position = np.array([x,y,z])
     _b = -((position.T - start) / sigmas**2 * direction).T
@@ -84,7 +84,7 @@ def rho(x, y, z, a, start, sigmas, direction, Deltar):
                 / sqrt_a_2)
     
 
-    return integral*expo
+    return factor*integral*expo
 
 
 def getZEndcaps(zIntervals, zs, ze, endcap_size):
