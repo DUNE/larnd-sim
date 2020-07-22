@@ -57,7 +57,7 @@ class TrackCharge:
                     * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
                     / sqrt_a_2)
 
-        return integral*expo*self.factor
+        return integral * expo* self.factor
 
 
 class PixelSignal:
@@ -118,7 +118,7 @@ class TPC:
 
         self.x_pixel_size = (consts.tpcBorders[0][1]-consts.tpcBorders[0][0]) / n_pixels
         self.y_pixel_size = (consts.tpcBorders[1][1]-consts.tpcBorders[1][0]) / n_pixels
-
+        self.sliceSize = 10
         self.activePixels = {}
 
     @staticmethod
@@ -189,9 +189,7 @@ class TPC:
         start = np.array([xs, ys, zs])
         end = np.array([xe, ye, ze])
         segment = end - start
-
         length = np.linalg.norm(segment)
-
         direction = segment/length
 
         sigmas = np.array([track[self.iTranDiff].item()*100,
@@ -206,10 +204,10 @@ class TPC:
         endcap_size = 3 * track[self.iLongDiff].item() * 100
         x = np.linspace((xe + xs) / 2 - self.x_pixel_size * 2,
                         (xe + xs) / 2 + self.x_pixel_size * 2,
-                        10)
+                        self.sliceSize)
         y = np.linspace((ye + ys) / 2 - self.y_pixel_size * 2,
                         (ye + ys) / 2 + self.y_pixel_size * 2,
-                        10)
+                        self.sliceSize)
         z = (ze + zs) / 2
 
         z_sampling = self.t_sampling * consts.vdrift
@@ -271,8 +269,8 @@ class TPC:
         l = (z - startVector[2]) / direction[2]
         xl = startVector[0] + l * direction[0]
         yl = startVector[1] + l * direction[1]
-        xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
-        yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, 10)
+        xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, self.sliceSize)
+        yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, self.sliceSize)
         xv, yv, zv = np.meshgrid(xx, yy, z)
 
         return xv, yv, zv
