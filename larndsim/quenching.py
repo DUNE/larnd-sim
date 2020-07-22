@@ -8,7 +8,7 @@ import numba as nb
 from . import consts
 
 
-@nb.njit(parallel=True)
+@nb.njit
 def Quench(tracks, col, mode="box"):
     """
     CPU Quenching Kernel function
