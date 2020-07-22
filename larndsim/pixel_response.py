@@ -180,3 +180,9 @@ def sigmoid(t, t0, t_rise=1):
 def distanceAttenuation(distances, t, B=5, t0=0):
     """Attenuation of the signal"""
     return np.exp(np.outer(distances, ((t.T-t0).T) / B))
+
+
+def getPixelFromCoordinates(x, y):
+        x_pixel = np.linspace(consts.tpcBorders[0][0], consts.tpcBorders[0][1], TPC.n_pixels)
+        y_pixel = np.linspace(consts.tpcBorders[1][0], consts.tpcBorders[1][1], TPC.n_pixels)
+        return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
