@@ -27,7 +27,7 @@ spec = [
     ('a', nb.float32),
 ]
 
-@nb.jitclass(spec)
+@nb.experimental.jitclass(spec)
 class TrackCharge:
     """Track charge deposition"""
 
