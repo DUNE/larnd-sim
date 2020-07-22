@@ -6,9 +6,9 @@ electrons towards the anode.
 from math import fabs, exp, sqrt
 import numba as nb
 from . import consts
+from tqdm import tqdm_notebook as progress_bar
 
-
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, fastmath=True)
 def Drift(tracks, col):
     """
     CPU Drift function
