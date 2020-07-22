@@ -4,4 +4,4 @@ tqdm
 scikit-image
 pytest
 numba
-spicyal
+spycial
