@@ -18,12 +18,11 @@ from . import quenching
 from . import TPC
 
 
-#@nb.jit
+
 def getPixels(track, col):
     """
     Array of Impacted Pixel ID
     """
-        
     s = (track[col["x_start"]], track[col["y_start"]])
     e = (track[col["x_end"]], track[col["y_end"]])
     
@@ -51,12 +50,12 @@ def getPixels(track, col):
                 
     return np.array(involvedPixels)
 
-#@nb.njit
+
 def getZInterval(track, cols, pixelIDs):
     """Here we calculate the interval in Z for the pixel pID
         using the impact factor"""
 
-    zIntervals = {}
+    zIntervals = np.zeros_like(pixelIDs, dtype = float)
     
     xs, xe = track[cols['x_start']], track[cols['x_end']]
     ys, ye = track[cols['y_start']], track[cols['y_end']]
@@ -69,7 +68,7 @@ def getZInterval(track, cols, pixelIDs):
     length = np.sqrt((xe - xs)*(xe - xs) + (ye - ys)*(ye - ys) + (ze - zs)*(ze - zs))
     trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
 
-    for pID in pixelIDs:
+    for ind, pID in enumerate(pixelIDs):
     
         x_p = pID[0]*TPC.x_pixel_size+consts.tpcBorders[0][0] + TPC.x_pixel_size/2
         y_p = pID[1]*TPC.y_pixel_size+consts.tpcBorders[1][0] + TPC.y_pixel_size/2        
@@ -95,7 +94,7 @@ def getZInterval(track, cols, pixelIDs):
             minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL) # tolerance range
 
 
-        zIntervals[pID[0], pID[1]] = (minusDeltaZ, plusDeltaZ)
+        zIntervals[ind] = (minusDeltaZ, plusDeltaZ)
 
     return zIntervals
 
@@ -115,20 +114,20 @@ def getPixelSignal(track, cols, pixelIDs, zIntervals, weights):
 
     endcap_size = 3*track[cols['longDiff']]*100
     
-    pixel_signal = {}
+    pixel_signal = []
     
-    for pixelID in pixelIDs:
+    for ind, pixelID in enumerate(pixelIDs):
 
         signal = np.zeros_like(time_interval)    
         x_p = pixelID[0] * TPC.x_pixel_size+consts.tpcBorders[0][0] + TPC.x_pixel_size / 2
         y_p = pixelID[1] * TPC.y_pixel_size+consts.tpcBorders[1][0] + TPC.y_pixel_size / 2
 
-        z_start, z_end = zIntervals[pixelID[0], pixelID[1]]
+        z_start, z_end = zIntervals[ind]
         z_sampling = TPC.t_sampling * consts.vdrift
         z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
 
         if z_range.size <= 1:
-            pixel_signal[(pixelID[0],pixelID[1])] = signal
+            pixel_signal.append(signal)
             continue
 
         for z in z_range:
@@ -140,7 +139,8 @@ def getPixelSignal(track, cols, pixelIDs, zIntervals, weights):
             signal += np.sum(signals, axis=0) \
                 * (TPC.x_pixel_size*4/9.) * (TPC.y_pixel_size*4/9.) * (z_range[1]-z_range[0]) #TODO TPC Nums
 
-        pixel_signal[(pixelID[0],pixelID[1])] = signal
+
+        pixel_signal.append(signal)
 
 
     return pixel_signal
@@ -170,13 +170,13 @@ def currentResponse(t, A=1, B=5, t0=0):
     
     return result
 
-
+@nb.njit
 def sigmoid(t, t0, t_rise=1):
     """Sigmoid function for FEE response"""
     result = 1 / (1 + np.exp(-(t-t0)/t_rise))
     return result
 
-
+@nb.njit
 def distanceAttenuation(distances, t, B=5, t0=0):
     """Attenuation of the signal"""
     return np.exp(np.outer(distances, ((t.T-t0).T) / B))

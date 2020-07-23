@@ -9,14 +9,11 @@ import numba as nb
 
 from math import pi, sqrt, ceil
 from scipy.special import erf
-from tqdm import tqdm_notebook as progress_bar
-import skimage.draw
 
 from . import consts
 from . import drifting
 from . import quenching
 from . import TPC
-
 
 def TrackCharge(track, cols, zIntervals):
     
@@ -53,7 +50,7 @@ def TrackCharge(track, cols, zIntervals):
                                         start, sigmas,direction, Deltar)
 
     return weights_atz
-    
+
 def getChargeWeights(x,y,z,a,factor, start, sigmas, direction, Deltar):
     
     xx = np.linspace(x - TPC.x_pixel_size * 2,
@@ -89,8 +86,8 @@ def rho(x, y, z, a, factor, start, sigmas, direction, Deltar):
 
 def getZEndcaps(zIntervals, zs, ze, endcap_size):
     endcaps = []
-    for key in zIntervals.keys():
-        z_start, z_end = zIntervals[key]
+    for zInt in zIntervals:
+        z_start, z_end = zInt
         z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/TPC.z_sampling))
         z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
         endcaps = endcaps + list(z_endcaps_range)
