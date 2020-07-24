@@ -17,14 +17,14 @@ from . import drifting
 from . import quenching
 
 spec = [
-    ('start', nb.float32[:]),
-    ('end', nb.float32[:]),
-    ('segment', nb.float32[:]),
-    ('Deltar', nb.float32),
-    ('sigmas', nb.float32[:]),
-    ('Q', nb.float32),
-    ('factor', nb.float32),
-    ('a', nb.float32),
+    ('start', nb.float64[:]),
+    ('end', nb.float64[:]),
+    ('segment', nb.float64[:]),
+    ('Deltar', nb.float64),
+    ('sigmas', nb.float64[:]),
+    ('Q', nb.float64),
+    ('factor', nb.float64),
+    ('a', nb.float64),
 ]
 
 @nb.experimental.jitclass(spec)
@@ -40,7 +40,7 @@ class TrackCharge:
         self.Deltar = np.linalg.norm(segment)
         self.sigmas = sigmas
         self.Q = Q
-        self.factor = Q/self.Deltar/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
+        self.factor = self.Q/self.Deltar/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
         self.a = ((segment/self.Deltar)**2 / (2*self.sigmas**2)).sum()
 
     def __repr__(self):
@@ -66,7 +66,7 @@ class TrackCharge:
                     * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
                     / sqrt_a_2)
 
-        return integral * expo * self.factor
+        return expo * integral * self.factor
 
 
 class PixelSignal:
@@ -172,8 +172,8 @@ class TPC:
             plusDeltaL = (x_plusDeltaL - xs)/trackDir[0] # length along the track in 3D
             minusDeltaL = (x_minusDeltaL - xs)/trackDir[0] # of the tolerance range
 
-            plusDeltaZ = min(zs + trackDir[2] * plusDeltaL, ze) # z coordinates of the
-            minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL) # tolerance range
+            plusDeltaZ = zs + trackDir[2] * plusDeltaL # z coordinates of the
+            minusDeltaZ = zs + trackDir[2] * minusDeltaL # tolerance range
 
         return minusDeltaZ, plusDeltaZ
 
@@ -184,41 +184,42 @@ class TPC:
         ys, ye = track[self.col["y_start"]], track[self.col["y_end"]]
         zs, ze = track[self.col["z_start"]], track[self.col["z_end"]]
 
-        start = np.array([xs, ys, zs], dtype=np.float32)
-        end = np.array([xe, ye, ze], dtype=np.float32)
+        start = np.array([xs, ys, zs])
+        end = np.array([xe, ye, ze])
         segment = end - start
         length = np.linalg.norm(segment)
         direction = segment/length
 
-        sigmas = np.array([track[self.col["tranDiff"]]*100,
-                           track[self.col["tranDiff"]]*100,
-                           track[self.col["longDiff"]]*100], dtype=np.float32)
+        sigmas = np.array([track[self.col["tranDiff"]],
+                           track[self.col["tranDiff"]],
+                           track[self.col["longDiff"]]])
 
         trackCharge = TrackCharge(track[self.col["NElectrons"]],
                                   start,
                                   end,
                                   sigmas=sigmas)
 
-        endcap_size = 3 * track[self.col["longDiff"]]*100
-        x = np.linspace((xe + xs) / 2 - self.x_pixel_size * 2,
-                        (xe + xs) / 2 + self.x_pixel_size * 2,
+        endcap_size = 3 * sigmas[2]
+        x = np.linspace((xe + xs) / 2 - track[self.col["tranDiff"]] * 5,
+                        (xe + xs) / 2 + track[self.col["tranDiff"]] * 5,
                         self.sliceSize)
-        y = np.linspace((ye + ys) / 2 - self.y_pixel_size * 2,
-                        (ye + ys) / 2 + self.y_pixel_size * 2,
+        y = np.linspace((ye + ys) / 2 - track[self.col["tranDiff"]] * 5,
+                        (ye + ys) / 2 + track[self.col["tranDiff"]] * 5,
                         self.sliceSize)
         z = (ze + zs) / 2
 
         z_sampling = self.t_sampling * consts.vdrift
         xv, yv, zv = np.meshgrid(x, y, z)
         weights = trackCharge.rho(np.array([xv, yv, zv]))
-        weights_bulk = weights.ravel()
 
+        weights_bulk = weights.ravel() * (x[1]-x[0]) * (y[1]-y[0])
         t_start = (track[self.col["t_start"]]-20) // self.t_sampling * self.t_sampling
         t_end = (track[self.col["t_end"]]+20) // self.t_sampling * self.t_sampling
         t_length = t_end-t_start
         time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 
         weights_endcap = {}
+        positions_endcap = {}
         zIntervals = {}
         for pixelID in pixelsIDs:
             pID = (pixelID[0], pixelID[1])
@@ -229,7 +230,8 @@ class TPC:
             z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
             for z in z_endcaps_range:
                 xv, yv, zv = self._getSliceCoordinates(start, direction, z)
-                weights_endcap[z] = trackCharge.rho(np.array([xv, yv, zv])).ravel()
+                positions_endcap[z]  = np.array([xv, yv, zv])
+                weights_endcap[z] = trackCharge.rho(positions_endcap[z]).ravel() * (x[1]-x[0]) * (y[1]-y[0])
 
 
         for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
@@ -247,18 +249,23 @@ class TPC:
                 continue
 
             for z in z_range:
-                xv, yv, zv = self._getSliceCoordinates(start, direction, z)
-
-                weights = weights_bulk
-
                 if z >= ze - endcap_size or z <= zs + endcap_size:
                     weights = weights_endcap[z]
+                    positions = positions_endcap[z]
+                else:
+                    positions = self._getSliceCoordinates(start, direction, z)
+                    weights = weights_bulk
+
+                xv, yv, zv = positions
 
                 signals = self._getSliceSignal(x_p, y_p, z, weights, xv, yv, time_interval)
-                signal += np.sum(signals, axis=0) \
-                          * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
+                signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
+
+            if not signal.any():
+                continue
 
             pixelSignal = PixelSignal(pID, int(track[self.col["trackID"]]), signal, (t_start, t_end))
+
             if pID in self.activePixels:
                 self.activePixels[pID].append(pixelSignal)
             else:
@@ -299,12 +306,20 @@ class TPC:
         involvedPixels = []
 
         for x, y in zip(xx, yy):
-            neighbors = (x, y), \
-                        (x, y + 1), (x + 1, y), \
-                        (x, y - 1), (x - 1, y), \
-                        (x + 1, y + 1), (x - 1, y - 1), \
-                        (x + 1, y - 1), (x - 1, y + 1)
+            neighbors = ((x, y),
+                         (x, y + 1), (x + 1, y),
+                         (x, y - 1), (x - 1, y),
+                         (x + 1, y + 1), (x - 1, y - 1),
+                         (x + 1, y - 1), (x - 1, y + 1))
+            nneighbors = ((x + 2, y), (x + 2, y + 1), (x + 2, y + 2), (x + 2, y - 1), (x + 2, y - 2),
+                          (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x + 2, y - 2),
+                          (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
+                          (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
             for ne in neighbors:
+                if ne not in involvedPixels:
+                    involvedPixels.append(ne)
+
+            for ne in nneighbors:
                 if ne not in involvedPixels:
                     involvedPixels.append(ne)
 
