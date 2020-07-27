@@ -25,8 +25,8 @@ TPC_PARAMS
 """
 vdrift = 0.153812 # cm / us,
 lifetime = 10e3 # us,
-tpcBorders = ((-150, 150), (-150, 150), (-150, 150)) # cm,
-tpcZStart = -150 # cm
+tpcBorders = ((-50, 50), (-50, 50), (-50, 50)) # cm,
+tpcZStart = -50 # cm
 timeInterval = (0, 3000) # us
 longDiff = 6.2e-6 # cm * cm / us,
 tranDiff = 16.3e-6 # cm
