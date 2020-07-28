@@ -132,14 +132,8 @@ class TPC:
         result = 1 / (1 + np.exp(-(t-t0)/t_rise))
         return result
 
-    @staticmethod
-    @nb.njit(fastmath=True)
-    def distanceAttenuation(distances, t, B=5, t0=0):
-        """Attenuation of the signal"""
-        return np.exp(np.outer(distances, ((t.T-t0).T) / B))
-
     def getZInterval(self, track, pID):
-        """Here we calculate the interval in Z for the pixel pID
+        """Here we calculate the interval in the drift direction for the pixel pID
         using the impact factor"""
         xs, xe = track[self.col["x_start"]], track[self.col["x_end"]]
         ys, ye = track[self.col["y_start"]], track[self.col["y_end"]]
@@ -157,7 +151,20 @@ class TPC:
 
         x_poca = (b*(b*x_p-a*y_p) - a*c)/(a*a+b*b)
 
-        doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
+        if xs < xe:
+            start = xs, ys
+            end = xe, ye
+        else:
+            start = xe, ye
+            end = xs, ys
+
+        if x_poca < start[0]:
+            doca = np.sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
+        elif x_poca > end[0]:
+            doca = np.sqrt((x_p - end[0])**2 + (y_p - end[1])**2)
+        else:
+            doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
+
         tolerance = 1.5*np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2)
         plusDeltaZ, minusDeltaZ = 0, 0
 
@@ -217,42 +224,29 @@ class TPC:
         t_length = t_end-t_start
         time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
 
-        weights_endcap = {}
-        positions_endcap = {}
-        zRanges = {}
-        for pixelID in pixelsIDs:
+        for pixelID in pixelsIDs:#progress_bar(pixelsIDs, desc="Calculating pixel response..."):
             pID = (pixelID[0], pixelID[1])
+
             z_start, z_end = self.getZInterval(track, pID)
-
             z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling)+1)
-            zRanges[pID] = z_range
-            z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
-            for z in z_endcaps_range:
-                xv, yv, zv = self._getSliceCoordinates(start, direction, z, track[self.col["tranDiff"]] * 5)
-                positions_endcap[z] = np.array([xv, yv, zv])
-                weights_endcap[z] = trackCharge.rho(positions_endcap[z]).ravel() * (x[1]-x[0]) * (y[1]-y[0])
-
-
-        for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
-            pID = (pixelID[0], pixelID[1])
-            signal = np.zeros_like(time_interval)
-
-            x_p = pID[0] * self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size / 2
-            y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
-            z_range = zRanges[pID]
 
             if z_range.size <= 1:
                 continue
 
-            for z in z_range:
-                if z >= ze - endcap_size or z <= zs + endcap_size:
-                    weights = weights_endcap[z]
-                    positions = positions_endcap[z]
-                else:
-                    positions = self._getSliceCoordinates(start, direction, z, track[self.col["tranDiff"]] * 5)
-                    weights = weights_bulk
+            signal = np.zeros_like(time_interval)
 
-                xv, yv, zv = positions
+            x_p = pID[0] * self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size / 2
+            y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
+
+            for z in z_range:
+
+                xv, yv, zv = self._getSliceCoordinates(start, direction, z, track[self.col["tranDiff"]] * 5)
+
+                if ze - endcap_size <= z <= ze + endcap_size or zs - endcap_size <= z <= zs + endcap_size:
+                    position = np.array([xv, yv, zv])
+                    weights = trackCharge.rho(position).ravel() * (x[1]-x[0]) * (y[1]-y[0])
+                else:
+                    weights = weights_bulk
 
                 signals = self._getSliceSignal(x_p, y_p, z, weights, xv, yv, time_interval)
                 signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
@@ -279,9 +273,9 @@ class TPC:
 
     def _getSliceSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
         t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
-        signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
-        # distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
-        # signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
+        distances = np.exp(-np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p)))
+        weights_attenuated = weights * distances.ravel()
+        signals = np.outer(weights_attenuated, self.currentResponse(time_interval, t0=t0))
 
         return signals
 
