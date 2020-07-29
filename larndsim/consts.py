@@ -28,6 +28,6 @@ lifetime = 10e3 # us,
 tpcBorders = ((-50, 50), (-50, 50), (-50, 50)) # cm,
 tpcZStart = -50 # cm
 timeInterval = (0, 3000) # us
-longDiff = 6.2e-6 # cm * cm / us,
-tranDiff = 16.3e-6 # cm
+longDiff = 4.0e-6 # cm * cm / us,
+tranDiff = 8.8e-6 # cm
 
