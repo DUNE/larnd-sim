@@ -7,7 +7,7 @@ import numpy as np
 import scipy.stats
 import numba as nb
 
-from math import pi, sqrt, ceil
+from math import pi, sqrt, ceil, exp
 from spycial import erf
 import skimage.draw
 
@@ -19,6 +19,31 @@ from . import quenching
 @nb.njit
 def nb_linspace(start, stop, n):
     return np.linspace(start, stop, n)
+
+
+@nb.njit
+def nb_meshgrid(x, y, z):
+    """
+    Create a mesh-grid using values in x,y,z - all arrays must be of same length
+        x                                   X-coordinate array
+        y                                   Y-coordinate array
+        z                                   Z-coordinate array
+    Returns a [3,n] matrix of all points within cubic grid
+    """
+    #Create output array of all possible combinations
+    mg = np.zeros((3, x.size*y.size*z.size), np.int32)
+
+    #For each item in x
+    counter = 0
+    for i in np.arange(0, x.size):
+        for j in np.arange(0, y.size):
+            for k in np.arange(0, z.size):
+
+                mg[0, counter] = x[i]
+                mg[1, counter] = y[j]
+                mg[2, counter] = z[k]
+                counter = 1
+    return mg
 
 
 spec = [
@@ -126,10 +151,9 @@ class TPC:
         self._time_padding = 20
 
     @staticmethod
-    @nb.njit(fastmath=True)
     def current_response(t, A=1, B=5, t0=0):
         """Current response parametrization"""
-        result = A * np.exp((t.T - t0).T / B)
+        result = A * np.exp((t - t0) / B)
         result[t > t0] = 0
         return result
 
@@ -282,7 +306,7 @@ class TPC:
         yl = start[1] + l * direction[1]
         xx = nb_linspace(xl - padding, xl + padding, self._slice_size)
         yy = nb_linspace(yl - padding, yl + padding, self._slice_size)
-        xv, yv, zv = np.meshgrid(xx, yy, z)
+        xv, yv, zv = nb_meshgrid(xx, yy, np.array([z]))
 
         return xv, yv, zv
 
