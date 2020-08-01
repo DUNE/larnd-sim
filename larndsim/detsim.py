@@ -31,7 +31,7 @@ def nb_meshgrid(x, y, z):
     Returns a [3,n] matrix of all points within cubic grid
     """
     #Create output array of all possible combinations
-    mg = np.zeros((3, x.size*y.size*z.size), np.int32)
+    mg = np.zeros((3, x.size*y.size*z.size))
 
     #For each item in x
     counter = 0
@@ -147,7 +147,7 @@ class TPC:
         self.y_pixel_size = (consts.tpcBorders[1][1]-consts.tpcBorders[1][0]) / n_pixels
         self.active_pixels = {}
 
-        self._slice_size = 10
+        self._slice_size = 20
         self._time_padding = 20
 
     @staticmethod
@@ -266,7 +266,7 @@ class TPC:
             y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
 
             z_start, z_end = self.z_interval(start, end, x_p, y_p,
-                                             1.5 * np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2))
+                                             3*np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2))
 
             z_range = nb_linspace(z_start, z_end, ceil(abs(z_end-z_start)/z_sampling)+1)
 
@@ -306,14 +306,14 @@ class TPC:
         yl = start[1] + l * direction[1]
         xx = nb_linspace(xl - padding, xl + padding, self._slice_size)
         yy = nb_linspace(yl - padding, yl + padding, self._slice_size)
-        xv, yv, zv = nb_meshgrid(xx, yy, np.array([z]))
+        xv, yv, zv = np.meshgrid(xx, yy, np.array([z]))
 
         return xv, yv, zv
 
     @staticmethod
     @nb.njit(fastmath=True)
     def slice_signal(x_p, y_p, weights, xv, yv, current_response):
-        distances = np.exp(-np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p)))
+        distances = np.exp(-10*np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p)))
         weights_attenuated = weights * distances.ravel()
         signals = np.outer(weights_attenuated, current_response)
 
