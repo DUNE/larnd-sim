@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 """
 Detector constants
 """
@@ -25,8 +27,11 @@ TPC_PARAMS
 """
 vdrift = 0.153812 # cm / us,
 lifetime = 10e3 # us,
-tpcBorders = ((-50, 50), (-50, 50), (-50, 50)) # cm,
-tpcZStart = -50 # cm
+# tpcBorders = [[-50, 50], [-50, 50], [-50, 50]] # cm,
+Segment = namedtuple('Segment', 'start end')
+Border = namedtuple('Border', 'x y z')
+tpcBorders = Border(Segment(0, 100), Segment(-50, 50), Segment(-50, 50))
+tpcZStart = tpcBorders.z.start # cm
 timeInterval = (0, 3000) # us
 longDiff = 4.0e-6 # cm * cm / us,
 tranDiff = 8.8e-6 # cm
