@@ -323,14 +323,14 @@ class TPC:
         s = (track[self.col["x_start"]], track[self.col["y_start"]])
         e = (track[self.col["x_end"]], track[self.col["y_end"]])
 
-        start_pixel = (round((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
-                       round((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
+        start_pixel = (int(round((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size)),
+                       int(round((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size)))
 
-        end_pixel = (round((e[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
-                     round((e[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
+        end_pixel = (int(round((e[0]-consts.tpcBorders[0][0]) // self.x_pixel_size)),
+                     int(round((e[1]-consts.tpcBorders[1][0]) // self.y_pixel_size)))
 
         active_pixels = skimage.draw.line(start_pixel[0], start_pixel[1],
-                                         end_pixel[0], end_pixel[1])
+                                          end_pixel[0], end_pixel[1])
 
         xx, yy = active_pixels
         involvedPixels = []
