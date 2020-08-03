@@ -141,7 +141,7 @@ class TPC:
         t_length = consts.timeInterval[1] - consts.timeInterval[0]
 
         self.t_sampling = t_sampling
-        self.anode_t = nb_linspace(consts.timeInterval[0], consts.timeInterval[1], round(t_length/self.t_sampling))
+        self.anode_t = nb_linspace(consts.timeInterval[0], consts.timeInterval[1], int(round(t_length/self.t_sampling)))
 
         self.x_pixel_size = (consts.tpcBorders[0][1]-consts.tpcBorders[0][0]) / n_pixels
         self.y_pixel_size = (consts.tpcBorders[1][1]-consts.tpcBorders[1][0]) / n_pixels
@@ -257,7 +257,7 @@ class TPC:
         t_start = (track[self.col["t_start"]] - self._time_padding) // self.t_sampling * self.t_sampling
         t_end = (track[self.col["t_end"]] + self._time_padding) // self.t_sampling * self.t_sampling
         t_length = t_end - t_start
-        time_interval = nb_linspace(t_start, t_end, round(t_length / self.t_sampling))
+        time_interval = nb_linspace(t_start, t_end, int(round(t_length / self.t_sampling)))
 
         for pixelID in pixelsIDs:
             pID = (pixelID[0], pixelID[1])
