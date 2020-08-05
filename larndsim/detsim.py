@@ -21,31 +21,6 @@ def nb_linspace(start, stop, n):
     return np.linspace(start, stop, n)
 
 
-@nb.njit
-def nb_meshgrid(x, y, z):
-    """
-    Create a mesh-grid using values in x,y,z - all arrays must be of same length
-        x                                   X-coordinate array
-        y                                   Y-coordinate array
-        z                                   Z-coordinate array
-    Returns a [3,n] matrix of all points within cubic grid
-    """
-    #Create output array of all possible combinations
-    mg = np.zeros((3, x.size*y.size*z.size))
-
-    #For each item in x
-    counter = 0
-    for i in np.arange(0, x.size):
-        for j in np.arange(0, y.size):
-            for k in np.arange(0, z.size):
-
-                mg[0, counter] = x[i]
-                mg[1, counter] = y[j]
-                mg[2, counter] = z[k]
-                counter = 1
-    return mg
-
-
 spec = [
     ('start', nb.float64[:]),
     ('end', nb.float64[:]),
@@ -249,11 +224,10 @@ class TPC:
                         (ye + ys) / 2 + track[self.col["tranDiff"]] * 5,
                         self._slice_size)
         z = (ze + zs) / 2
-
         z_sampling = self.t_sampling * consts.vdrift
-
         weights = trackCharge.rho(np.array(np.meshgrid(x, y, z)))
         weights_bulk = weights.ravel() * (x[1]-x[0]) * (y[1]-y[0])
+
         t_start = (track[self.col["t_start"]] - self._time_padding) // self.t_sampling * self.t_sampling
         t_end = (track[self.col["t_end"]] + self._time_padding) // self.t_sampling * self.t_sampling
         t_length = t_end - t_start
@@ -277,18 +251,21 @@ class TPC:
 
             for z in z_range:
 
-                xv, yv, zv = self.slice_coordinates(start, direction, z, track[self.col["tranDiff"]] * 5)
+                xv, yv, zv = self.slice_coordinates(start, direction, z, track[self.col["tranDiff"]] * 5, self._slice_size)
 
                 if ze - endcap_size <= z <= ze + endcap_size or zs - endcap_size <= z <= zs + endcap_size:
                     position = np.array([xv, yv, zv])
-                    weights = trackCharge.rho(position).ravel() * (x[1]-x[0]) * (y[1]-y[0])
+                    weights = trackCharge.rho(position).ravel() * (xv[0][1][0]-xv[0][0][0]) * (yv[1][0][0]-yv[0][0][0])
                 else:
                     weights = weights_bulk
 
+
                 t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
+
                 current_response = self.current_response(time_interval, t0=t0)
                 signals = self.slice_signal(x_p, y_p, weights, xv, yv, current_response)
                 signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
+
 
             if not signal.any():
                 continue
@@ -300,12 +277,14 @@ class TPC:
             else:
                 self.active_pixels[pID] = [pixel_signal]
 
-    def slice_coordinates(self, start, direction, z, padding):
+    @staticmethod
+    @nb.jit(fastmath=True)
+    def slice_coordinates(start, direction, z, padding, slice_size):
         l = (z - start[2]) / direction[2]
         xl = start[0] + l * direction[0]
         yl = start[1] + l * direction[1]
-        xx = nb_linspace(xl - padding, xl + padding, self._slice_size)
-        yy = nb_linspace(yl - padding, yl + padding, self._slice_size)
+        xx = np.linspace(xl - padding, xl + padding, slice_size)
+        yy = np.linspace(yl - padding, yl + padding, slice_size)
         xv, yv, zv = np.meshgrid(xx, yy, np.array([z]))
 
         return xv, yv, zv
