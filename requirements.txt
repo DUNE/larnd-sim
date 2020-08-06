@@ -3,3 +3,5 @@ scipy
 scikit-image
 pytest
 numba
+sphinx-rtd-theme
+travis-sphinx
