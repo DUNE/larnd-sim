@@ -3,11 +3,10 @@ script:
   - pytest tests/*.py
 
 script:
-    - travis-sphinx build
+    - travis-sphinx build --branches=numba_roberto
 
 after_success:
     - travis-sphinx deploy
-
 
 notifications:
   slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
