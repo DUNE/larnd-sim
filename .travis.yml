@@ -2,9 +2,6 @@ language: python
 script:
   - pytest tests/*.py
 
-install:
-  - pip install travis-sphinx
-
 script:
     - travis-sphinx build
 
