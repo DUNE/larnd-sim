@@ -1,27 +1,41 @@
+"""
+Module that calculates the current induced by edep-sim track segments
+on the pixels
+"""
+
 import numba as nb
 import numpy as np
-# from spycial import erf
-from math import pi, ceil, sqrt, erf, exp
-from .consts import *
 import skimage.draw
 
-@nb.njit
+from math import pi, ceil, sqrt, erf, exp
+from .consts import *
+
+
+@nb.njit(fastmath=True)
 def current_response(t, A=1, B=5, t0=0):
     """Current response parametrization"""
     result = A * np.exp((t - t0) / B)
     result[t > t0] = 0
     return result
 
-@nb.njit
-def slice_coordinates(start, direction, z, padding, slice_size):
+@nb.njit(fastmath=True)
+def slice_coordinates(point, padding, slice_size):
+    xl = point[0]
+    yl = point[1]
+    xx = np.linspace(xl - padding, xl + padding, slice_size)
+    yy = np.linspace(yl - padding, yl + padding, slice_size)
+
+    return xx, yy, np.array([point[2]])
+
+@nb.njit(fastmath=True)
+def track_point(start, direction, z):
     l = (z - start[2]) / direction[2]
     xl = start[0] + l * direction[0]
     yl = start[1] + l * direction[1]
-    xx = np.linspace(xl - padding, xl + padding, slice_size)
-    yy = np.linspace(yl - padding, yl + padding, slice_size)
-    return xx, yy, np.array([z])
 
-@nb.njit
+    return  np.array([xl, yl, z])
+
+@nb.njit(fastmath=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """Here we calculate the interval in the drift direction for the pixel pID
     using the impact factor"""
@@ -80,37 +94,34 @@ def get_pixels(track, cols, pixel_size):
     s = (track[cols["x_start"]], track[cols["y_start"]])
     e = (track[cols["x_end"]], track[cols["y_end"]])
 
-    start_pixel = (int(round((s[0]-tpcBorders[0][0]) // pixel_size[0])),
-                    int(round((s[1]-tpcBorders[1][0]) // pixel_size[1])))
+    start_pixel = (int(round((s[0]-tpc_borders[0][0]) // pixel_size[0])),
+                   int(round((s[1]-tpc_borders[1][0]) // pixel_size[1])))
 
-    end_pixel = (int(round((e[0]-tpcBorders[0][0]) // pixel_size[0])),
-                    int(round((e[1]-tpcBorders[1][0]) // pixel_size[1])))
+    end_pixel = (int(round((e[0]-tpc_borders[0][0]) // pixel_size[0])),
+                 int(round((e[1]-tpc_borders[1][0]) // pixel_size[1])))
 
     active_pixels = skimage.draw.line(start_pixel[0], start_pixel[1],
-                                        end_pixel[0], end_pixel[1])
+                                      end_pixel[0], end_pixel[1])
 
     xx, yy = active_pixels
-    involvedPixels = []
+    involved_pixels = []
 
     for x, y in zip(xx, yy):
         neighbors = ((x, y),
-                        (x, y + 1), (x + 1, y),
-                        (x, y - 1), (x - 1, y),
-                        (x + 1, y + 1), (x - 1, y - 1),
-                        (x + 1, y - 1), (x - 1, y + 1))
+                     (x, y + 1), (x + 1, y),
+                     (x, y - 1), (x - 1, y),
+                     (x + 1, y + 1), (x - 1, y - 1),
+                     (x + 1, y - 1), (x - 1, y + 1))
         nneighbors = ((x + 2, y), (x + 2, y + 1), (x + 2, y + 2), (x + 2, y - 1), (x + 2, y - 2),
-                        (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x + 2, y - 2),
-                        (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
-                        (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
-        for ne in neighbors:
-            if ne not in involvedPixels:
-                involvedPixels.append(ne)
+                      (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x + 2, y - 2),
+                      (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
+                      (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
 
-        for ne in nneighbors:
-            if ne not in involvedPixels:
-                involvedPixels.append(ne)
+        for ne in (neighbors+nneighbors):
+            if ne not in involved_pixels:
+                involved_pixels.append(ne)
 
-    return involvedPixels
+    return involved_pixels
 
 @nb.jit
 def list2array(pixelTrackIDs):
@@ -131,7 +142,7 @@ def pixelID_track(tracks, cols, pixel_size):
 
     return dictPixelTrackID
 
-@nb.njit
+@nb.njit(fastmath=True)
 def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
     distances = np.empty(len(xv)*len(yv))
     i = 0
@@ -145,13 +156,13 @@ def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
 
     return signals
 
-@nb.njit
+@nb.njit(fastmath=True)
 def _b(x, y, z, start, sigmas, segment, Deltar):
     return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
              (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
              (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
 
-@nb.njit
+@nb.njit(fastmath=True)
 def rho(x, y, z, a, start, sigmas, segment, Deltar, factor):
     """Charge distribution in space"""
     b = _b(x, y, z, start, sigmas, segment, Deltar)
@@ -164,44 +175,29 @@ def rho(x, y, z, a, start, sigmas, segment, Deltar, factor):
     expo = exp(b*b/(4*a) - delta)
 
     integral = sqrt(pi) * \
-                (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
-                sqrt_a_2
+               (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
+               sqrt_a_2
 
     return expo * factor * integral
 
-
 @nb.njit(fastmath=True)
-def track_current(track, pixelTrackIDs, cols, slice_size, t_sampling, active_pixels, pixel_size=(0.3333, 0.3333), time_padding=20):
-
-    xs, xe = track[cols["x_start"]], track[cols["x_end"]]
-    ys, ye = track[cols["y_start"]], track[cols["y_end"]]
-    zs, ze = track[cols["z_start"]], track[cols["z_end"]]
-
-    start = np.array([xs, ys, zs])
-    end = np.array([xe, ye, ze])
+def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
     segment = end - start
-    length = np.linalg.norm(segment)
-    direction = segment/length
 
     Deltar = np.linalg.norm(segment)
 
-    sigmas = np.array([track[cols["tranDiff"]],
-                       track[cols["tranDiff"]],
-                       track[cols["longDiff"]]])
-
-    factor = track[cols["NElectrons"]]/Deltar/(sigmas.prod()*sqrt(8*pi*pi*pi))
+    factor = n_electrons/Deltar/(sigmas.prod()*sqrt(8*pi*pi*pi))
     a = ((segment/Deltar)**2 / (2*sigmas**2)).sum()
 
-    endcap_size = 5 * sigmas[2]
-    xx = np.linspace((xe + xs) / 2 - track[cols["tranDiff"]] * 5,
-                     (xe + xs) / 2 + track[cols["tranDiff"]] * 5,
-                     slice_size)
-    yy = np.linspace((ye + ys) / 2 - track[cols["tranDiff"]] * 5,
-                     (ye + ys) / 2 + track[cols["tranDiff"]] * 5,
-                     slice_size)
-    zz = np.array([(ze + zs) / 2])
 
-    z_sampling = t_sampling * vdrift
+    xx = np.linspace(point[0] - sigmas[0] * 5,
+                     point[0] + sigmas[0] * 5,
+                     slice_size)
+    yy = np.linspace(point[1] - sigmas[1] * 5,
+                     point[1] + sigmas[1] * 5,
+                     slice_size)
+    zz = np.array([point[2]])
+
     weights = np.empty(len(xx)*len(yy)*len(zz))
     i = 0
     for x in xx:
@@ -209,23 +205,44 @@ def track_current(track, pixelTrackIDs, cols, slice_size, t_sampling, active_pix
             for z in zz:
                 weights[i] = rho(x, y, z, a, start, sigmas, segment, Deltar, factor)
                 i += 1
-    weights_bulk = weights.ravel() * (xx[1]-xx[0]) * (yy[1]-yy[0])
+
+    return weights.ravel() * (xx[1]-xx[0]) * (yy[1]-yy[0])
+
+
+@nb.njit(fastmath=True)
+def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
+
+    start = np.array([track[cols["x_start"]], track[cols["y_start"]], track[cols["z_start"]]])
+    end = np.array([track[cols["x_end"]], track[cols["y_end"]], track[cols["z_end"]]])
+    mid_point = (start+end)/2
+
+    segment = end - start
+    length = np.linalg.norm(segment)
+    direction = segment/length
+
+    sigmas = np.array([track[cols["tranDiff"]],
+                       track[cols["tranDiff"]],
+                       track[cols["longDiff"]]])
+    endcap_size = 5 * track[cols["longDiff"]]
+
+    weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
 
     t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
     t_end = (track[cols["t_end"]] + time_padding) // t_sampling * t_sampling
     t_length = t_end - t_start
     time_interval = np.linspace(t_start, t_end, int(round(t_length / t_sampling)))
 
-    for i in nb.prange(pixelTrackIDs.shape[0]):
-        pID = pixelTrackIDs[i]
+    z_sampling = t_sampling * vdrift
+
+    for i in nb.prange(pixels.shape[0]):
+        pID = pixels[i]
         if pID[0] == np.inf:
             break
 
-        x_p = pID[0] * pixel_size[0] + tpcBorders[0][0] + pixel_size[0] / 2
-        y_p = pID[1] * pixel_size[1] + tpcBorders[1][0] + pixel_size[1] / 2
+        x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
+        y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
 
         z_start, z_end = z_interval(start, end, x_p, y_p, 3*np.sqrt(pixel_size[0]**2 + pixel_size[1]**2))
-
         z_range = np.linspace(z_start, z_end, ceil(abs(z_end-z_start)/z_sampling)+1)
 
         if z_range.size <= 1:
@@ -234,19 +251,15 @@ def track_current(track, pixelTrackIDs, cols, slice_size, t_sampling, active_pix
         signal = np.zeros_like(time_interval)
 
         for z in z_range:
-            xv, yv, zv = slice_coordinates(start, direction, z, track[cols["tranDiff"]] * 5, slice_size)
-            if ze - endcap_size <= z <= ze + endcap_size or zs - endcap_size <= z <= zs + endcap_size:
-                weights = np.empty(len(xv)*len(yv)*len(zv))
-                i = 0
-                for x in xv:
-                    for y in yv:
-                        for z in zv:
-                            weights[i] = rho(x, y, z, a, start, sigmas, segment, Deltar, factor) * (xx[1]-xx[0]) * (yy[1]-yy[0])
-                            i += 1
+            point = track_point(start, direction, z)
+            xv, yv, zv = slice_coordinates(point, track[cols["tranDiff"]] * 5, slice_size)
+            if track[cols["z_end"]] - endcap_size <= z <= track[cols["z_end"]] + endcap_size or \
+               track[cols["z_start"]] - endcap_size <= z <= track[cols["z_start"]] + endcap_size:
+                weights = diffusion_weights(track[cols["NElectrons"]], point, start, end, sigmas, slice_size)
             else:
                 weights = weights_bulk
 
-            t0 = (z - tpcBorders[2][0]) / vdrift
+            t0 = (z - tpc_borders[2][0]) / vdrift
 
             current_response_z = current_response(time_interval, t0=t0)
             signals = slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
@@ -275,23 +288,23 @@ def pixel_response(pixel_signals, anode_t):
 
 
 float_array = nb.types.float64[::1]
-key_type = nb.types.Tuple((nb.int64, nb.int64))
-value_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
+pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
+signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
 
 @nb.njit(fastmath=True)
 def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_size=20):
-    active_pixels = nb.typed.Dict.empty(key_type=key_type,
-                                        value_type=value_type)
+    active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
+                                        value_type=signal_type)
 
     for i in nb.prange(tracks.shape[0]):
         track = tracks[i]
         pID = pIDs_array[i]
-        track_current(track, pID, cols, slice_size, t_sampling, active_pixels, pixel_size=pixel_size)
+        track_current(track, pID, cols, slice_size, t_sampling, active_pixels, pixel_size)
 
     return active_pixels
 
-# @nb.jit
+@nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
-    x_pixel = np.linspace(tpcBorders[0][0], tpcBorders[0][1], n_pixels)
-    y_pixel = np.linspace(tpcBorders[1][0], tpcBorders[1][1], n_pixels)
+    x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels)
+    y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels)
     return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
