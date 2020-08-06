@@ -1,7 +1,16 @@
-  language: python
-  script:
-    - pytest tests/*.py
+language: python
+script:
+  - pytest tests/*.py
+
+install:
+  - pip install --user travis-sphinx
+
+script:
+    - travis-sphinx build
+
+after_success:
+    - travis-sphinx deploy
+
 
 notifications:
   slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
-  
