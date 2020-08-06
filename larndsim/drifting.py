@@ -13,7 +13,7 @@ def Drift(tracks, col):
     """
     CPU Drift function
     """
-    zAnode = tpcBorders[2][0]
+    zAnode = tpc_borders[2][0]
 
     for index in nb.prange(tracks.shape[0]):
         driftDistance = fabs(tracks[index, col["z"]] - zAnode)
