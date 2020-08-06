@@ -148,7 +148,7 @@ def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
     i = 0
     for x in xv:
         for y in yv:
-            distances[i] = exp(-10*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
+            distances[i] = exp(-1e2*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
             i += 1
 
     weights_attenuated = weights * distances
@@ -182,13 +182,26 @@ def rho(x, y, z, a, start, sigmas, segment, Deltar, factor):
 
 @nb.njit(fastmath=True)
 def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
+    """The function calculates the weights of the charge cloud slice at a
+    specified point
+
+    Args:
+        n_electrons (int): number of electrons ionized by the track
+        point (:obj:`numpy.array`): coordinates of the specified point
+        start (:obj:`numpy.array`): coordinates of the track segment start point
+        end (:obj:`numpy.array`): coordinates of the track segment end point
+        sigmas (:obj:`numpy.array`): diffusion values along the x,y,z axes
+        slice_size (int): number of sampling points for the slice
+
+    Returns:
+        :obj:`numpy.array`: array containing the weights
+    """
+
     segment = end - start
 
     Deltar = np.linalg.norm(segment)
-
     factor = n_electrons/Deltar/(sigmas.prod()*sqrt(8*pi*pi*pi))
     a = ((segment/Deltar)**2 / (2*sigmas**2)).sum()
-
 
     xx = np.linspace(point[0] - sigmas[0] * 5,
                      point[0] + sigmas[0] * 5,
@@ -206,11 +219,31 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
                 weights[i] = rho(x, y, z, a, start, sigmas, segment, Deltar, factor)
                 i += 1
 
-    return weights.ravel() * (xx[1]-xx[0]) * (yy[1]-yy[0])
+    return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
 
 
-@nb.njit(fastmath=True)
+def partial(func, *args):
+    @nb.njit
+    def inner(*iargs):
+        return func(*args, *iargs)
+    return inner
+
+
+@nb.njit(fastmath=True, parallel=True)
 def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
+    """The function calculates the current induced on each pixel for the selected track
+
+    Args:
+        track (:obj:`numpy.array`): array containing track segment information
+        pixels (:obj:`numpy.array`): array containing the IDs of the involved pixels
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
+        slice_size (int): number of points for the sampling of the diffused charge cloud slice
+        t_sampling (float): time sampling
+        active_pixels (:obj:`numba.typed.Dict`): Numba dictionary where we store the pixel signals
+        pixel_size (tuple): size of each pixel on the x and y axes
+        time_padding (float, optional): time padding on each side of the induced signal array
+
+    """
 
     start = np.array([track[cols["x_start"]], track[cols["y_start"]], track[cols["z_start"]]])
     end = np.array([track[cols["x_end"]], track[cols["y_end"]], track[cols["z_end"]]])
@@ -225,8 +258,11 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
                        track[cols["longDiff"]]])
     endcap_size = 5 * track[cols["longDiff"]]
 
+    # Here we calculate the diffusion weights at the center of the track segment
     weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
 
+    # Here we calculate the start and end time of our signal (+- a specified padding)
+    # and we round it to our time sampling
     t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
     t_end = (track[cols["t_end"]] + time_padding) // t_sampling * t_sampling
     t_length = t_end - t_start
@@ -234,6 +270,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
     z_sampling = t_sampling * vdrift
 
+    # The first loop is over the involved pixels
     for i in nb.prange(pixels.shape[0]):
         pID = pixels[i]
         if pID[0] == np.inf:
@@ -242,7 +279,10 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
         x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
         y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
 
-        z_start, z_end = z_interval(start, end, x_p, y_p, 3*np.sqrt(pixel_size[0]**2 + pixel_size[1]**2))
+        # This is the interval along the drift direction that we are considering
+        # We are taking slice of the charge cloud that are within the impact factor
+        impact_factor = 3 * np.sqrt(pixel_size[0]**2 + pixel_size[1]**2)
+        z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
         z_range = np.linspace(z_start, z_end, ceil(abs(z_end-z_start)/z_sampling)+1)
 
         if z_range.size <= 1:
@@ -250,32 +290,42 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
         signal = np.zeros_like(time_interval)
 
-        for z in z_range:
+        # The second loop is over the slices along the drift direction
+        for j in nb.prange(z_range.shape[0]):
+            z = z_range[j]
             point = track_point(start, direction, z)
             xv, yv, zv = slice_coordinates(point, track[cols["tranDiff"]] * 5, slice_size)
+
+            # If the slice is near the endcap we calculate the weights again and we don't
+            # use the weights calculated at midpoint
             if track[cols["z_end"]] - endcap_size <= z <= track[cols["z_end"]] + endcap_size or \
                track[cols["z_start"]] - endcap_size <= z <= track[cols["z_start"]] + endcap_size:
                 weights = diffusion_weights(track[cols["NElectrons"]], point, start, end, sigmas, slice_size)
             else:
                 weights = weights_bulk
 
+            # This is the induced current for this z coordinate
             t0 = (z - tpc_borders[2][0]) / vdrift
-
             current_response_z = current_response(time_interval, t0=t0)
+
+            # Here we multiply the signal for each sampled point in our slice
+            # The total signal will be the sum of the signal for each point
             signals = slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
             signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
 
         if not signal.any():
             continue
 
+        # If the pixel is already in the dictionary of the active pixels
+        # we add the new signal to the list with its start and end times,
+        # otherwise we create a list filled with the signal we just calculated
         t = (pID[0], pID[1])
-        if t not in active_pixels:
+        if t in active_pixels:
+            active_pixels[t].append((t_start, t_end, signal))
+        else:
             pixel_signal = nb.typed.List()
             pixel_signal.append((t_start, t_end, signal))
             active_pixels[t] = pixel_signal
-        else:
-            active_pixels[t].append((t_start, t_end, signal))
-
 
 @nb.jit
 def pixel_response(pixel_signals, anode_t):
@@ -293,6 +343,20 @@ signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_ar
 
 @nb.njit(fastmath=True)
 def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_size=20):
+    """This function calculate the current induced on the pixels by the input track segments
+
+    Args:
+        track (:obj:`numpy.array`): array containing the tracks segment information
+        pIDs_array (:obj:`numpy.array`): array containing the involved pixels for each track
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
+        pixel_size (tuple): size of each pixel on the x and y axes
+        t_sampling (float, optional): time sampling
+        slice_size (int, optional): number of points for the sampling of the diffused charge cloud slice
+
+    Return:
+        :obj:`numba.typed.Dict`: Numba dictionary containing a list of the signals for each pixel
+    """
+
     active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
                                         value_type=signal_type)
 
@@ -305,6 +369,17 @@ def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_siz
 
 @nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
+    """This function returns the ID of the pixel that covers the specified point
+
+    Args:
+        x (float): x coordinate
+        y (float): y coordinate
+        n_pixels (int): number of pixels for each axis
+
+    Returns:
+        tuple: the pixel ID
+    """
+
     x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels)
     y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels)
     return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
