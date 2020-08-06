@@ -1,7 +1,5 @@
 numpy
 scipy
-tqdm
 scikit-image
 pytest
 numba
-spycial
