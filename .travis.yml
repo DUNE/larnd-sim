@@ -1,9 +1,7 @@
 language: python
 script:
   - pytest tests/*.py
-
-script:
-    - travis-sphinx build
+  - travis-sphinx build
 
 after_success:
     - travis-sphinx deploy --branches=numba_roberto
