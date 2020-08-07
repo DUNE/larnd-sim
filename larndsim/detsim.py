@@ -89,7 +89,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     return min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
 
-@nb.jit
+# @nb.jit
 def get_pixels(track, cols, pixel_size):
     s = (track[cols["x_start"]], track[cols["y_start"]])
     e = (track[cols["x_end"]], track[cols["y_end"]])
@@ -123,17 +123,17 @@ def get_pixels(track, cols, pixel_size):
 
     return involved_pixels
 
-@nb.jit
-def list2array(pixelTrackIDs):
+# @nb.jit
+def list2array(pixelTrackIDs, dtype=np.int64):
     lens = [len(pIDs) for pIDs in pixelTrackIDs]
-    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.inf)
+    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.inf, dtype=dtype)
     for i, pIDs in enumerate(pixelTrackIDs):
         for j, pID in enumerate(pIDs):
             pIDs_array[i][j] = pID
     
     return pIDs_array
 
-@nb.jit
+# @nb.jit
 def pixelID_track(tracks, cols, pixel_size):
     dictPixelTrackID = []
 
@@ -327,7 +327,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
             pixel_signal.append((t_start, t_end, signal))
             active_pixels[t] = pixel_signal
 
-@nb.jit
+# @nb.jit
 def pixel_response(pixel_signals, anode_t):
     current = np.zeros_like(anode_t)
 
@@ -367,7 +367,7 @@ def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_siz
 
     return active_pixels
 
-@nb.jit
+# @nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
     """This function returns the ID of the pixel that covers the specified point
 

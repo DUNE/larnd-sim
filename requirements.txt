@@ -5,3 +5,4 @@ pytest
 numba
 sphinx-rtd-theme
 travis-sphinx
+pandas
