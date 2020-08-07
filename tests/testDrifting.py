@@ -31,7 +31,7 @@ class TestDrifting:
     col["longDiff"] = 8
 
     def test_lifetime(self):
-        zAnode = consts.tpcZStart
+        zAnode = consts.tpc_borders[2][0]
         driftDistance = np.abs(self.tracks[:, self.col["z"]] - zAnode)
         driftTime = driftDistance / consts.vdrift
 
