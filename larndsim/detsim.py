@@ -89,24 +89,23 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     return min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
 
-# @nb.jit
+@nb.njit(fastmath=True)
 def get_pixels(track, cols, pixel_size):
     s = (track[cols["x_start"]], track[cols["y_start"]])
     e = (track[cols["x_end"]], track[cols["y_end"]])
+    
+    start_pixel = (int(round((s[0]- tpc_borders[0][0]) // pixel_size[0])),
+                   int(round((s[1]- tpc_borders[1][0]) // pixel_size[1])))
 
-    start_pixel = (int(round((s[0]-tpc_borders[0][0]) // pixel_size[0])),
-                   int(round((s[1]-tpc_borders[1][0]) // pixel_size[1])))
+    end_pixel = (int(round((e[0]- tpc_borders[0][0]) // pixel_size[0])),
+                 int(round((e[1]- tpc_borders[1][0]) // pixel_size[1])))
 
-    end_pixel = (int(round((e[0]-tpc_borders[0][0]) // pixel_size[0])),
-                 int(round((e[1]-tpc_borders[1][0]) // pixel_size[1])))
-
-    active_pixels = skimage.draw.line(start_pixel[0], start_pixel[1],
+    active_pixels = line2pixel_bresenham(start_pixel[0], start_pixel[1],
                                       end_pixel[0], end_pixel[1])
 
-    xx, yy = active_pixels
     involved_pixels = []
 
-    for x, y in zip(xx, yy):
+    for x, y in active_pixels:
         neighbors = ((x, y),
                      (x, y + 1), (x + 1, y),
                      (x, y - 1), (x - 1, y),
@@ -123,7 +122,48 @@ def get_pixels(track, cols, pixel_size):
 
     return involved_pixels
 
-# @nb.jit
+@nb.njit(fastmath=True)
+def line2pixel_bresenham(x0, y0, x1, y1):
+
+    dx = x1 - x0
+    dy = y1 - y0
+
+    xsign = 1 if dx > 0 else -1
+    ysign = 1 if dy > 0 else -1
+
+    dx = abs(dx)
+    dy = abs(dy)
+
+    if dx > dy:
+        xx, xy, yx, yy = xsign, 0, 0, ysign
+    else:
+        dx, dy = dy, dx
+        xx, xy, yx, yy = 0, ysign, xsign, 0
+
+    D = 2*dy - dx
+    y = 0
+    
+    pixel = nb.typed.List()
+    for x in range(dx + 1):
+        pixel.append([x0 + x*xx + y*yx, y0 + x*xy + y*yy])
+        if D >= 0:
+            y += 1
+            D -= 2*dx
+        D += 2*dy
+        
+    return pixel
+
+@nb.njit(fastmath=True)
+def pixelID_track(tracks, cols, pixel_size):
+    PixelTrackID = nb.typed.List()
+
+    for itrk in range(len(tracks)):
+        PixelTrackID.append(get_pixels(tracks[itrk], cols, pixel_size))
+
+    return PixelTrackID
+
+
+@nb.njit(fastmath=True)
 def list2array(pixelTrackIDs, dtype=np.int64):
     lens = [len(pIDs) for pIDs in pixelTrackIDs]
     pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.inf, dtype=dtype)
@@ -132,15 +172,6 @@ def list2array(pixelTrackIDs, dtype=np.int64):
             pIDs_array[i][j] = pID
     
     return pIDs_array
-
-# @nb.jit
-def pixelID_track(tracks, cols, pixel_size):
-    dictPixelTrackID = []
-
-    for track in tracks:
-        dictPixelTrackID.append(get_pixels(track, cols, pixel_size))
-
-    return dictPixelTrackID
 
 @nb.njit(fastmath=True)
 def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
@@ -327,7 +358,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
             pixel_signal.append((t_start, t_end, signal))
             active_pixels[t] = pixel_signal
 
-# @nb.jit
+@nb.jit
 def pixel_response(pixel_signals, anode_t):
     current = np.zeros_like(anode_t)
 
