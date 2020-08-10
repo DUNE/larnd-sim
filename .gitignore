@@ -5,3 +5,4 @@ dist
 __pycache__
 *.mypy_cache
 *.virtual_documents
+docs/build
