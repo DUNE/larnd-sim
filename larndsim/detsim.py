@@ -1,348 +1,385 @@
-#!/usr/bin/env python
 """
-Detector simulation module
+Module that calculates the current induced by edep-sim track segments
+on the pixels
 """
 
+import numba as nb
 import numpy as np
-import scipy.stats
-
-from math import pi, sqrt, ceil
-from scipy.special import erf
-from tqdm import tqdm_notebook as progress_bar
 import skimage.draw
 
-from . import consts
-from . import drifting
-from . import quenching
+from math import pi, ceil, sqrt, erf, exp
+from .consts import *
 
 
-class TrackCharge:
-    """Track charge deposition"""
+@nb.njit(fastmath=True)
+def current_response(t, A=1, B=5, t0=0):
+    """Current response parametrization"""
+    result = A * np.exp((t - t0) / B)
+    result[t > t0] = 0
+    return result
 
-    def __init__(self, Q, start, end, sigmas):
-        segment = end - start
-        self.start = start
-        self.end = end
-        self.segment = segment
+@nb.njit(fastmath=True)
+def slice_coordinates(point, padding, slice_size):
+    xl = point[0]
+    yl = point[1]
+    xx = np.linspace(xl - padding, xl + padding, slice_size)
+    yy = np.linspace(yl - padding, yl + padding, slice_size)
 
-        self.Deltar = np.linalg.norm(segment)
-        self.sigmas = np.array(sigmas)
-        self.Q = Q
-        self.factor = Q/self.Deltar/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
-        self.a = ((segment/self.Deltar)**2 / (2*self.sigmas**2)).sum()
+    return xx, yy, np.array([point[2]])
 
-    def __repr__(self):
-        instanceDescription = "<%s instance at %s>\nQ %f\nxyz (%f, %f, %f), (%f, %f, %f)\nsigmas (%f, %f, %f)" % \
-                               (self.__class__.__name__, id(self),
-                                self.Q, *self.start, *self.end, *self.sigmas)
+@nb.njit(fastmath=True)
+def track_point(start, direction, z):
+    l = (z - start[2]) / direction[2]
+    xl = start[0] + l * direction[0]
+    yl = start[1] + l * direction[1]
 
-        return instanceDescription
+    return  np.array([xl, yl, z])
 
-    def _b(self, x, y, z):
-        position = np.array([x, y, z])
-        b = -((position.T - self.start) / self.sigmas**2 * self.segment / self.Deltar).T
+@nb.njit(fastmath=True)
+def z_interval(start_point, end_point, x_p, y_p, tolerance):
+    """Here we calculate the interval in the drift direction for the pixel pID
+    using the impact factor"""
 
-        return b.sum(axis=0)
+    if start_point[0] > end_point[0]:
+        start = end_point
+        end = start_point
+    elif start_point[0] < end_point[0]:
+        start = start_point
+        end = end_point
+    else: # Limit case that we should probably manage better
+        return 0, 0
 
-    def rho(self, x, y, z):
-        """Charge distribution in space"""
-        b = self._b(x, y, z)
-        sqrt_a_2 = 2*np.sqrt(self.a)
+    xs, ys = start[0], start[1]
+    xe, ye = end[0], end[1]
 
-        position = np.array([x,y,z])
-        deltaVector = ((position.T - self.start)**2 / (2*self.sigmas**2)).T
+    m = (ye - ys) / (xe - xs)
+    q = (xe * ys - xs * ye) / (xe - xs)
 
-        expo = np.exp(b*b/(4*self.a) - deltaVector.sum(axis=0))
+    a, b, c = m, -1, q
 
-        integral = (sqrt(pi)
-                    * (-erf(b/sqrt_a_2) + erf((b + 2*self.a*self.Deltar)/sqrt_a_2))
-                    / sqrt_a_2)
+    x_poca = (b*(b*x_p-a*y_p) - a*c)/(a*a+b*b)
 
-        return integral*expo*self.factor
+    segment = end - start
+    length = np.linalg.norm(segment)
+    dir3D = segment/length
 
+    if x_poca < start[0]:
+        doca = np.sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
+        x_poca = start[0]
+    elif x_poca > end[0]:
+        doca = np.sqrt((x_p - end[0])**2 + (y_p - end[1])**2)
+        x_poca = end[0]
+    else:
+        doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
 
-class PixelSignal:
-    """Signal induced on pixel at a given time interval"""
+    plusDeltaZ, minusDeltaZ = 0, 0
 
-    def __init__(self, pID, trackID, current, time_interval):
-        self.id = pID
-        self.trackID = trackID
-        self.current = current
-        self.time_interval = time_interval
+    if tolerance > doca:
+        length2D = np.sqrt((xe-xs)**2 + (ye-ys)**2)
+        dir2D = (end[0]-start[0])/length2D, (end[1]-start[1])/length2D
+        deltaL2D = np.sqrt(tolerance**2 - doca**2) # length along the track in 2D
 
+        x_plusDeltaL = x_poca + deltaL2D*dir2D[0] # x coordinates of the tolerance range
+        x_minusDeltaL = x_poca - deltaL2D*dir2D[0]
+        plusDeltaL = (x_plusDeltaL - start[0])/dir3D[0] # length along the track in 3D
+        minusDeltaL = (x_minusDeltaL - start[0])/dir3D[0] # of the tolerance range
 
-    def __repr__(self):
-        instanceDescription = "<%s instance at %s>\n\tPixel ID (%i, %i)\n\tTrack ID %i\n\tTime interval (%g, %g)\n\tCurrent integral %g" % \
-                              (self.__class__.__name__, id(self),
-                               *self.id, self.trackID, *self.time_interval, self.current.sum())
+        plusDeltaZ = start[2] + dir3D[2] * plusDeltaL # z coordinates of the
+        minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
-        return instanceDescription
+    return min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
 
+# @nb.jit
+def get_pixels(track, cols, pixel_size):
+    s = (track[cols["x_start"]], track[cols["y_start"]])
+    e = (track[cols["x_end"]], track[cols["y_end"]])
 
-class TPC:
-    """This class implements the detector simulation of a pixelated LArTPC.
-    It calculates the charge deposited on each pixel.
+    start_pixel = (int(round((s[0]-tpc_borders[0][0]) // pixel_size[0])),
+                   int(round((s[1]-tpc_borders[1][0]) // pixel_size[1])))
+
+    end_pixel = (int(round((e[0]-tpc_borders[0][0]) // pixel_size[0])),
+                 int(round((e[1]-tpc_borders[1][0]) // pixel_size[1])))
+
+    active_pixels = skimage.draw.line(start_pixel[0], start_pixel[1],
+                                      end_pixel[0], end_pixel[1])
+
+    xx, yy = active_pixels
+    involved_pixels = []
+
+    for x, y in zip(xx, yy):
+        neighbors = ((x, y),
+                     (x, y + 1), (x + 1, y),
+                     (x, y - 1), (x - 1, y),
+                     (x + 1, y + 1), (x - 1, y - 1),
+                     (x + 1, y - 1), (x - 1, y + 1))
+        nneighbors = ((x + 2, y), (x + 2, y + 1), (x + 2, y + 2), (x + 2, y - 1), (x + 2, y - 2),
+                      (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x + 2, y - 2),
+                      (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
+                      (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
+
+        for ne in (neighbors+nneighbors):
+            if ne not in involved_pixels:
+                involved_pixels.append(ne)
+
+    return involved_pixels
+
+# @nb.jit
+def list2array(pixelTrackIDs, dtype=np.int64):
+    lens = [len(pIDs) for pIDs in pixelTrackIDs]
+    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.inf, dtype=dtype)
+    for i, pIDs in enumerate(pixelTrackIDs):
+        for j, pID in enumerate(pIDs):
+            pIDs_array[i][j] = pID
+    
+    return pIDs_array
+
+# @nb.jit
+def pixelID_track(tracks, cols, pixel_size):
+    dictPixelTrackID = []
+
+    for track in tracks:
+        dictPixelTrackID.append(get_pixels(track, cols, pixel_size))
+
+    return dictPixelTrackID
+
+@nb.njit(fastmath=True)
+def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
+    distances = np.empty(len(xv)*len(yv))
+    i = 0
+    for x in xv:
+        for y in yv:
+            distances[i] = exp(-1e2*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
+            i += 1
+
+    weights_attenuated = weights * distances
+    signals = np.outer(weights_attenuated, this_current_response)
+
+    return signals
+
+@nb.njit(fastmath=True)
+def _b(x, y, z, start, sigmas, segment, Deltar):
+    return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
+             (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
+             (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
+
+@nb.njit(fastmath=True)
+def rho(x, y, z, a, start, sigmas, segment, Deltar, factor):
+    """Charge distribution in space"""
+    b = _b(x, y, z, start, sigmas, segment, Deltar)
+    sqrt_a_2 = 2*sqrt(a)
+
+    delta = (x-start[0])*(x-start[0])/(2*sigmas[0]*sigmas[0]) + \
+            (y-start[1])*(y-start[1])/(2*sigmas[1]*sigmas[1]) + \
+            (z-start[2])*(z-start[2])/(2*sigmas[2]*sigmas[2])
+
+    expo = exp(b*b/(4*a) - delta)
+
+    integral = sqrt(pi) * \
+               (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
+               sqrt_a_2
+
+    return expo * factor * integral
+
+@nb.njit(fastmath=True)
+def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
+    """The function calculates the weights of the charge cloud slice at a
+    specified point
 
     Args:
-        n_pixels (int): number of pixels that tile the anode
-        t_sampling (float): time sampling
-        **kwargs: dictionary containing the tensor indeces
+        n_electrons (int): number of electrons ionized by the track
+        point (:obj:`numpy.array`): coordinates of the specified point
+        start (:obj:`numpy.array`): coordinates of the track segment start point
+        end (:obj:`numpy.array`): coordinates of the track segment end point
+        sigmas (:obj:`numpy.array`): diffusion values along the x,y,z axes
+        slice_size (int): number of sampling points for the slice
 
-    Attributes:
-        n_pixels (int): number of pixels per axis that tile the anode
-        x_start (float): starting x coordinate of the TPC
-        x_end (float): ending x coordinate of the TPC
+    Returns:
+        :obj:`numpy.array`: array containing the weights
     """
-    def __init__(self, n_pixels=50, t_sampling=0.1, **kwargs):
 
-        self.n_pixels = n_pixels
+    segment = end - start
 
-        self.x_start = consts.tpcBorders[0][0]
-        self.x_end = consts.tpcBorders[0][1]
-        x_length = self.x_end - self.x_start
+    Deltar = np.linalg.norm(segment)
+    factor = n_electrons/Deltar/(sigmas.prod()*sqrt(8*pi*pi*pi))
+    a = ((segment/Deltar)**2 / (2*sigmas**2)).sum()
 
-        self.y_start = consts.tpcBorders[1][0]
-        self.y_end = consts.tpcBorders[1][1]
-        y_length = self.y_end - self.y_start
+    xx = np.linspace(point[0] - sigmas[0] * 5,
+                     point[0] + sigmas[0] * 5,
+                     slice_size)
+    yy = np.linspace(point[1] - sigmas[1] * 5,
+                     point[1] + sigmas[1] * 5,
+                     slice_size)
+    zz = np.array([point[2]])
 
-        self.t_start = consts.timeInterval[0]
-        self.t_end = consts.timeInterval[1]
-        t_length = self.t_end - self.t_start
+    weights = np.empty(len(xx)*len(yy)*len(zz))
+    i = 0
+    for x in xx:
+        for y in yy:
+            for z in zz:
+                weights[i] = rho(x, y, z, a, start, sigmas, segment, Deltar, factor)
+                i += 1
 
-        self.x_sampling = x_length/n_pixels/4
-        self.y_sampling = y_length/n_pixels/4
-        self.t_sampling = t_sampling
-
-        self.anode_x = np.linspace(self.x_start, self.x_end, int(x_length/self.x_sampling))
-        self.anode_y = np.linspace(self.y_start, self.y_end, int(y_length/self.y_sampling))
-        self.anode_t = np.linspace(self.t_start, self.t_end, int(t_length/self.t_sampling))
-
-        self.tpc = np.zeros((int(x_length / self.x_sampling),
-                             int(y_length / self.y_sampling),
-                             int(t_length / t_sampling)))
-
-        self.ixStart = kwargs['x_start']
-        self.ixEnd = kwargs['x_end']
-        self.iyStart = kwargs['y_start']
-        self.iyEnd = kwargs['y_end']
-        self.izStart = kwargs['z_start']
-        self.izEnd = kwargs['z_end']
-        self.itStart = kwargs['t_start']
-        self.itEnd = kwargs['t_end']
-        self.iNElectrons = kwargs['NElectrons']
-        self.iLongDiff = kwargs['longDiff']
-        self.iTranDiff = kwargs['tranDiff']
-        self.iTrackID = kwargs['trackID']
-
-        self.x_pixel_size = x_length / n_pixels
-        self.y_pixel_size = y_length / n_pixels
-
-        self.x_pixel_range = np.linspace(0, self.x_pixel_size, int(self.x_pixel_size/self.x_sampling))
-        self.y_pixel_range = np.linspace(0, self.y_pixel_size, int(self.y_pixel_size/self.y_sampling))
-
-        self.activePixels = {}
-
-    @staticmethod
-    def currentResponse(t, A=1, B=5, t0=0):
-        """Current response parametrization"""
-        result = np.heaviside((-t.T + t0).T, 0.5) * A * np.exp((t.T - t0).T / B)
-        result = np.nan_to_num(result)
-
-        return result
-
-    @staticmethod
-    def sigmoid(t, t0, t_rise=1):
-        """Sigmoid function for FEE response"""
-        result = 1 / (1 + np.exp(-(t-t0)/t_rise))
-        return result
-
-    @staticmethod
-    def distanceAttenuation(distances, t, B=5, t0=0):
-        """Attenuation of the signal"""
-        return np.exp(np.outer(distances, ((t.T-t0).T) / B))
-
-    def getZInterval(self, track, pID):
-        """Here we calculate the interval in Z for the pixel pID
-        using the impact factor"""
-        xs, xe = track[self.ixStart], track[self.ixEnd]
-        ys, ye = track[self.iyStart], track[self.iyEnd]
-        zs, ze = track[self.izStart], track[self.izEnd]
-        length = np.sqrt((xe - xs)*(xe - xs) + (ye - ys)*(ye - ys) + (ze - zs)*(ze - zs))
-        trackDir = (xe-xs)/length, (ye-ys)/length, (ze-zs)/length
-
-        x_p = pID[0]*self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size/2
-        y_p = pID[1]*self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size/2
-
-        m = (ye - ys) / (xe - xs)
-        q = (xe * ys - xs * ye) / (xe - xs)
-
-        a, b, c = m, -1, q
-
-        x_poca = (b*(b*x_p-a*y_p) - a*c)/(a*a+b*b)
-
-        doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
-        tolerance = 1.5*np.sqrt(self.x_pixel_size**2 + self.y_pixel_size**2)
-        plusDeltaZ, minusDeltaZ = 0, 0
-
-        if tolerance > doca:
-            length2D = np.sqrt((xe-xs)**2 + (ye-ys)**2)
-            dir2D = (xe-xs)/length2D, (ye-ys)/length2D
-            deltaL2D = np.sqrt(tolerance**2 - doca**2) # length along the track in 2D
-
-            x_plusDeltaL = x_poca + deltaL2D*dir2D[0] # x coordinates of the tolerance range
-            x_minusDeltaL = x_poca - deltaL2D*dir2D[0]
-
-            plusDeltaL = (x_plusDeltaL - xs)/trackDir[0] # length along the track in 3D
-            minusDeltaL = (x_minusDeltaL - xs)/trackDir[0] # of the tolerance range
-
-            plusDeltaZ = min(zs + trackDir[2] * plusDeltaL, ze) # z coordinates of the
-            minusDeltaZ = max(zs, zs + trackDir[2] * minusDeltaL) # tolerance range
-
-        return minusDeltaZ, plusDeltaZ
-
-    def calculateCurrent(self, track):
-        pixelsIDs = self.getPixels(track)
-
-        xs, xe = track[self.ixStart], track[self.ixEnd]
-        ys, ye = track[self.iyStart], track[self.iyEnd]
-        zs, ze = track[self.izStart], track[self.izEnd]
-
-        start = np.array([xs, ys, zs])
-        end = np.array([xe, ye, ze])
-        segment = end - start
-        length = np.linalg.norm(segment)
-        direction = segment / length
-
-        sigmas = np.array([track[self.iTranDiff].item()*100,
-                           track[self.iTranDiff].item()*100,
-                           track[self.iLongDiff].item()*100])
-
-        trackCharge = TrackCharge(track[self.iNElectrons],
-                                  start,
-                                  end,
-                                  sigmas=sigmas)
-
-        endcap_size = 3 * track[self.iLongDiff].item() * 100
-        x = np.linspace((xe + xs) / 2 - self.x_pixel_size * 2,
-                        (xe + xs) / 2 + self.x_pixel_size * 2,
-                        10)
-        y = np.linspace((ye + ys) / 2 - self.y_pixel_size * 2,
-                        (ye + ys) / 2 + self.y_pixel_size * 2,
-                        10)
-        z = (ze+zs)/2
-
-        z_sampling = self.t_sampling * consts.vdrift
-        xv, yv, zv = np.meshgrid(x, y, z)
-        weights = trackCharge.rho(xv, yv, zv)
-        weights_bulk = weights.ravel()
-
-        t_start = (track[self.itStart]-20) // self.t_sampling * self.t_sampling
-        t_end = (track[self.itEnd]+20) // self.t_sampling * self.t_sampling
-        t_length = t_end-t_start
-        time_interval = np.linspace(t_start, t_end, round(t_length/self.t_sampling))
-
-        weights_endcap = {}
-        zIntervals = {}
-        for pixelID in pixelsIDs:
-            pID = (pixelID[0], pixelID[1])
-            z_start, z_end = self.getZInterval(track, pID)
-            zIntervals[pID] = (z_start, z_end)
-
-            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
-            z_endcaps_range = z_range[(z_range >= ze - endcap_size) | (z_range <= zs + endcap_size)]
-            for z in z_endcaps_range:
-                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
-                weights_endcap[z] = trackCharge.rho(xv, yv, zv)
+    return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
 
 
-        for pixelID in progress_bar(pixelsIDs, desc="Calculating pixel response..."):
-            pID = (pixelID[0], pixelID[1])
-            z_start, z_end = zIntervals[pID]
+def partial(func, *args):
+    @nb.njit
+    def inner(*iargs):
+        return func(*args, *iargs)
+    return inner
 
-            signal = np.zeros_like(time_interval)
 
-            x_p = pID[0] * self.x_pixel_size+consts.tpcBorders[0][0] + self.x_pixel_size / 2
-            y_p = pID[1] * self.y_pixel_size+consts.tpcBorders[1][0] + self.y_pixel_size / 2
+@nb.njit(fastmath=True, parallel=True)
+def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
+    """The function calculates the current induced on each pixel for the selected track
 
-            z_range = np.linspace(z_start, z_end, ceil((z_end-z_start)/z_sampling))
+    Args:
+        track (:obj:`numpy.array`): array containing track segment information
+        pixels (:obj:`numpy.array`): array containing the IDs of the involved pixels
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
+        slice_size (int): number of points for the sampling of the diffused charge cloud slice
+        t_sampling (float): time sampling
+        active_pixels (:obj:`numba.typed.Dict`): Numba dictionary where we store the pixel signals
+        pixel_size (tuple): size of each pixel on the x and y axes
+        time_padding (float, optional): time padding on each side of the induced signal array
 
-            if z_range.size <= 1:
-                continue
+    """
 
-            for z in z_range:
-                xv, yv, zv = self._getSliceCoordinates(startVector, direction, z)
+    start = np.array([track[cols["x_start"]], track[cols["y_start"]], track[cols["z_start"]]])
+    end = np.array([track[cols["x_end"]], track[cols["y_end"]], track[cols["z_end"]]])
+    mid_point = (start+end)/2
 
-                weights = weights_bulk
-                if z >= ze - endcap_size or z <= zs + endcap_size:
-                    weights = weights_endcap[z]
+    segment = end - start
+    length = np.linalg.norm(segment)
+    direction = segment/length
 
-                signals = self._getSliceSignal(x_p, y_p, z, weights, xv, yv, time_interval)
-                signal += np.sum(signals, axis=0) \
-                          * (x[1]-x[0]) * (y[1]-y[0]) * (z_range[1]-z_range[0])
+    sigmas = np.array([track[cols["tranDiff"]],
+                       track[cols["tranDiff"]],
+                       track[cols["longDiff"]]])
+    endcap_size = 5 * track[cols["longDiff"]]
 
-            pixelSignal = PixelSignal(pID, int(track[self.iTrackID]), signal, (t_start, t_end))
-            if pID in self.activePixels:
-                self.activePixels[pID].append(pixelSignal)
+    # Here we calculate the diffusion weights at the center of the track segment
+    weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
+
+    # Here we calculate the start and end time of our signal (+- a specified padding)
+    # and we round it to our time sampling
+    t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
+    t_end = (track[cols["t_end"]] + time_padding) // t_sampling * t_sampling
+    t_length = t_end - t_start
+    time_interval = np.linspace(t_start, t_end, int(round(t_length / t_sampling)))
+
+    z_sampling = t_sampling * vdrift
+
+    # The first loop is over the involved pixels
+    for i in nb.prange(pixels.shape[0]):
+        pID = pixels[i]
+        if pID[0] == np.inf:
+            break
+
+        x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
+        y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
+
+        # This is the interval along the drift direction that we are considering
+        # We are taking slice of the charge cloud that are within the impact factor
+        impact_factor = 3 * np.sqrt(pixel_size[0]**2 + pixel_size[1]**2)
+        z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+        z_range = np.linspace(z_start, z_end, ceil(abs(z_end-z_start)/z_sampling)+1)
+
+        if z_range.size <= 1:
+            continue
+
+        signal = np.zeros_like(time_interval)
+
+        # The second loop is over the slices along the drift direction
+        for j in nb.prange(z_range.shape[0]):
+            z = z_range[j]
+            point = track_point(start, direction, z)
+            xv, yv, zv = slice_coordinates(point, track[cols["tranDiff"]] * 5, slice_size)
+
+            # If the slice is near the endcap we calculate the weights again and we don't
+            # use the weights calculated at midpoint
+            if track[cols["z_end"]] - endcap_size <= z <= track[cols["z_end"]] + endcap_size or \
+               track[cols["z_start"]] - endcap_size <= z <= track[cols["z_start"]] + endcap_size:
+                weights = diffusion_weights(track[cols["NElectrons"]], point, start, end, sigmas, slice_size)
             else:
-                self.activePixels[pID] = [pixelSignal]
+                weights = weights_bulk
 
-    def _getSliceCoordinates(self, startVector, direction, z):
-        l = (z - startVector[2]) / direction[2]
-        xl = startVector[0] + l * direction[0]
-        yl = startVector[1] + l * direction[1]
-        xx = np.linspace(xl - self.x_pixel_size * 2, xl + self.x_pixel_size * 2, 10)
-        yy = np.linspace(yl - self.y_pixel_size * 2, yl + self.y_pixel_size * 2, 10)
-        xv, yv, zv = np.meshgrid(xx, yy, z)
+            # This is the induced current for this z coordinate
+            t0 = (z - tpc_borders[2][0]) / vdrift
+            current_response_z = current_response(time_interval, t0=t0)
 
-        return xv, yv, zv
+            # Here we multiply the signal for each sampled point in our slice
+            # The total signal will be the sum of the signal for each point
+            signals = slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
+            signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
 
-    def _getSliceSignal(self, x_p, y_p, z, weights, xv, yv, time_interval):
-        t0 = (z - consts.tpcBorders[2][0]) / consts.vdrift
-        signals = np.outer(weights, self.currentResponse(time_interval, t0=t0))
-        distances = np.sqrt((xv - x_p)*(xv - x_p) + (yv - y_p)*(yv - y_p))
+        if not signal.any():
+            continue
 
-        signals *= self.distanceAttenuation(distances.ravel(), time_interval, t0=t0)
+        # If the pixel is already in the dictionary of the active pixels
+        # we add the new signal to the list with its start and end times,
+        # otherwise we create a list filled with the signal we just calculated
+        t = (pID[0], pID[1])
+        if t in active_pixels:
+            active_pixels[t].append((t_start, t_end, signal))
+        else:
+            pixel_signal = nb.typed.List()
+            pixel_signal.append((t_start, t_end, signal))
+            active_pixels[t] = pixel_signal
 
-        return signals
+# @nb.jit
+def pixel_response(pixel_signals, anode_t):
+    current = np.zeros_like(anode_t)
 
-    def getPixels(self, track):
-        s = (track[self.ixStart], track[self.iyStart])
-        e = (track[self.ixEnd], track[self.iyEnd])
+    for signal in pixel_signals:
+        current[(anode_t >= signal[0]) & (anode_t <= signal[1])] += signal[2]
 
-        start_pixel = (int((s[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
-                       int((s[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
+    return current
 
-        end_pixel = (int((e[0]-consts.tpcBorders[0][0]) // self.x_pixel_size),
-                     int((e[1]-consts.tpcBorders[1][0]) // self.y_pixel_size))
 
-        activePixels = skimage.draw.line(start_pixel[0], start_pixel[1],
-                                         end_pixel[0], end_pixel[1])
+float_array = nb.types.float64[::1]
+pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
+signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
 
-        xx, yy = activePixels
-        involvedPixels = []
+@nb.njit(fastmath=True)
+def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_size=20):
+    """This function calculate the current induced on the pixels by the input track segments
 
-        for x, y in zip(xx, yy):
-            neighbors = (x, y), \
-                        (x, y + 1), (x + 1, y), \
-                        (x, y - 1), (x - 1, y), \
-                        (x + 1, y + 1), (x - 1, y - 1), \
-                        (x + 1, y - 1), (x - 1, y + 1)
-            for ne in neighbors:
-                if ne not in involvedPixels:
-                    involvedPixels.append(ne)
+    Args:
+        track (:obj:`numpy.array`): array containing the tracks segment information
+        pIDs_array (:obj:`numpy.array`): array containing the involved pixels for each track
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
+        pixel_size (tuple): size of each pixel on the x and y axes
+        t_sampling (float, optional): time sampling
+        slice_size (int, optional): number of points for the sampling of the diffused charge cloud slice
 
-        return np.array(involvedPixels)
+    Return:
+        :obj:`numba.typed.Dict`: Numba dictionary containing a list of the signals for each pixel
+    """
 
-    def getPixelResponse(self, pixelID):
-        pixelSignals = self.activePixels[pixelID]
-        current = np.zeros_like(self.anode_t)
+    active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
+                                        value_type=signal_type)
 
-        for signal in pixelSignals:
-            current[(self.anode_t >= signal.time_interval[0]) & (self.anode_t <= signal.time_interval[1])] += signal.current
+    for i in nb.prange(tracks.shape[0]):
+        track = tracks[i]
+        pID = pIDs_array[i]
+        track_current(track, pID, cols, slice_size, t_sampling, active_pixels, pixel_size)
 
-        return current
+    return active_pixels
 
-    def getPixelFromCoordinates(self, x, y):
-        x_pixel = np.linspace(self.x_start, self.x_end, self.n_pixels)
-        y_pixel = np.linspace(self.y_start, self.y_end, self.n_pixels)
-        return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
+# @nb.jit
+def pixel_from_coordinates(x, y, n_pixels):
+    """This function returns the ID of the pixel that covers the specified point
+
+    Args:
+        x (float): x coordinate
+        y (float): y coordinate
+        n_pixels (int): number of pixels for each axis
+
+    Returns:
+        tuple: the pixel ID
+    """
+
+    x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels)
+    y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels)
+    return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
