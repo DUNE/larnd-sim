@@ -1,7 +1,8 @@
 numpy
 scipy
-tqdm
 scikit-image
 pytest
 numba
-spycial
+sphinx-rtd-theme
+travis-sphinx
+pandas
