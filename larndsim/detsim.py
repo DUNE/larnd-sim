@@ -253,13 +253,6 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
     return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
 
 
-def partial(func, *args):
-    @nb.njit
-    def inner(*iargs):
-        return func(*args, *iargs)
-    return inner
-
-
 @nb.njit(fastmath=True, parallel=True)
 def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
     """The function calculates the current induced on each pixel for the selected track
