@@ -3,7 +3,7 @@
 import random
 import numpy as np
 import pytest
-
+from math import sqrt, pi
 import os, sys, inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -16,13 +16,24 @@ class TestTrackCharge:
     start = np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
     end =  np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
     sigmas = np.array([random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)])
-    trackCharge = detsim.TrackCharge(charge, start, end, sigmas)
 
     def test_rho(self):
-        x = np.linspace(-10, 10, 100)
-        y = np.linspace(-10, 10, 100)
-        z = np.linspace(-10, 10, 100)
-        xv, yv, zv = np.meshgrid(x, y, z)
-        rho = self.trackCharge.rho(np.array([xv, yv, zv])).sum() * (x[1]-x[0]) * (y[1]-y[0]) * (z[1]-z[0])
+        xx = np.linspace(-10, 10, 100)
+        yy = np.linspace(-10, 10, 100)
+        zz = np.linspace(-10, 10, 100)
 
-        assert rho == pytest.approx(self.charge, rel=0.05)
+        segment = self.end - self.start
+        Deltar = np.linalg.norm(segment)
+        factor = self.charge/Deltar/(self.sigmas.prod()*sqrt(8*pi*pi*pi))
+        a = ((segment/Deltar)**2 / (2*self.sigmas**2)).sum()
+
+        weights = np.empty(len(xx)*len(yy)*len(zz))
+
+        i = 0
+        for x in xx:
+            for y in yy:
+                for z in zz:
+                    weights[i] = detsim.rho(x, y, z, a, self.start, self.sigmas, segment, Deltar, factor) * (xx[1]-xx[0]) * (yy[1]-yy[0]) * (zz[1] - zz[0])
+                    i += 1
+
+        assert np.sum(weights) == pytest.approx(self.charge, rel=0.05)
