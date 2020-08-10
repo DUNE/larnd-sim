@@ -4,7 +4,7 @@ script:
   - travis-sphinx build
 
 after_success:
-    - travis-sphinx deploy --branches=numba_roberto
+    - travis-sphinx deploy --branches=master
 
 notifications:
   slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
