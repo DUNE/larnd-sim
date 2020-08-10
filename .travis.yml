@@ -1,7 +1,10 @@
-  language: python
-  script:
-    - pytest tests/*.py
+language: python
+script:
+  - pytest tests/*.py
+  - travis-sphinx build
+
+after_success:
+    - travis-sphinx deploy --branches=numba_roberto
 
 notifications:
   slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
-  
