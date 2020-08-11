@@ -188,15 +188,17 @@ def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
     return signals
 
 @nb.njit(fastmath=True)
-def _b(x, y, z, start, sigmas, segment, Deltar):
+def _b(x, y, z, start, sigmas, segment):
+    Deltar = np.linalg.norm(segment)
     return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
              (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
              (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
 
 @nb.njit(fastmath=True)
-def rho(x, y, z, a, start, sigmas, segment, Deltar, factor):
+def rho(x, y, z, a, start, sigmas, segment, factor):
     """Charge distribution in space"""
-    b = _b(x, y, z, start, sigmas, segment, Deltar)
+    Deltar = np.linalg.norm(segment)
+    b = _b(x, y, z, start, sigmas, segment)
     sqrt_a_2 = 2*sqrt(a)
 
     delta = (x-start[0])*(x-start[0])/(2*sigmas[0]*sigmas[0]) + \
@@ -247,7 +249,7 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
     for x in xx:
         for y in yy:
             for z in zz:
-                weights[i] = rho(x, y, z, a, start, sigmas, segment, Deltar, factor)
+                weights[i] = rho(x, y, z, a, start, sigmas, segment, factor)
                 i += 1
 
     return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
