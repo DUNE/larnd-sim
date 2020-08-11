@@ -5,7 +5,6 @@ on the pixels
 
 import numba as nb
 import numpy as np
-import skimage.draw
 
 from math import pi, ceil, sqrt, erf, exp
 from .consts import *
