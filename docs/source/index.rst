@@ -6,19 +6,27 @@
 Welcome to larnd-sim's documentation!
 =====================================
 
-.. automodule:: larndsim.detsim
-    :members:
-
-.. automodule:: larndsim.quenching
-    :members:
-
-.. automodule:: larndsim.drifting
-    :members:
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+Quenching stage
+###############
+
+.. automodule:: larndsim.quenching
+    :members:
+
+Drifting stage
+###############
+
+.. automodule:: larndsim.drifting
+    :members:
+
+Detector simulation stage
+#########################
+
+.. automodule:: larndsim.detsim
+    :members:
 
 
 Indices and tables
