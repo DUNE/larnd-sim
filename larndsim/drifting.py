@@ -13,11 +13,11 @@ def Drift(tracks, cols):
     """
     This function takes as input an array of track segments and calculates
     the properties of the segments at the anode:
-        - z coordinate at the anode
-        - number of electrons taking into account electron lifetime
-        - longitudinal diffusion
-        - transverse diffusion
-        - time of arrival at the anode
+    - z coordinate at the anode
+    - number of electrons taking into account electron lifetime
+    - longitudinal diffusion
+    - transverse diffusion
+    - time of arrival at the anode
 
     Args:
         tracks (:obj:`numpy.array`): array containing the tracks segment information
