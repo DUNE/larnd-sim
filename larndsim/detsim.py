@@ -5,8 +5,8 @@ on the pixels
 
 import numba as nb
 import numpy as np
-import skimage.draw
 
+from numba import cuda
 from math import pi, ceil, sqrt, erf, exp
 from .consts import *
 
@@ -188,14 +188,14 @@ def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
     return signals
 
 @nb.njit(fastmath=True)
-def _b(x, y, z, start, sigmas, segment):
+def _b_cpu(x, y, z, start, sigmas, segment):
     Deltar = np.linalg.norm(segment)
     return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
              (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
              (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
 
 @nb.njit(fastmath=True)
-def rho(x, y, z, a, start, sigmas, segment, factor):
+def rho_cpu(x, y, z, a, start, sigmas, segment, factor):
     """Charge distribution in space"""
     Deltar = np.linalg.norm(segment)
     b = _b(x, y, z, start, sigmas, segment)
@@ -213,7 +213,41 @@ def rho(x, y, z, a, start, sigmas, segment, factor):
 
     return expo * factor * integral
 
-@nb.njit(fastmath=True)
+@cuda.jit(device=True)
+def _b(x, y, z, start, sigmas, segment, Deltar):
+    return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
+             (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
+             (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
+
+@cuda.jit
+def rho(xx, yy, zz, q, weights, start, sigmas, segment):
+    x, y, z = cuda.grid(3)
+    Deltax, Deltay, Deltaz = segment[0], segment[1], segment[2]
+    Deltar = sqrt(Deltax**2+Deltay**2+Deltaz**2)
+    a = ((Deltax/Deltar) * (Deltax/Deltar) / (2*sigmas[0]*sigmas[0]) + \
+         (Deltay/Deltar) * (Deltay/Deltar) / (2*sigmas[1]*sigmas[1]) + \
+         (Deltaz/Deltar) * (Deltaz/Deltar) / (2*sigmas[2]*sigmas[2]))
+    factor = q/Deltar/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
+    sqrt_a_2 = 2*sqrt(a)
+
+    if x < xx.shape[0] and y < yy.shape[0] and z < zz.shape[0]:
+        b = _b(xx[x], yy[y], zz[z], start, sigmas, segment, Deltar)
+
+        delta = (xx[x]-start[0])*(xx[x]-start[0])/(2*sigmas[0]*sigmas[0]) + \
+                (yy[y]-start[1])*(yy[y]-start[1])/(2*sigmas[1]*sigmas[1]) + \
+                (zz[z]-start[2])*(zz[z]-start[2])/(2*sigmas[2]*sigmas[2])
+
+        expo = exp(b*b/(4*a) - delta)
+
+        integral = sqrt(pi) * \
+                   (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
+                   sqrt_a_2
+        
+        t0 = (zz[z]+50)/0.153812
+        x_p, y_p = 0, 3
+        weights[x,y,z] = expo * integral * factor * exp(-sqrt((xx[x]-x_p)**2+(yy[y]-y_p)**2))
+
+@nb.jit
 def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
     """The function calculates the weights of the charge cloud slice at a
     specified point
@@ -244,19 +278,21 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
                      slice_size)
     zz = np.array([point[2]])
 
-    weights = np.empty(len(xx)*len(yy)*len(zz))
-    i = 0
-    for x in xx:
-        for y in yy:
-            for z in zz:
-                weights[i] = rho(x, y, z, a, start, sigmas, segment, factor)
-                i += 1
+    weights = np.zeros((xx.shape[0],yy.shape[0],zz.shape[0]))
+    threadsperblock = (4,4,4)
+    blockspergrid_x = ceil(xx.shape[0] / threadsperblock[0])
+    blockspergrid_y = ceil(yy.shape[0] / threadsperblock[1])
+    blockspergrid_z = ceil(zz.shape[0] / threadsperblock[2])
+    blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
+
+    rho[blockspergrid, threadsperblock](xx, yy, zz, n_electrons, weights, start, sigmas, segment)
+    weights = weights.ravel()
 
     return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
 
 
-@nb.njit(fastmath=True, parallel=True)
-def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
+@nb.jit#(fastmath=True, parallel=True)
+def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20.0):
     """The function calculates the current induced on each pixel for the selected track
 
     Args:
@@ -367,7 +403,7 @@ float_array = nb.types.float64[::1]
 pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
 signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
 
-@nb.njit(fastmath=True)
+@nb.jit#(fastmath=True)
 def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_size=20):
     """This function calculate the current induced on the pixels by the input track segments
 
