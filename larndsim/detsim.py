@@ -64,7 +64,9 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         plusDeltaZ = start[2] + dir3D[2] * plusDeltaL # z coordinates of the
         minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
-    return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
+        return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
+    else:
+        return 0, 0, 0
 
 
 @nb.jit(fastmath=True)
@@ -80,7 +82,6 @@ def get_pixels(track, cols, pixel_size):
 
     active_pixels = line2pixel_bresenham(start_pixel[0], start_pixel[1],
                                       end_pixel[0], end_pixel[1])
-
     involved_pixels = []
 
     for x, y in active_pixels:
@@ -266,7 +267,7 @@ def pixels_signal(pixels, signals, pixel_size, start, direction, end, time_inter
 
             impact_factor = 1.5 * sqrt(pixel_size[0]**2 + pixel_size[1]**2)
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-            
+
             if z_start != 0 and z_end != 0:
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)+1
                 z_range_down = ceil(abs(z_poca-z_start)/z_sampling)+1
@@ -317,7 +318,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
     # Here we calculate the diffusion weights at the center of the track segment
     weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
-    
+
     # Here we calculate the start and end time of our signal (+- a specified padding)
     # and we round it to our time sampling
     t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
@@ -326,6 +327,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
     time_interval = np.linspace(t_start, t_end, int(round(t_length / t_sampling)))
 
     z_sampling = t_sampling * vdrift
+
 
     signals = np.zeros((pixels.shape[0], time_interval.shape[0]))
     threadsperblock = (32, 32)
@@ -342,12 +344,16 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
                                                   z_sampling,
                                                   weights_bulk,
                                                   track[cols["tranDiff"]] * 5)
+
     for i in range(signals.shape[0]):
         pID = pixels[i][0], pixels[i][1]
         if pID[0] < 0 or pID[1] < 0:
             continue
             
         signal = signals[i]
+        if not signal.any():
+            continue
+            
         if pID in active_pixels:
             active_pixels[pID].append((t_start, t_end, signal))
         else:
