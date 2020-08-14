@@ -66,7 +66,6 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     length = np.linalg.norm(segment)
     dir3D = segment/length
 
-    z_poca = start[2] + (x_poca - start[0])/dir3D[0]*dir3D[2]
 
     if x_poca < start[0]:
         doca = np.sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
@@ -76,6 +75,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         x_poca = end[0]
     else:
         doca = np.abs(a*x_p+b*y_p+c)/np.sqrt(a*a+b*b)
+
+    z_poca = start[2] + (x_poca - start[0])/dir3D[0]*dir3D[2]
 
     plusDeltaZ, minusDeltaZ = 0, 0
 
@@ -92,8 +93,10 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         plusDeltaZ = start[2] + dir3D[2] * plusDeltaL # z coordinates of the
         minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
-    return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
-
+        return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
+    else:
+        return 0, 0, 0
+    
 @nb.njit(fastmath=True)
 def get_pixels(track, cols, pixel_size):
     s = (track[cols["x_start"]], track[cols["y_start"]])
@@ -185,7 +188,6 @@ def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
         for y in yv:
             weights_attenuated += weights[i]*exp(-1e2*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
             i += 1
-
     return this_current_response * weights_attenuated
 
 @nb.njit(fastmath=True)
@@ -211,7 +213,7 @@ def rho(x, y, z, a, start, sigmas, segment, factor):
     integral = sqrt(pi) * \
                (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
                sqrt_a_2
-
+    
     return expo * factor * integral
 
 @nb.njit(fastmath=True)
@@ -256,7 +258,7 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
 
 
 @nb.njit(fastmath=True, parallel=True)
-def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=20):
+def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=40.0):
     """The function calculates the current induced on each pixel for the selected track
 
     Args:
@@ -294,7 +296,6 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
     time_interval = np.linspace(t_start, t_end, int(round(t_length / t_sampling)))
 
     z_sampling = t_sampling * vdrift
-
     # The first loop is over the involved pixels
     for i in nb.prange(pixels.shape[0]):
         pID = pixels[i]
@@ -306,14 +307,15 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
         # This is the interval along the drift direction that we are considering
         # We are taking slice of the charge cloud that are within the impact factor
-        impact_factor = 3 * np.sqrt(pixel_size[0]**2 + pixel_size[1]**2)
+        impact_factor = 1.5 * np.sqrt(pixel_size[0]**2 + pixel_size[1]**2)
         z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+        
+        if (z_poca, z_start, z_end) == (0, 0, 0):
+            continue
+            
         z_range_up = np.linspace(z_poca, z_end, ceil(abs(z_end-z_poca)/z_sampling)+1)
         z_range_down = np.linspace(z_start, z_poca, ceil(abs(z_poca-z_start)/z_sampling)+1)[:-1]
         z_range = np.concatenate((z_range_down, z_range_up))
-
-        if z_range.size <= 1:
-            continue
 
         signal = np.zeros_like(time_interval)
 
@@ -330,15 +332,10 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
                 weights = diffusion_weights(track[cols["NElectrons"]], point, start, end, sigmas, slice_size)
             else:
                 weights = weights_bulk
-
             # This is the induced current for this z coordinate
             t0 = (z - tpc_borders[2][0]) / vdrift
             current_response_z = current_response(time_interval, t0=t0)
-
-            # Here we multiply the signal for each sampled point in our slice
-            # The total signal will be the sum of the signal for each point
-            signal += slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
-
+            signal += slice_signal(x_p, y_p, weights, xv, yv, current_response_z) * (z_range[1] - z_range[0])
         if not signal.any():
             continue
 
