@@ -27,8 +27,12 @@ def slice_coordinates(point, padding, slice_size):
     return xx, yy, np.array([point[2]])
 
 @nb.njit(fastmath=True)
-def track_point(start, direction, z):
+def track_point(start, end, direction, z):
     l = (z - start[2]) / direction[2]
+
+    l_max = (end[2] - start[2]) / direction[2]
+    l = min(max(l, 0), l_max)
+
     xl = start[0] + l * direction[0]
     yl = start[1] + l * direction[1]
 
@@ -46,7 +50,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         start = start_point
         end = end_point
     else: # Limit case that we should probably manage better
-        return 0, 0
+        return 0, 0, 0
 
     xs, ys = start[0], start[1]
     xe, ye = end[0], end[1]
@@ -61,6 +65,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     segment = end - start
     length = np.linalg.norm(segment)
     dir3D = segment/length
+
+    z_poca = start[2] + (x_poca - start[0])/dir3D[0]*dir3D[2]
 
     if x_poca < start[0]:
         doca = np.sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
@@ -86,7 +92,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         plusDeltaZ = start[2] + dir3D[2] * plusDeltaL # z coordinates of the
         minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
-    return min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
+    return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
 
 @nb.njit(fastmath=True)
 def get_pixels(track, cols, pixel_size):
@@ -100,8 +106,7 @@ def get_pixels(track, cols, pixel_size):
                  int(round((e[1]- tpc_borders[1][0]) // pixel_size[1])))
 
     active_pixels = line2pixel_bresenham(start_pixel[0], start_pixel[1],
-                                      end_pixel[0], end_pixel[1])
-
+                                         end_pixel[0], end_pixel[1])
     involved_pixels = []
 
     for x, y in active_pixels:
@@ -141,7 +146,7 @@ def line2pixel_bresenham(x0, y0, x1, y1):
 
     D = 2*dy - dx
     y = 0
-    
+
     pixel = nb.typed.List()
     for x in range(dx + 1):
         pixel.append([x0 + x*xx + y*yx, y0 + x*xy + y*yy])
@@ -165,7 +170,7 @@ def pixelID_track(tracks, cols, pixel_size):
 @nb.njit(fastmath=True)
 def list2array(pixelTrackIDs, dtype=np.int64):
     lens = [len(pIDs) for pIDs in pixelTrackIDs]
-    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.inf, dtype=dtype)
+    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.iinfo(dtype).min, dtype=dtype)
     for i, pIDs in enumerate(pixelTrackIDs):
         for j, pID in enumerate(pIDs):
             pIDs_array[i][j] = pID
@@ -174,17 +179,14 @@ def list2array(pixelTrackIDs, dtype=np.int64):
 
 @nb.njit(fastmath=True)
 def slice_signal(x_p, y_p, weights, xv, yv, this_current_response):
-    distances = np.empty(len(xv)*len(yv))
+    weights_attenuated = 0
     i = 0
     for x in xv:
         for y in yv:
-            distances[i] = exp(-1e2*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
+            weights_attenuated += weights[i]*exp(-1e2*sqrt((x - x_p)*(x - x_p) + (y - y_p)*(y - y_p)))
             i += 1
 
-    weights_attenuated = weights * distances
-    signals = np.outer(weights_attenuated, this_current_response)
-
-    return signals
+    return this_current_response * weights_attenuated
 
 @nb.njit(fastmath=True)
 def _b(x, y, z, start, sigmas, segment):
@@ -241,15 +243,14 @@ def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
     yy = np.linspace(point[1] - sigmas[1] * 5,
                      point[1] + sigmas[1] * 5,
                      slice_size)
-    zz = np.array([point[2]])
+    z = point[2]
 
-    weights = np.empty(len(xx)*len(yy)*len(zz))
+    weights = np.empty(len(xx)*len(yy))
     i = 0
     for x in xx:
         for y in yy:
-            for z in zz:
-                weights[i] = rho(x, y, z, a, start, sigmas, segment, factor)
-                i += 1
+            weights[i] = rho(x, y, z, a, start, sigmas, segment, factor)
+            i += 1
 
     return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
 
@@ -285,7 +286,6 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
     # Here we calculate the diffusion weights at the center of the track segment
     weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
-
     # Here we calculate the start and end time of our signal (+- a specified padding)
     # and we round it to our time sampling
     t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
@@ -298,7 +298,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
     # The first loop is over the involved pixels
     for i in nb.prange(pixels.shape[0]):
         pID = pixels[i]
-        if pID[0] == np.inf:
+        if pID[0] < 0:
             break
 
         x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
@@ -307,8 +307,10 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
         # This is the interval along the drift direction that we are considering
         # We are taking slice of the charge cloud that are within the impact factor
         impact_factor = 3 * np.sqrt(pixel_size[0]**2 + pixel_size[1]**2)
-        z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-        z_range = np.linspace(z_start, z_end, ceil(abs(z_end-z_start)/z_sampling)+1)
+        z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+        z_range_up = np.linspace(z_poca, z_end, ceil(abs(z_end-z_poca)/z_sampling)+1)
+        z_range_down = np.linspace(z_start, z_poca, ceil(abs(z_poca-z_start)/z_sampling)+1)[:-1]
+        z_range = np.concatenate((z_range_down, z_range_up))
 
         if z_range.size <= 1:
             continue
@@ -318,7 +320,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
         # The second loop is over the slices along the drift direction
         for j in nb.prange(z_range.shape[0]):
             z = z_range[j]
-            point = track_point(start, direction, z)
+            point = track_point(start, end, direction, z)
             xv, yv, zv = slice_coordinates(point, track[cols["tranDiff"]] * 5, slice_size)
 
             # If the slice is near the endcap we calculate the weights again and we don't
@@ -335,8 +337,7 @@ def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pi
 
             # Here we multiply the signal for each sampled point in our slice
             # The total signal will be the sum of the signal for each point
-            signals = slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
-            signal += np.sum(signals, axis=0) * (z_range[1]-z_range[0])
+            signal += slice_signal(x_p, y_p, weights, xv, yv, current_response_z)
 
         if not signal.any():
             continue
