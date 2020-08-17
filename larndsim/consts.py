@@ -31,9 +31,13 @@ lifetime = 10e3 # us,
 tpc_borders = np.array([(0, 100), (-50, 50), (-50, 50)]) # cm,
 tpc_xStart = 0
 tpc_yStart = -50
+tpc_zStart = -50
 timeInterval = (0, 3000) # us
-longDiff = 4.0e-6 # cm * cm / us,
-tranDiff = 8.8e-6 # cm
+#longDiff = 4.0e-6 # cm * cm / us,
+#tranDiff = 8.8e-6 # cm
+
+LONGDIFF = 4.0e-6 # cm * cm / us,
+TRANDIFF = 8.8e-6 # cm
 
 
 """
