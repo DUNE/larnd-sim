@@ -1,3 +1,4 @@
+
 """
 Module that calculates the current induced by edep-sim track segments
 on the pixels
@@ -91,7 +92,7 @@ def get_pixels(track, cols, pixel_size):
                      (x + 1, y + 1), (x - 1, y - 1),
                      (x + 1, y - 1), (x - 1, y + 1))
         nneighbors = ((x + 2, y), (x + 2, y + 1), (x + 2, y + 2), (x + 2, y - 1), (x + 2, y - 2),
-                      (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x + 2, y - 2),
+                      (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x - 2, y - 2),
                       (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
                       (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
 
