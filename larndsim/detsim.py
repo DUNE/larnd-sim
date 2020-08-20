@@ -157,9 +157,8 @@ def _b(x, y, z, start, sigmas, segment, Deltar):
              (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
              (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
 
-@cuda.jit
-def rho(xx, yy, z, q, weights, start, sigmas, segment):
-    x, y = cuda.grid(2)
+@cuda.jit(device=True)
+def rho(x, y, z, q, start, sigmas, segment):
     Deltax, Deltay, Deltaz = segment[0], segment[1], segment[2]
     Deltar = sqrt(Deltax**2+Deltay**2+Deltaz**2)
     a = ((Deltax/Deltar) * (Deltax/Deltar) / (2*sigmas[0]*sigmas[0]) + \
@@ -168,72 +167,37 @@ def rho(xx, yy, z, q, weights, start, sigmas, segment):
     factor = q/Deltar/(sigmas[0]*sigmas[1]*sigmas[2]*sqrt(8*pi*pi*pi))
     sqrt_a_2 = 2*sqrt(a)
 
-    if x < xx.shape[0] and y < yy.shape[0]:
-        b = _b(xx[x], yy[y], z, start, sigmas, segment, Deltar)
+    b = _b(x, y, z, start, sigmas, segment, Deltar)
 
-        delta = (xx[x]-start[0])*(xx[x]-start[0])/(2*sigmas[0]*sigmas[0]) + \
-                (yy[y]-start[1])*(yy[y]-start[1])/(2*sigmas[1]*sigmas[1]) + \
-                (z-start[2])*(z-start[2])/(2*sigmas[2]*sigmas[2])
+    delta = (x-start[0])*(x-start[0])/(2*sigmas[0]*sigmas[0]) + \
+            (y-start[1])*(y-start[1])/(2*sigmas[1]*sigmas[1]) + \
+            (z-start[2])*(z-start[2])/(2*sigmas[2]*sigmas[2])
 
-        expo = exp(b*b/(4*a) - delta)
+    expo = exp(b*b/(4*a) - delta)
 
-        integral = sqrt(pi) * \
-                   (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
-                   sqrt_a_2
+    integral = sqrt(pi) * \
+               (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
+               sqrt_a_2
 
-        weights[x,y] = expo * integral * factor 
-
-@nb.jit
-def diffusion_weights(n_electrons, point, start, end, sigmas, slice_size):
-    """The function calculates the weights of the charge cloud slice at a
-    specified point
-
-    Args:
-        n_electrons (int): number of electrons ionized by the track
-        point (:obj:`numpy.array`): coordinates of the specified point
-        start (:obj:`numpy.array`): coordinates of the track segment start point
-        end (:obj:`numpy.array`): coordinates of the track segment end point
-        sigmas (:obj:`numpy.array`): diffusion values along the x,y,z axes
-        slice_size (int): number of sampling points for the slice
-
-    Returns:
-        :obj:`numpy.array`: array containing the weights
-    """
-
-    segment = end - start
-
-    Deltar = np.linalg.norm(segment)
-    factor = n_electrons/Deltar/(sigmas.prod()*sqrt(8*pi*pi*pi))
-    a = ((segment/Deltar)**2 / (2*sigmas**2)).sum()
-
-    xx = np.linspace(point[0] - sigmas[0] * 5,
-                     point[0] + sigmas[0] * 5,
-                     slice_size)
-    yy = np.linspace(point[1] - sigmas[1] * 5,
-                     point[1] + sigmas[1] * 5,
-                     slice_size)
-    z = point[2]
-
-    weights = np.zeros((xx.shape[0],yy.shape[0]))
-    threadsperblock = (16,16)
-    blockspergrid_x = ceil(xx.shape[0] / threadsperblock[0])
-    blockspergrid_y = ceil(yy.shape[0] / threadsperblock[1])
-    blockspergrid = (blockspergrid_x, blockspergrid_y)
-
-    rho[blockspergrid, threadsperblock](xx, yy, z, n_electrons, weights, start, sigmas, segment)
-    
-    return weights * (xx[1]-xx[0]) * (yy[1]-yy[0])
+    return expo * integral * factor 
 
 
 @cuda.jit(device=True)
-def distance_attenuation(x_p, y_p, xl, yl, padding, weights):
+def distance_attenuation(x_p, y_p, xl, yl, q, start, point, sigmas, segment, padding, slice_size):
     summed_weight = 0
 
-    for i in range(weights.shape[0]):
-        for j in range(weights.shape[1]):
-            xv = xl - padding + 2*padding*i/(weights.shape[0]-1)
-            yv = yl - padding + 2*padding*j/(weights.shape[1]-1)
-            summed_weight += weights[i][j]*exp(-1e2*sqrt((x_p - xv)**2+(y_p - yv)**2))
+    x_step = 2 * padding / (slice_size - 1)
+    y_step = 2 * padding / (slice_size - 1)
+    
+    for ix in range(slice_size):
+        for iy in range(slice_size):
+            x = point[0] - padding + ix*x_step
+            y = point[1] - padding + iy*y_step
+            xv = xl - padding + ix*x_step
+            yv = yl - padding + iy*y_step
+            summed_weight += rho(x, y, point[2], q, start, sigmas, segment) \
+                             * exp(-1e2*sqrt((x_p - xv)**2+(y_p - yv)**2)) \
+                             * x_step * y_step
 
     return summed_weight
 
@@ -251,115 +215,7 @@ def track_point(start, end, direction, z):
 def current_signal(time, t0):
     A = 1
     B = 5
-    
     return A*exp((time-t0)/B)
-
-@cuda.jit
-def pixels_signal(pixels, signals, pixel_size, start, direction, end, time_interval, z_sampling, weights, padding):
-    ip, it = cuda.grid(2)
-    A = 1
-    B = 5
-    if ip < signals.shape[0] and it < signals.shape[1]:
-        pID = pixels[ip]
-        if pID[0] >= 0 and pID[1] >= 0:
-            x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
-            y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
-
-            impact_factor = 1.5 * sqrt(pixel_size[0]**2 + pixel_size[1]**2)
-            z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
-            if z_start != 0 and z_end != 0:
-                z_range_up = ceil(abs(z_end-z_poca)/z_sampling)+1
-                z_range_down = ceil(abs(z_poca-z_start)/z_sampling)+1
-                z_step = (z_end-z_poca)/(z_range_up-1)
-
-                for iz in range(z_range_up):
-                    z_coord = z_poca + iz*z_step
-                    xl, yl = track_point(start, end, direction, z_coord)
-                    t0 = (z_coord-tpc_borders[2][0])/vdrift
-                    if time_interval[it] < t0:
-                        cuda.atomic.add(signals[ip], it, current_signal(time_interval[it], t0) * distance_attenuation(x_p, y_p, xl, yl, padding, weights) * z_step) 
-
-                for iz in range(1,z_range_down):
-                    z_coord = z_poca - iz*z_step
-                    xl, yl = track_point(start, end, direction, z_coord)
-                    t0 = (z_coord-tpc_borders[2][0])/vdrift
-                    if time_interval[it] < t0:
-                        cuda.atomic.add(signals[ip], it, current_signal(time_interval[it], t0) * distance_attenuation(x_p, y_p, xl, yl, padding, weights) * z_step)
-                    
-
-@nb.jit#(fastmath=True, parallel=True)
-def track_current(track, pixels, cols, slice_size, t_sampling, active_pixels, pixel_size, time_padding=40.0):
-    """The function calculates the current induced on each pixel for the selected track
-
-    Args:
-        track (:obj:`numpy.array`): array containing track segment information
-        pixels (:obj:`numpy.array`): array containing the IDs of the involved pixels
-        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
-        slice_size (int): number of points for the sampling of the diffused charge cloud slice
-        t_sampling (float): time sampling
-        active_pixels (:obj:`numba.typed.Dict`): Numba dictionary where we store the pixel signals
-        pixel_size (tuple): size of each pixel on the x and y axes
-        time_padding (float, optional): time padding on each side of the induced signal array
-
-    """
-
-    start = np.array([track[cols["x_start"]], track[cols["y_start"]], track[cols["z_start"]]])
-    end = np.array([track[cols["x_end"]], track[cols["y_end"]], track[cols["z_end"]]])
-    mid_point = (start+end)/2
-    segment = end - start
-    length = np.linalg.norm(segment)
-    direction = segment/length
-
-    sigmas = np.array([track[cols["tranDiff"]],
-                       track[cols["tranDiff"]],
-                       track[cols["longDiff"]]])
-    endcap_size = 5 * track[cols["longDiff"]]
-
-    # Here we calculate the diffusion weights at the center of the track segment
-    weights_bulk = diffusion_weights(track[cols["NElectrons"]], mid_point, start, end, sigmas, slice_size)
-
-    # Here we calculate the start and end time of our signal (+- a specified padding)
-    # and we round it to our time sampling
-    t_start = (track[cols["t_start"]] - time_padding) // t_sampling * t_sampling
-    t_end = (track[cols["t_end"]] + time_padding) // t_sampling * t_sampling
-    t_length = t_end - t_start
-    time_interval = np.linspace(t_start, t_end, int(round(t_length / t_sampling)))
-
-    z_sampling = t_sampling * vdrift
-
-
-    signals = np.zeros((pixels.shape[0], time_interval.shape[0]))
-    threadsperblock = (32, 32)
-    blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
-    blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
-    blockspergrid = (blockspergrid_x, blockspergrid_y)
-    pixels_signal[threadsperblock, blockspergrid](pixels,
-                                                  signals,
-                                                  pixel_size,
-                                                  start,
-                                                  direction,
-                                                  end,
-                                                  time_interval,
-                                                  z_sampling,
-                                                  weights_bulk,
-                                                  track[cols["tranDiff"]] * 5)
-
-    for i in range(signals.shape[0]):
-        pID = pixels[i][0], pixels[i][1]
-        if pID[0] < 0 or pID[1] < 0:
-            continue
-            
-        signal = signals[i]
-        if not signal.any():
-            continue
-            
-        if pID in active_pixels:
-            active_pixels[pID].append((t_start, t_end, signal))
-        else:
-            this_pixel_signal = nb.typed.List()
-            this_pixel_signal.append((t_start, t_end, signal))
-            active_pixels[pID] = this_pixel_signal
 
             
 @nb.jit
@@ -372,35 +228,101 @@ def pixel_response(pixel_signals, anode_t):
     return current
 
 
-float_array = nb.types.float64[::1]
+float_array = nb.types.float32[::1]
 pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
 signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
 
-@nb.jit#(fastmath=True)
-def tracks_current(tracks, pIDs_array, cols, pixel_size, t_sampling=1, slice_size=20):
-    """This function calculate the current induced on the pixels by the input track segments
-
-    Args:
-        track (:obj:`numpy.array`): array containing the tracks segment information
-        pIDs_array (:obj:`numpy.array`): array containing the involved pixels for each track
-        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
-        pixel_size (tuple): size of each pixel on the x and y axes
-        t_sampling (float, optional): time sampling
-        slice_size (int, optional): number of points for the sampling of the diffused charge cloud slice
-
-    Return:
-        :obj:`numba.typed.Dict`: Numba dictionary containing a list of the signals for each pixel
-    """
-
+@nb.njit
+def join_pixel_signals(signals, pixels):
     active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
                                         value_type=signal_type)
+    t_start = time_interval[0]
+    t_end = time_interval[1]
+    
+    for itrk in range(signals.shape[0]):
+        for ipix in range(signals.shape[1]):
+            pID = int(pixels[itrk][ipix][0]), int(pixels[itrk][ipix][1])
+            if pID[0] < 0 or pID[1] < 0:
+                continue
 
-    for i in nb.prange(tracks.shape[0]):
-        track = tracks[i]
-        pID = pIDs_array[i]
-        track_current(track, pID, cols, slice_size, t_sampling, active_pixels, pixel_size)
+            signal = signals[itrk][ipix]
+            if not signal.any():
+                continue
+
+            if pID in active_pixels:
+                active_pixels[pID].append((t_start, t_end, signal))
+            else:
+                this_pixel_signal = nb.typed.List()
+                this_pixel_signal.append((t_start, t_end, signal))
+                active_pixels[pID] = this_pixel_signal
 
     return active_pixels
+
+@cuda.jit
+def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padding, t_sampling, slice_size):
+    itrk,ipix,it = cuda.grid(3)
+    ix_start = 0
+    ix_end = 5
+    iy_start = 7
+    iy_end = 8
+    iz_start = 6
+    iz_end = 2
+    itran_diff = 19
+    ilong_diff = 18
+    it_start = 10
+    it_end = 11
+    in_electrons = 17
+    
+    if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
+        t = tracks[itrk]
+        
+        pID = pixels[itrk][ipix]
+
+        if pID[0] >= 0 and pID[1] >= 0:
+            x_p = pID[0] * pixel_size[0] + 0 + pixel_size[0] / 2
+            y_p = pID[1] * pixel_size[1] - 50 + pixel_size[1] / 2
+
+            impact_factor = 1.5 * sqrt(pixel_size[0]**2 + pixel_size[1]**2)
+
+            start = (t[ix_start], t[iy_start], t[iz_start])
+            end = (t[ix_end], t[iy_end], t[iz_end])
+            sigmas = (t[itran_diff], t[itran_diff], t[ilong_diff])
+            segment = (end[0]-start[0],end[1]-start[1],end[2]-start[2])
+            length = sqrt(segment[0]**2+segment[1]**2+segment[2]**2)
+            direction = (segment[0]/length, segment[1]/length, segment[2]/length)
+
+            mid_point = (t[ix_end] + t[ix_start])/2., (t[iy_end] + t[iy_start])/2., (t[iz_end] + t[iz_start])/2.
+
+            z_sampling = t_sampling * vdrift
+            padding = t[itran_diff] * 2.5
+            z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+
+            if z_start != 0 and z_end != 0:
+                z_range_up = ceil(abs(z_end-z_poca)/z_sampling)+1
+                z_range_down = ceil(abs(z_poca-z_start)/z_sampling)+1
+                z_step = (z_end-z_poca)/(z_range_up-1)
+
+            for iz in range(z_range_up):
+                z_coord = z_poca + iz*z_step
+                xl, yl = track_point(start, end, direction, z_coord)
+                t0 = (z_coord+50)/vdrift
+                if time_interval[it] < t0:
+                    signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
+                                               * distance_attenuation(x_p, y_p, xl, yl, 
+                                                                      t[in_electrons], 
+                                                                      start, mid_point, sigmas, 
+                                                                      segment, padding, slice_size) * z_step
+
+            for iz in range(1,z_range_down):
+                z_coord = z_poca - iz*z_step
+                xl, yl = track_point(start, end, direction, z_coord)
+                t0 = (z_coord+50)/vdrift
+                if time_interval[it] < t0:
+                    signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
+                                               * distance_attenuation(x_p, y_p, xl, yl, 
+                                                                      t[in_electrons], 
+                                                                      start, mid_point, sigmas, 
+                                                                      segment, padding, slice_size) * z_step
 
 # @nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
@@ -418,4 +340,3 @@ def pixel_from_coordinates(x, y, n_pixels):
     x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels)
     y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels)
     return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
-
