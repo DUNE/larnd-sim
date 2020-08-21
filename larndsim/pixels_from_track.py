@@ -1,21 +1,21 @@
 from numba import cuda
 from math import pi, ceil, sqrt, erf, exp
 from .consts import *
-
+from .indeces import *
 
 @cuda.jit
-def get_pixels(x_start, y_start, x_end, y_end, active_pixels, neighboring_pixels, n_pixels):
+def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels):
     '''
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
     '''
     i = cuda.grid(1)
-    if i < x_start.shape[0]:
-        
-        start_pixel = (int(round((x_start[i] - tpc_xStart) // x_pixel_size)),
-                       int(round((y_start[i] - tpc_yStart) // y_pixel_size)))
-        end_pixel = (int(round((x_end[i] - tpc_xStart) // x_pixel_size)),
-                     int(round((y_end[i] - tpc_yStart) // y_pixel_size)))
+    if i < tracks.shape[0]:
+        t = tracks[i]
+        start_pixel = (int(round((t[x_start] - tpc_borders[0][0]) // x_pixel_size)),
+                       int(round((t[y_start] - tpc_borders[1][0]) // y_pixel_size)))
+        end_pixel = (int(round((t[x_end] - tpc_borders[0][0]) // x_pixel_size)),
+                     int(round((t[y_end] - tpc_borders[1][0]) // y_pixel_size)))
         
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], active_pixels[i])
         radius = 2
