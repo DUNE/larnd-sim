@@ -10,7 +10,7 @@ import numpy as np
 from numba import cuda
 from math import pi, ceil, sqrt, erf, exp
 from .consts import *
-
+from . import indeces as i
 
 @cuda.jit(device=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
@@ -68,89 +68,6 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
     else:
         return 0, 0, 0
-
-
-@nb.jit(fastmath=True)
-def get_pixels(track, cols, pixel_size):
-    s = (track[cols["x_start"]], track[cols["y_start"]])
-    e = (track[cols["x_end"]], track[cols["y_end"]])
-    
-    start_pixel = (int(round((s[0]- tpc_borders[0][0]) // pixel_size[0])),
-                   int(round((s[1]- tpc_borders[1][0]) // pixel_size[1])))
-
-    end_pixel = (int(round((e[0]- tpc_borders[0][0]) // pixel_size[0])),
-                 int(round((e[1]- tpc_borders[1][0]) // pixel_size[1])))
-
-    active_pixels = line2pixel_bresenham(start_pixel[0], start_pixel[1],
-                                      end_pixel[0], end_pixel[1])
-    involved_pixels = []
-
-    for x, y in active_pixels:
-        neighbors = ((x, y),
-                     (x, y + 1), (x + 1, y),
-                     (x, y - 1), (x - 1, y),
-                     (x + 1, y + 1), (x - 1, y - 1),
-                     (x + 1, y - 1), (x - 1, y + 1))
-        nneighbors = ((x + 2, y), (x + 2, y + 1), (x + 2, y + 2), (x + 2, y - 1), (x + 2, y - 2),
-                      (x - 2, y), (x - 2, y + 1), (x - 2, y + 2), (x - 2, y - 1), (x - 2, y - 2),
-                      (x, y + 2), (x - 1, y + 2), (x + 1, y + 2),
-                      (x, y - 2), (x - 1, y - 2), (x + 1, y - 2))
-
-        for ne in (neighbors+nneighbors):
-            if ne not in involved_pixels:
-                involved_pixels.append(ne)
-
-    return involved_pixels
-
-@nb.jit(fastmath=True)
-def line2pixel_bresenham(x0, y0, x1, y1):
-
-    dx = x1 - x0
-    dy = y1 - y0
-
-    xsign = 1 if dx > 0 else -1
-    ysign = 1 if dy > 0 else -1
-
-    dx = abs(dx)
-    dy = abs(dy)
-
-    if dx > dy:
-        xx, xy, yx, yy = xsign, 0, 0, ysign
-    else:
-        dx, dy = dy, dx
-        xx, xy, yx, yy = 0, ysign, xsign, 0
-
-    D = 2*dy - dx
-    y = 0
-    
-    pixel = nb.typed.List()
-    for x in range(dx + 1):
-        pixel.append([x0 + x*xx + y*yx, y0 + x*xy + y*yy])
-        if D >= 0:
-            y += 1
-            D -= 2*dx
-        D += 2*dy
-        
-    return pixel
-
-@nb.jit(fastmath=True)
-def pixelID_track(tracks, cols, pixel_size):
-    PixelTrackID = nb.typed.List()
-
-    for itrk in range(len(tracks)):
-        PixelTrackID.append(get_pixels(tracks[itrk], cols, pixel_size))
-
-    return PixelTrackID
-
-@nb.jit(fastmath=True)
-def list2array(pixelTrackIDs, dtype=np.int32):
-    lens = [len(pIDs) for pIDs in pixelTrackIDs]
-    pIDs_array = np.full((len(pixelTrackIDs), max(lens), 2), np.iinfo(dtype).min, dtype=dtype)
-    for i, pIDs in enumerate(pixelTrackIDs):
-        for j, pID in enumerate(pIDs):
-            pIDs_array[i][j] = pID
-    
-    return pIDs_array
 
 @cuda.jit(device=True)
 def _b(x, y, z, start, sigmas, segment, Deltar):
@@ -262,40 +179,28 @@ def join_pixel_signals(signals, pixels):
 @cuda.jit
 def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padding, t_sampling, slice_size):
     itrk,ipix,it = cuda.grid(3)
-    ix_start = 0
-    ix_end = 5
-    iy_start = 7
-    iy_end = 8
-    iz_start = 6
-    iz_end = 2
-    itran_diff = 19
-    ilong_diff = 18
-    it_start = 10
-    it_end = 11
-    in_electrons = 17
     
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
-        
         pID = pixels[itrk][ipix]
 
         if pID[0] >= 0 and pID[1] >= 0:
-            x_p = pID[0] * pixel_size[0] + 0 + pixel_size[0] / 2
-            y_p = pID[1] * pixel_size[1] - 50 + pixel_size[1] / 2
+            x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
+            y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
 
             impact_factor = 1.5 * sqrt(pixel_size[0]**2 + pixel_size[1]**2)
 
-            start = (t[ix_start], t[iy_start], t[iz_start])
-            end = (t[ix_end], t[iy_end], t[iz_end])
-            sigmas = (t[itran_diff], t[itran_diff], t[ilong_diff])
+            start = (t[i.x_start], t[i.y_start], t[i.z_start])
+            end = (t[i.x_end], t[i.y_end], t[i.z_end])
+            sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
             segment = (end[0]-start[0],end[1]-start[1],end[2]-start[2])
             length = sqrt(segment[0]**2+segment[1]**2+segment[2]**2)
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
 
-            mid_point = (t[ix_end] + t[ix_start])/2., (t[iy_end] + t[iy_start])/2., (t[iz_end] + t[iz_start])/2.
+            mid_point = (t[i.x_end] + t[i.x_start])/2., (t[i.y_end] + t[i.y_start])/2., (t[i.z_end] + t[i.z_start])/2.
 
             z_sampling = t_sampling * vdrift
-            padding = t[itran_diff] * 2.5
+            padding = t[i.tran_diff] * 2.5
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
             if z_start != 0 and z_end != 0:
@@ -306,26 +211,25 @@ def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padd
             for iz in range(z_range_up):
                 z_coord = z_poca + iz*z_step
                 xl, yl = track_point(start, end, direction, z_coord)
-                t0 = (z_coord+50)/vdrift
+                t0 = (z_coord - tpc_borders[2][0])/vdrift
                 if time_interval[it] < t0:
                     signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
                                                * distance_attenuation(x_p, y_p, xl, yl, 
-                                                                      t[in_electrons], 
+                                                                      t[i.n_electrons], 
                                                                       start, mid_point, sigmas, 
                                                                       segment, padding, slice_size) * z_step
 
             for iz in range(1,z_range_down):
                 z_coord = z_poca - iz*z_step
                 xl, yl = track_point(start, end, direction, z_coord)
-                t0 = (z_coord+50)/vdrift
+                t0 = (z_coord - tpc_borders[2][0])/vdrift
                 if time_interval[it] < t0:
                     signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
                                                * distance_attenuation(x_p, y_p, xl, yl, 
-                                                                      t[in_electrons], 
+                                                                      t[i.n_electrons], 
                                                                       start, mid_point, sigmas, 
                                                                       segment, padding, slice_size) * z_step
-
-# @nb.jit
+@nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
     """This function returns the ID of the pixel that covers the specified point
 

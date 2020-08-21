@@ -34,10 +34,6 @@ time_interval = (0., 3000.) # us
 long_diff = 4.0e-6 # cm * cm / us,
 tran_diff = 8.8e-6 # cm
 
-tpc_xStart = 0
-tpc_yStart = -50
-tpc_zStart = -50
-
 """
 PIXEL CONFIG
 """
@@ -45,3 +41,10 @@ PIXEL CONFIG
 n_pixels = 333
 x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels
 y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels
+pixel_size = np.array([x_pixel_size, y_pixel_size])
+
+"""
+Configuration parameters
+"""
+box = 1
+birks = 2
