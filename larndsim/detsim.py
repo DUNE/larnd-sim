@@ -14,8 +14,10 @@ from . import indeces as i
 
 @cuda.jit(device=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
-    """Here we calculate the interval in the drift direction for the pixel pID
-    using the impact factor"""
+    """
+    Here we calculate the interval in the drift direction for the pixel pID
+    using the impact factor
+    """
 
     if start_point[0] > end_point[0]:
         start = end_point
@@ -99,7 +101,6 @@ def rho(x, y, z, q, start, sigmas, segment):
 
     return expo * integral * factor 
 
-
 @cuda.jit(device=True)
 def distance_attenuation(x_p, y_p, xl, yl, q, start, point, sigmas, segment, padding, slice_size):
     summed_weight = 0
@@ -134,9 +135,8 @@ def current_signal(time, t0):
     A = 1
     B = 5
     return A*exp((time-t0)/B)
-
             
-@nb.jit
+@nb.njit
 def pixel_response(pixel_signals, anode_t):
     current = np.zeros_like(anode_t)
 
@@ -144,7 +144,6 @@ def pixel_response(pixel_signals, anode_t):
         current[(anode_t >= signal[0]) & (anode_t <= signal[1])] += signal[2]
 
     return current
-
 
 float_array = nb.types.float32[::1]
 pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
@@ -177,7 +176,7 @@ def join_pixel_signals(signals, pixels):
     return active_pixels
 
 @cuda.jit
-def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padding, t_sampling, slice_size):
+def tracks_current(signals, pixels, tracks, time_interval, time_padding, t_sampling, slice_size):
     itrk,ipix,it = cuda.grid(3)
     
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
@@ -192,12 +191,15 @@ def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padd
 
             start = (t[i.x_start], t[i.y_start], t[i.z_start])
             end = (t[i.x_end], t[i.y_end], t[i.z_end])
-            sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
-            segment = (end[0]-start[0],end[1]-start[1],end[2]-start[2])
-            length = sqrt(segment[0]**2+segment[1]**2+segment[2]**2)
+            segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
+            length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
 
-            mid_point = (t[i.x_end] + t[i.x_start])/2., (t[i.y_end] + t[i.y_start])/2., (t[i.z_end] + t[i.z_start])/2.
+            sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
+
+            mid_point = ((t[i.x_end] + t[i.x_start])/2., 
+                         (t[i.y_end] + t[i.y_start])/2., 
+                         (t[i.z_end] + t[i.z_start])/2.)
 
             z_sampling = t_sampling * vdrift
             padding = t[i.tran_diff] * 2.5
@@ -205,30 +207,20 @@ def tracks_current(signals, pixels, pixel_size, tracks, time_interval, time_padd
 
             if z_start != 0 and z_end != 0:
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)+1
-                z_range_down = ceil(abs(z_poca-z_start)/z_sampling)+1
+                z_range_down = ceil(abs(z_poca-z_start)/z_sampling)
                 z_step = (z_end-z_poca)/(z_range_up-1)
 
-            for iz in range(z_range_up):
-                z_coord = z_poca + iz*z_step
-                xl, yl = track_point(start, end, direction, z_coord)
-                t0 = (z_coord - tpc_borders[2][0])/vdrift
-                if time_interval[it] < t0:
-                    signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
-                                               * distance_attenuation(x_p, y_p, xl, yl, 
-                                                                      t[i.n_electrons], 
-                                                                      start, mid_point, sigmas, 
-                                                                      segment, padding, slice_size) * z_step
+                for iz in range(-z_range_down,z_range_up):
+                    z_coord = z_poca + iz*z_step
+                    xl, yl = track_point(start, end, direction, z_coord)
+                    t0 = (z_coord - tpc_borders[2][0]) / vdrift
+                    if time_interval[it] < t0:
+                        signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
+                                                   * distance_attenuation(x_p, y_p, xl, yl, 
+                                                                          t[i.n_electrons], 
+                                                                          start, mid_point, sigmas, 
+                                                                          segment, padding, slice_size) * z_step
 
-            for iz in range(1,z_range_down):
-                z_coord = z_poca - iz*z_step
-                xl, yl = track_point(start, end, direction, z_coord)
-                t0 = (z_coord - tpc_borders[2][0])/vdrift
-                if time_interval[it] < t0:
-                    signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
-                                               * distance_attenuation(x_p, y_p, xl, yl, 
-                                                                      t[i.n_electrons], 
-                                                                      start, mid_point, sigmas, 
-                                                                      segment, padding, slice_size) * z_step
 @nb.jit
 def pixel_from_coordinates(x, y, n_pixels):
     """This function returns the ID of the pixel that covers the specified point
