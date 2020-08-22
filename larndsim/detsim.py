@@ -267,6 +267,7 @@ def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_siz
                 for iz in range(-z_range_down,z_range_up):
                     z_coord = z_poca + iz*z_step
                     t0 = (z_coord - tpc_borders[2][0]) / vdrift
+                    x_t, y_t = track_point(start, end, direction, z_coord)
                     if time_interval[it] < t0:
                         signals[itrk][ipix][it] += current_signal(time_interval[it], t0) \
                                                    * diffusion_weight(this_pixel_point, 
