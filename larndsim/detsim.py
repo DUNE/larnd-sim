@@ -41,6 +41,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     length = sqrt((end[0]-start[0])**2+(end[1]-start[1])**2+(end[2]-start[2])**2)
     dir3D = (end[0] - start[0])/length, (end[1] - start[1])/length, (end[2] - start[2])/length
 
+
     if x_poca < start[0]:
         doca = sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
         x_poca = start[0]
@@ -52,6 +53,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     y_poca = start[1] + (x_poca - start[0])/dir3D[0]*dir3D[1]
     z_poca = start[2] + (x_poca - start[0])/dir3D[0]*dir3D[2]
+
     plusDeltaZ, minusDeltaZ = 0, 0
 
     if tolerance > doca:
@@ -124,7 +126,7 @@ def diffusion_weight(pixel_point, track_point, q, start, point, sigmas, segment,
     """
     This function calculates the total amount of charge of a segment slice, attenuated by the distance
     between the track and the pixel center.
-    
+
     Args:
         - pixel_point (tuple): pixel coordinates
         - track_point (tuple): coordinates of the segment in the slice
