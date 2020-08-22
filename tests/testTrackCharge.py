@@ -28,7 +28,7 @@ class TestTrackCharge:
         for x in xx:
             for y in yy:
                 for z in zz:
-                    weights[i] = detsim.rho(x, y, z, self.charge, self.start, self.sigmas, segment) * (xx[1]-xx[0]) * (yy[1]-yy[0]) * (zz[1] - zz[0])
+                    weights[i] = detsim.rho((x, y, z), self.charge, self.start, self.sigmas, segment) * (xx[1]-xx[0]) * (yy[1]-yy[0]) * (zz[1] - zz[0])
                     i += 1
 
         assert np.sum(weights) == pytest.approx(self.charge, rel=0.05)
