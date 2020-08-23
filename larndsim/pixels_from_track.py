@@ -18,7 +18,7 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels):
                      int(round((t[y_end] - tpc_borders[1][0]) // y_pixel_size)))
         
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], active_pixels[i])
-        radius = 2
+        radius = 3
         n_pixels[i] = get_neighboring_pixels(active_pixels[i], radius, neighboring_pixels[i])
 
 
