@@ -17,18 +17,18 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """
     Here we calculate the interval in the drift direction for the pixel pID
     using the impact factor
-    
+
     Args:
         - start_point (tuple): coordinates of the segment start
         - end_point (tuple): coordinates of the segment end
         - x_p (float): pixel center `x` coordinate
         - y_p (float): pixel center `y` coordinate
-        - tolerance (float): maximum distance between the pixel center and 
+        - tolerance (float): maximum distance between the pixel center and
         the segment
-        
+
     Returns:
-        tuple: `z` coordinate of the point of closest approach (POCA), 
-        `z` coordinate of the first slice, `z` coordinate of the last slice. 
+        tuple: `z` coordinate of the point of closest approach (POCA),
+        `z` coordinate of the first slice, `z` coordinate of the last slice.
         (0,0,0) if POCA > tolerance.
     """
     if start_point[0] > end_point[0]:
@@ -63,7 +63,6 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     else:
         doca = abs(a*x_p+b*y_p+c)/sqrt(a*a+b*b)
 
-    y_poca = start[1] + (x_poca - start[0])/dir3D[0]*dir3D[1]
     z_poca = start[2] + (x_poca - start[0])/dir3D[0]*dir3D[2]
 
     plusDeltaZ, minusDeltaZ = 0, 0
@@ -95,7 +94,7 @@ def _b(x, y, z, start, sigmas, segment, Deltar):
 def rho(point, q, start, sigmas, segment):
     """
     Function that returns the amount of charge at a certain point in space
-    
+
     Args:
         - point (tuple): point coordinates
         - q (float): total charge
@@ -134,14 +133,14 @@ def attenuated_charge(charge, pixel_point, position):
     return charge * exp(-10*sqrt((pixel_point[0] - position[0])**2+(pixel_point[1] - position[1])**2))
 
 @cuda.jit(device=True)
-def diffusion_weight(pixel_point, track_point, q, start, sigmas, segment, slice_size, sampled_points):
+def diffusion_weight(pixel_point, point, q, start, sigmas, segment, slice_size, sampled_points):
     """
     This function calculates the total amount of charge of a segment slice, attenuated by the distance
     between the track and the pixel center.
 
     Args:
         - pixel_point (tuple): pixel coordinates
-        - track_point (tuple): coordinates of the segment in the slice
+        - point (tuple): coordinates of the segment in the slice
         - q (float): total track charge
         - start (tuple): segment start coordinates
         - sigmas (tuple): diffusion coefficients in the spatial dimensions?
@@ -162,24 +161,23 @@ def diffusion_weight(pixel_point, track_point, q, start, sigmas, segment, slice_
         for itheta in range(sampled_points*2):
             r = ir*r_step
             theta = itheta*theta_step
-            xv = track_point[0] + r*cos(theta)
-            yv = track_point[1] + r*sin(theta)
-            charge = rho((xv, yv, track_point[2]), q, start, sigmas, segment)
+            xv = point[0] + r*cos(theta)
+            yv = point[1] + r*sin(theta)
+            charge = rho((xv, yv, point[2]), q, start, sigmas, segment)
             summed_weight += attenuated_charge(charge, pixel_point, (xv, yv)) \
                              * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2) # this is the circle sector area 
 
     return summed_weight
 
 @cuda.jit(device=True)
-def track_point(start, end, direction, z):
+def track_point(start, direction, z):
     """
     This function returns the segment coordinates for a point along the `z` coordinate
     
     Args:
         - start (tuple): start coordinates
-        - end (tuple): end coordinates
         - direction (tuple): direction coordinates
-        - z (float): `z` coordinate corresponding to the `x`, `y` coordinates 
+        - z (float): `z` coordinate corresponding to the `x`, `y` coordinates
         
     Returns:
         tuple: the (x,y) pair of coordinates for the segment at `z`
@@ -276,8 +274,8 @@ def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_siz
         - slice_size (int): number of sampled points on the segment slice.
         
     """
-    itrk,ipix,it = cuda.grid(3)
-    
+    itrk, ipix, it = cuda.grid(3)
+
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
@@ -312,11 +310,11 @@ def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_siz
                 for iz in range(-z_range_down, z_range_up+1):
                     z_t = z_poca + iz*z_step
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
-                    x_t, y_t = track_point(start, end, direction, z_t)
+                    x_t, y_t = track_point(start, direction, z_t)
                     if time_interval[it] < t0:
-                        diff_weight = diffusion_weight(this_pixel_point, 
+                        diff_weight = diffusion_weight(this_pixel_point,
                                                        (x_t, y_t, z_t),
-                                                       t[i.n_electrons], 
+                                                       t[i.n_electrons],
                                                        start, sigmas, segment, padding, slice_size) * z_step
                         signals[itrk][ipix][it] += current_signal(time_interval[it], t0) * diff_weight
 
