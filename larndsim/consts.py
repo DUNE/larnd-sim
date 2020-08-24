@@ -28,6 +28,25 @@ TPC_PARAMS
 vdrift = 0.153812 # cm / us,
 lifetime = 10e3 # us,
 tpc_borders = np.array([(0, 100), (-50, 50), (-50, 50)]) # cm,
-timeInterval = (0, 3000) # us
-longDiff = 4.0e-6 # cm * cm / us,
-tranDiff = 8.8e-6 # cm
+t_sampling = 1
+time_interval = (0., 3000.) # us
+time_ticks = np.linspace(time_interval[0],
+                         time_interval[1],
+                         int(round(time_interval[1]-time_interval[0])/t_sampling))
+long_diff = 4.0e-6 # cm * cm / us,
+tran_diff = 8.8e-6 # cm
+
+"""
+PIXEL CONFIG
+"""
+
+n_pixels = 333
+x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels
+y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels
+pixel_size = np.array([x_pixel_size, y_pixel_size])
+
+"""
+Configuration parameters
+"""
+box = 1
+birks = 2
