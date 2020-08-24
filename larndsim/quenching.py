@@ -18,7 +18,8 @@ def Quench(tracks, cols, mode="box"):
     Birks (Amoruso, et al NIM A 523 (2004) 275).
     Args:
         tracks (:obj:`numpy.array`): array containing the tracks segment information
-        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for the track array
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names
+        for the track array
         mode (string, optional): recombination model. Default is "box"
     """
     for index in nb.prange(tracks.shape[0]):
@@ -39,7 +40,8 @@ def Quench(tracks, cols, mode="box"):
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[index, cols["NElectrons"]] = recomb * tracks[index, cols["dE"]] * consts.MeVToElectrons
+        tracks[index, cols["NElectrons"]] = recomb * tracks[index, cols["dE"]] \
+                                            * consts.MeVToElectrons
 
 
 @cuda.jit
@@ -49,14 +51,14 @@ def GPU_Quench(tracks, mode):
 
     Args:
         tracks (:obj:`numpy.array`): array containing the tracks segment information
-        mode (string, optional): recombination model. 
+        mode (string, optional): recombination model.
     """
     itrk = cuda.grid(1)
-    
+
     if itrk < tracks.shape[0]:
         dEdx = tracks[itrk][i.dEdx]
         dE = tracks[itrk][i.dE]
-        
+
         recomb = 0
         if mode == consts.box:
             # Baller, 2013 JINST 8 P08005
