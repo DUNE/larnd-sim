@@ -32,6 +32,7 @@ release = '0.0.1'
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.coverage',
               'sphinx.ext.napoleon',
+              'sphinx.ext.intersphinx',
               'sphinx_rtd_theme']
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -40,7 +41,9 @@ templates_path = ['_templates']
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['tests/*']
-
+intersphinx_mapping = {'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+                       'numba': ('https://numba.pydata.org/numba-doc/latest', None)}
+napoleon_use_param = False
 
 # -- Options for HTML output -------------------------------------------------
 
