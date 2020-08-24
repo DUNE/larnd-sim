@@ -9,20 +9,21 @@ from numba import cuda
 from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
 from . import indeces as i
 
-@nb.njit(parallel=True, fastmath=True)
+# @nb.njit(parallel=True, fastmath=True)
 def Drift(tracks, cols):
     """
     This function takes as input an array of track segments and calculates
     the properties of the segments at the anode:
-      - z coordinate at the anode
-      - number of electrons taking into account electron lifetime
-      - longitudinal diffusion
-      - transverse diffusion
-      - time of arrival at the anode
+
+      * z coordinate at the anode
+      * number of electrons taking into account electron lifetime
+      * longitudinal diffusion
+      * transverse diffusion
+      * time of arrival at the anode
 
     Args:
-        - tracks (:obj:`numpy.array`): array containing the tracks segment information
-        - cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for
+        tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for
           the track array
     """
     z_anode = tpc_borders[2][0]
