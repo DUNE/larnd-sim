@@ -26,7 +26,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         - x_p (float): pixel center `x` coordinate
         - y_p (float): pixel center `y` coordinate
         - tolerance (float): maximum distance between the pixel center and
-        the segment
+          the segment
 
     Returns:
         tuple: `z` coordinate of the point of closest approach (POCA),
@@ -227,11 +227,11 @@ def pixel_response(pixel_signals, anode_t):
 
     Args:
         - pixel_signals (:obj:`numba.typed.Dict`): dictionary containing
-        the pixel signals at different times
+           the pixel signals at different times
         - anode_t (:obj:`np.array`): numpy array containing the time ticks
 
     Returns:
-        - :obj:`np.array`: numpy array contaning the joined signals
+        :obj:`np.array`: numpy array contaning the joined signals
     """
     current = np.zeros_like(anode_t)
 
@@ -252,9 +252,9 @@ def join_pixel_signals(signals, pixels):
 
     Args:
         - signals (:obj:`numpy.array`): 3D array containing the induced
-        current signals for each segment and each pixel
+          current signals for each segment and each pixel
         - pixels (:obj:`numpy.array`): 3D array containg the pixel IDs for
-        each segment
+          each segment
 
     Returns:
         :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
