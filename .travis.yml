@@ -1,5 +1,6 @@
 language: python
 script:
+  - export NUMBA_ENABLE_CUDASIM=1
   - pytest tests/*.py
   - travis-sphinx build
 
