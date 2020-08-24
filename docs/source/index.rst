@@ -20,7 +20,7 @@ Drifting stage
 ###############
 
 .. automodule:: larndsim.drifting
-    :members:
+   :members:
 
 Detector simulation stage
 #########################
