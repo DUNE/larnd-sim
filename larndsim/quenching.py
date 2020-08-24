@@ -18,10 +18,10 @@ def Quench(tracks, cols, mode="box"):
     Birks (Amoruso, et al NIM A 523 (2004) 275).
 
     Args:
-        - tracks (:obj:`numpy.array`): array containing the tracks segment information
-        - cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names
+        tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
+        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names
           for the track array
-        - mode (string, optional): recombination model. Default is "box"
+        mode (string, optional): recombination model. Default is "box"
     """
     for index in nb.prange(tracks.shape[0]):
         dedx = tracks[index, cols["dEdx"]]
@@ -51,7 +51,7 @@ def GPU_Quench(tracks, mode):
     CUDA version of `Quench`.
 
     Args:
-        tracks (:obj:`numpy.array`): array containing the tracks segment information
+        tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
         mode (string, optional): recombination model.
     """
     itrk = cuda.grid(1)

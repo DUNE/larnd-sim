@@ -226,12 +226,12 @@ def pixel_response(pixel_signals, anode_t):
     This function joins signals at different times but in the same pixel
 
     Args:
-        - pixel_signals (:obj:`numba.typed.Dict`): dictionary containing
+        pixel_signals (:obj:`numba.typed.Dict`): dictionary containing
            the pixel signals at different times
-        - anode_t (:obj:`np.array`): numpy array containing the time ticks
+        anode_t (:obj:`numpy.ndarray`): numpy array containing the time ticks
 
     Returns:
-        :obj:`np.array`: numpy array contaning the joined signals
+        :obj:`numpy.ndarray`: array contaning the joined signals
     """
     current = np.zeros_like(anode_t)
 
@@ -251,9 +251,9 @@ def join_pixel_signals(signals, pixels):
     the value is a list of induced current signals on the pixel.
 
     Args:
-        - signals (:obj:`numpy.array`): 3D array containing the induced
+        signals (:obj:`numpy.ndarray`): 3D array containing the induced
           current signals for each segment and each pixel
-        - pixels (:obj:`numpy.array`): 3D array containg the pixel IDs for
+        pixels (:obj:`numpy.ndarray`): 3D array containg the pixel IDs for
           each segment
 
     Returns:
