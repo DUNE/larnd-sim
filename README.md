@@ -1,5 +1,5 @@
 # larnd-sim [![Build Status](https://travis-ci.com/soleti/larnd-sim.svg?token=ySJqJBz9YiZ99571Y3et&branch=master)](https://travis-ci.com/soleti/larnd-sim)
-<img alt="larnd-sim" src="https://i.imgur.com/DnIuxpM.png" height="140">
+<img alt="larnd-sim" src="docs/logo.png" height="160">
 
 This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.
 
