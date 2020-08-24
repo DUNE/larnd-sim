@@ -16,11 +16,12 @@ def Quench(tracks, cols, mode="box"):
     the number of electrons that reach the anode plane after recombination.
     It is possible to pick among two models: Box (Baller, 2013 JINST 8 P08005) or
     Birks (Amoruso, et al NIM A 523 (2004) 275).
+
     Args:
-        tracks (:obj:`numpy.array`): array containing the tracks segment information
-        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names
-        for the track array
-        mode (string, optional): recombination model. Default is "box"
+        - tracks (:obj:`numpy.array`): array containing the tracks segment information
+        - cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names
+          for the track array
+        - mode (string, optional): recombination model. Default is "box"
     """
     for index in nb.prange(tracks.shape[0]):
         dedx = tracks[index, cols["dEdx"]]
