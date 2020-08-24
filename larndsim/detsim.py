@@ -4,12 +4,14 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
+from math import pi, ceil, sqrt, erf, exp, cos, sin
+
 import numba as nb
 import numpy as np
 
 from numba import cuda
-from math import pi, ceil, sqrt, erf, exp, cos, sin
-from .consts import *
+from .consts import tpc_borders, vdrift, pixel_size
+from .consts import t_sampling, time_ticks, time_interval
 from . import indeces as i
 
 @cuda.jit(device=True)
@@ -101,7 +103,7 @@ def rho(point, q, start, sigmas, segment):
         - start (tuple): segment start coordinates
         - sigmas (tuple): diffusion coefficients
         - segment (tuple): segment sizes
-    
+
     Returns:
         float: the amount of charge at `point`.
     """
@@ -126,17 +128,30 @@ def rho(point, q, start, sigmas, segment):
                (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
                sqrt_a_2
 
-    return expo * integral * factor 
+    return expo * integral * factor
 
 @cuda.jit(device=True)
 def attenuated_charge(charge, pixel_point, position):
-    return charge * exp(-10*sqrt((pixel_point[0] - position[0])**2+(pixel_point[1] - position[1])**2))
+    """
+    This function returns the charge at `position`, attenuated by the distance
+    between `position` and `pixel_point`
+
+    Args:
+        - charge (float): amount of charge
+        - pixel_point (tuple): pixel center coordinates
+        - position (tuple): position coordinates
+
+    Returns:
+        float: the attenuated charge at `position`
+    """
+    return charge * exp(-10 * sqrt((pixel_point[0] - position[0])**2 \
+                                   + (pixel_point[1] - position[1])**2))
 
 @cuda.jit(device=True)
 def diffusion_weight(pixel_point, point, q, start, sigmas, segment, slice_size, sampled_points):
     """
-    This function calculates the total amount of charge of a segment slice, attenuated by the distance
-    between the track and the pixel center.
+    This function calculates the total amount of charge of a segment slice, attenuated by the
+    distance between the track and the pixel center.
 
     Args:
         - pixel_point (tuple): pixel coordinates
@@ -147,15 +162,15 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment, slice_size, 
         - segment (tuple): segment sizes in the spatial dimensions
         - slice_size (float): size of the slice
         - sampled_points (int): number of sampled points in the slice
-        
+
     Returns:
         float: the total attenuated charge in the slice
     """
     summed_weight = 0
-    
+
     r_step = slice_size / (sampled_points - 1)
     theta_step = 2 * pi / (sampled_points*2 - 1)
-    
+
     # we sample the slice in polar coordinates
     for ir in range(sampled_points):
         for itheta in range(sampled_points*2):
@@ -165,7 +180,8 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment, slice_size, 
             yv = point[1] + r*sin(theta)
             charge = rho((xv, yv, point[2]), q, start, sigmas, segment)
             summed_weight += attenuated_charge(charge, pixel_point, (xv, yv)) \
-                             * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2) # this is the circle sector area 
+                             * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2)
+                             # this is the circle sector area
 
     return summed_weight
 
@@ -173,39 +189,50 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment, slice_size, 
 def track_point(start, direction, z):
     """
     This function returns the segment coordinates for a point along the `z` coordinate
-    
+
     Args:
         - start (tuple): start coordinates
         - direction (tuple): direction coordinates
         - z (float): `z` coordinate corresponding to the `x`, `y` coordinates
-        
+
     Returns:
         tuple: the (x,y) pair of coordinates for the segment at `z`
     """
     l = (z - start[2]) / direction[2]
     xl = start[0] + l * direction[0]
     yl = start[1] + l * direction[1]
-    
+
     return xl, yl
 
 @cuda.jit(device=True)
 def current_signal(time, t0):
     """
     This function returns the induced current function at `time`.
-    
+
     Args:
         - time (float): time where the function is evaluated
         - t0 (float): time when the electron reaches the pixel
-    
+
     Returns:
         float: value of the induced current
     """
     A = 1
     B = 5
     return A*exp((time-t0)/B)
-            
+
 @nb.njit
 def pixel_response(pixel_signals, anode_t):
+    """
+    This function joins signals at different times but in the same pixel
+
+    Args:
+        - pixel_signals (:obj:`numba.typed.Dict`): dictionary containing
+        the pixel signals at different times
+        - anode_t (:obj:`np.array`): numpy array containing the time ticks
+
+    Returns:
+        - :obj:`np.array`: numpy array contaning the joined signals
+    """
     current = np.zeros_like(anode_t)
 
     for signal in pixel_signals:
@@ -222,13 +249,13 @@ def join_pixel_signals(signals, pixels):
     """
     This function returns a dictionary where the key is the pixel ID and
     the value is a list of induced current signals on the pixel.
-    
+
     Args:
-        - signals (:obj:`numpy.array`): 3D array containing the induced 
+        - signals (:obj:`numpy.array`): 3D array containing the induced
         current signals for each segment and each pixel
-        - pixels (:obj:`numpy.array`): 3D array containg the pixel IDs for 
+        - pixels (:obj:`numpy.array`): 3D array containg the pixel IDs for
         each segment
-    
+
     Returns:
         :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
         the value is a list of induced current signals on the pixel
@@ -237,7 +264,7 @@ def join_pixel_signals(signals, pixels):
                                         value_type=signal_type)
     t_start = time_interval[0]
     t_end = time_interval[1]
-    
+
     for itrk in range(signals.shape[0]):
         for ipix in range(signals.shape[1]):
             pID = int(pixels[itrk][ipix][0]), int(pixels[itrk][ipix][1])
@@ -258,21 +285,19 @@ def join_pixel_signals(signals, pixels):
     return active_pixels
 
 @cuda.jit
-def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_size):
+def tracks_current(signals, pixels, tracks, slice_size):
     """
-    This CUDA kernel calculates the charge induced on the pixels by the input tracks. 
-    
+    This CUDA kernel calculates the charge induced on the pixels by the input tracks.
+
     Args:
-        - signals (:obj:`numpy.array`): empty 3D array with dimensions S x P x T, 
-        where S is the number of track segments, P is the number of pixels, and T is 
+        - signals (:obj:`numpy.array`): empty 3D array with dimensions S x P x T,
+        where S is the number of track segments, P is the number of pixels, and T is
         the number of time ticks. The output is stored here.
-        - pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is 
+        - pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is
         the number of track segments, P is the number of pixels and the third dimension
         contains the two pixel ID numbers.
-        - time_interval (:obj:`numpy.array`): 1D array containing the time ticks.
-        - t_sampling (float): time sampling. 
         - slice_size (int): number of sampled points on the segment slice.
-        
+
     """
     itrk, ipix, it = cuda.grid(3)
 
@@ -281,7 +306,7 @@ def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_siz
         pID = pixels[itrk][ipix]
 
         if pID[0] >= 0 and pID[1] >= 0:
-            
+
             # Pixel coordinates
             x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
             y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
@@ -311,12 +336,13 @@ def tracks_current(signals, pixels, tracks, time_interval, t_sampling, slice_siz
                     z_t = z_poca + iz*z_step
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
                     x_t, y_t = track_point(start, direction, z_t)
-                    if time_interval[it] < t0:
+                    if time_ticks[it] < t0:
                         diff_weight = diffusion_weight(this_pixel_point,
                                                        (x_t, y_t, z_t),
                                                        t[i.n_electrons],
-                                                       start, sigmas, segment, padding, slice_size) * z_step
-                        signals[itrk][ipix][it] += current_signal(time_interval[it], t0) * diff_weight
+                                                       start, sigmas, segment,
+                                                       padding, slice_size) * z_step
+                        signals[itrk][ipix][it] += current_signal(time_ticks[it], t0) * diff_weight
 
 @nb.jit(forceobj=True)
 def pixel_from_coordinates(x, y, n_pixels):
