@@ -5,7 +5,8 @@ script:
   - travis-sphinx build
 
 after_success:
-    - travis-sphinx deploy --branches=master
+  - find larndsim/ -name '*.py' -exec sed -i -e 's/@cuda/#@cuda/g' {} \;  
+  - travis-sphinx deploy --branches=master
 
 notifications:
   slack: dunescience:HnUdVUQSSlhocorG8poRdXhm
