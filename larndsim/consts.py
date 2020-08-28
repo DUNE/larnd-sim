@@ -28,8 +28,10 @@ TPC_PARAMS
 vdrift = 0.153812 # cm / us,
 lifetime = 10e3 # us,
 tpc_borders = np.array([(0, 100), (-50, 50), (-50, 50)]) # cm,
-t_sampling = 1
+t_sampling = 0.5
 time_interval = (0., 3000.) # us
+time_padding = 20
+sampled_points = 20
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
                          int(round(time_interval[1]-time_interval[0])/t_sampling))
