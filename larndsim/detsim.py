@@ -16,7 +16,16 @@ from . import indeces as i
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
     """
-    Find the maximum value in values and store in result[0].
+    Find the value of the longest signal time and stores the start
+    time of each segment.
+    
+    Args:
+        track_starts (:obj:`numpy.ndarray`): array where
+            we store the segments start time
+        time_max (:obj:`numpy.ndarray`): array where we store
+            the longest signal time
+        tracks (:obj:`numpy.ndarray`): array containing the segment
+            information
     """
     itrk = cuda.grid(1)
 
@@ -35,17 +44,17 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     using the impact factor
 
     Args:
-        - start_point (tuple): coordinates of the segment start
-        - end_point (tuple): coordinates of the segment end
-        - x_p (float): pixel center `x` coordinate
-        - y_p (float): pixel center `y` coordinate
-        - tolerance (float): maximum distance between the pixel center and
-          the segment
+        start_point (tuple): coordinates of the segment start
+        end_point (tuple): coordinates of the segment end
+        x_p (float): pixel center `x` coordinate
+        y_p (float): pixel center `y` coordinate
+        tolerance (float): maximum distance between the pixel center and
+            the segment
 
     Returns:
         tuple: `z` coordinate of the point of closest approach (POCA),
-        `z` coordinate of the first slice, `z` coordinate of the last slice.
-        (0,0,0) if POCA > tolerance.
+            `z` coordinate of the first slice, `z` coordinate of the last slice.
+            (0,0,0) if POCA > tolerance.
     """
     if start_point[0] > end_point[0]:
         start = end_point
@@ -112,11 +121,11 @@ def rho(point, q, start, sigmas, segment):
     Function that returns the amount of charge at a certain point in space
 
     Args:
-        - point (tuple): point coordinates
-        - q (float): total charge
-        - start (tuple): segment start coordinates
-        - sigmas (tuple): diffusion coefficients
-        - segment (tuple): segment sizes
+        point (tuple): point coordinates
+        q (float): total charge
+        start (tuple): segment start coordinates
+        sigmas (tuple): diffusion coefficients
+        segment (tuple): segment sizes
 
     Returns:
         float: the amount of charge at `point`.
@@ -151,9 +160,9 @@ def attenuated_charge(charge, pixel_point, position):
     between `position` and `pixel_point`
 
     Args:
-        - charge (float): amount of charge
-        - pixel_point (tuple): pixel center coordinates
-        - position (tuple): position coordinates
+        charge (float): amount of charge
+        pixel_point (tuple): pixel center coordinates
+        position (tuple): position coordinates
 
     Returns:
         float: the attenuated charge at `position`
@@ -168,12 +177,12 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment):
     distance between the track and the pixel center.
 
     Args:
-        - pixel_point (tuple): pixel coordinates
-        - point (tuple): coordinates of the segment in the slice
-        - q (float): total track charge
-        - start (tuple): segment start coordinates
-        - sigmas (tuple): diffusion coefficients in the spatial dimensions?
-        - segment (tuple): segment sizes in the spatial dimensions
+        pixel_point (tuple): pixel coordinates
+        point (tuple): coordinates of the segment in the slice
+        q (float): total track charge
+        start (tuple): segment start coordinates
+        sigmas (tuple): diffusion coefficients in the spatial dimensions?
+        segment (tuple): segment sizes in the spatial dimensions
 
     Returns:
         float: the total attenuated charge in the slice
@@ -203,9 +212,9 @@ def track_point(start, direction, z):
     This function returns the segment coordinates for a point along the `z` coordinate
 
     Args:
-        - start (tuple): start coordinates
-        - direction (tuple): direction coordinates
-        - z (float): `z` coordinate corresponding to the `x`, `y` coordinates
+        start (tuple): start coordinates
+        direction (tuple): direction coordinates
+        z (float): `z` coordinate corresponding to the `x`, `y` coordinates
 
     Returns:
         tuple: the (x,y) pair of coordinates for the segment at `z`
@@ -222,8 +231,8 @@ def current_signal(time, t0):
     This function returns the induced current function at `time`.
 
     Args:
-        - time (float): time where the function is evaluated
-        - t0 (float): time when the electron reaches the pixel
+        time (float): time where the function is evaluated
+        t0 (float): time when the electron reaches the pixel
 
     Returns:
         float: value of the induced current
@@ -264,13 +273,13 @@ def join_pixel_signals(signals, pixels, track_starts, max_length):
 
     Args:
         signals (:obj:`numpy.ndarray`): 3D array containing the induced
-          current signals for each segment and each pixel
+            current signals for each segment and each pixel
         pixels (:obj:`numpy.ndarray`): 3D array containg the pixel IDs for
-          each segment
+            each segment
 
     Returns:
         :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
-        the value is a list of induced current signals on the pixel
+            the value is a list of induced current signals on the pixel
     """
     active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
                                         value_type=signal_type)
@@ -304,12 +313,12 @@ def tracks_current(signals, pixels, tracks):
     This CUDA kernel calculates the charge induced on the pixels by the input tracks.
 
     Args:
-        - signals (:obj:`numpy.array`): empty 3D array with dimensions S x P x T,
-        where S is the number of track segments, P is the number of pixels, and T is
-        the number of time ticks. The output is stored here.
-        - pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is
-        the number of track segments, P is the number of pixels and the third dimension
-        contains the two pixel ID numbers.
+        signals (:obj:`numpy.array`): empty 3D array with dimensions S x P x T,
+            where S is the number of track segments, P is the number of pixels, and T is
+            the number of time ticks. The output is stored here.
+        pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is
+            the number of track segments, P is the number of pixels and the third dimension
+            contains the two pixel ID numbers.
 
     """
     itrk, ipix, it = cuda.grid(3)
