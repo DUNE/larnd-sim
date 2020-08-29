@@ -12,53 +12,21 @@ from numba import cuda
 from .consts import tpc_borders, vdrift, pixel_size, time_padding
 from .consts import t_sampling, time_ticks, time_interval, sampled_points
 from . import indeces as i
-
-@cuda.jit
-def calculate_time_intervals(tracks, time_intervals):
-    itrk, it = cuda.grid(2)
-    
-    if itrk < time_intervals.shape[0] and it < time_intervals.shape[1]:
-        track = tracks[itrk]
-        t_start = (track[i.t_start] - time_padding) // t_sampling * t_sampling
-        time_intervals[itrk][it] = t_start + it*t_sampling
         
 @cuda.jit
-def max_time_interval(result, tracks):
+def time_intervals(track_starts, time_max, tracks):
     """
     Find the maximum value in values and store in result[0].
     """
     itrk = cuda.grid(1)
-    # Atomically store to result[0,1,2] from values[i, j, k]
-    track = tracks[itrk]
-    t_end = (track[i.t_end] + time_padding) // t_sampling * t_sampling
-    t_start = (track[i.t_start] - time_padding) // t_sampling * t_sampling
-    t_length = t_end - t_start
-    cuda.atomic.max(result, 0, int(round(t_length / t_sampling))+1)
 
-@nb.njit
-def get_time_intervals(tracks):
-    
-    t_length_max = 0
-    time_starts = np.empty(tracks.shape[0])
-    
-    for itrk in nb.prange(tracks.shape[0]):
+    if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_start = (track[i.t_start] - time_padding) // t_sampling * t_sampling
         t_end = (track[i.t_end] + time_padding) // t_sampling * t_sampling
-        t_length = t_end - t_start
-        time_starts[itrk] = t_start
-        if t_length > t_length_max:
-            t_length_max = t_length
-
-    time_intervals = np.empty((tracks.shape[0],int(round(t_length_max / t_sampling))+1))
-
-    for itrk in nb.prange(tracks.shape[0]):
-        track = tracks[itrk]
         t_start = (track[i.t_start] - time_padding) // t_sampling * t_sampling
-        t_end = t_start + t_length_max
-        time_intervals[itrk] = np.linspace(t_start, t_end, int(round(t_length_max / t_sampling))+1)
-
-    return time_intervals
+        t_length = t_end - t_start
+        track_starts[itrk] = t_start
+        cuda.atomic.max(time_max, 0, int(round(t_length / t_sampling))+1)
         
 @cuda.jit(device=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
@@ -289,7 +257,7 @@ pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
 signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
 
 @nb.njit
-def join_pixel_signals(signals, pixels, time_intervals):
+def join_pixel_signals(signals, pixels, track_starts, max_length):
     """
     This function returns a dictionary where the key is the pixel ID and
     the value is a list of induced current signals on the pixel.
@@ -309,8 +277,8 @@ def join_pixel_signals(signals, pixels, time_intervals):
 
 
     for itrk in range(signals.shape[0]):
-        t_start = time_intervals[itrk][0]
-        t_end = time_intervals[itrk][-1]
+        t_start = track_starts[itrk]
+        t_end = t_start + max_length*t_sampling
         
         for ipix in range(signals.shape[1]):
             pID = int(pixels[itrk][ipix][0]), int(pixels[itrk][ipix][1])
@@ -331,7 +299,7 @@ def join_pixel_signals(signals, pixels, time_intervals):
     return active_pixels
 
 @cuda.jit
-def tracks_current(signals, pixels, tracks, time_intervals):
+def tracks_current(signals, pixels, tracks):
     """
     This CUDA kernel calculates the charge induced on the pixels by the input tracks.
 
@@ -374,18 +342,21 @@ def tracks_current(signals, pixels, tracks, time_intervals):
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)
                 z_range_down = ceil(abs(z_poca-z_start)/z_sampling)
                 z_step = (z_end-z_poca)/(z_range_up)
+                
+                t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
 
                 # Loop over the slices along the z direction
                 for iz in range(-z_range_down, z_range_up+1):
                     z_t = z_poca + iz*z_step
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
                     x_t, y_t = track_point(start, direction, z_t)
-                    if time_intervals[itrk][it] < t0:
+                    time_tick = t_start + it*t_sampling
+                    if time_tick < t0:
                         diff_weight = diffusion_weight(this_pixel_point,
                                                        (x_t, y_t, z_t),
                                                        t[i.n_electrons],
                                                        start, sigmas, segment) * z_step
-                        signals[itrk][ipix][it] += current_signal(time_intervals[itrk][it], t0) * diff_weight
+                        signals[itrk][ipix][it] += current_signal(time_tick, t0) * diff_weight
 
 @nb.jit(forceobj=True)
 def pixel_from_coordinates(x, y, n_pixels):
