@@ -12,13 +12,13 @@ from numba import cuda
 from .consts import tpc_borders, vdrift, pixel_size, time_padding
 from .consts import t_sampling, time_ticks, time_interval, sampled_points
 from . import indeces as i
-        
+
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
     """
     Find the value of the longest signal time and stores the start
     time of each segment.
-    
+
     Args:
         track_starts (:obj:`numpy.ndarray`): array where
             we store the segments start time
@@ -36,7 +36,7 @@ def time_intervals(track_starts, time_max, tracks):
         t_length = t_end - t_start
         track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, int(round(t_length / t_sampling))+1)
-        
+
 @cuda.jit(device=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """
@@ -53,8 +53,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     Returns:
         tuple: `z` coordinate of the point of closest approach (POCA),
-            `z` coordinate of the first slice, `z` coordinate of the last slice.
-            (0,0,0) if POCA > tolerance.
+        `z` coordinate of the first slice, `z` coordinate of the last slice.
+        (0,0,0) if POCA > tolerance.
     """
     if start_point[0] > end_point[0]:
         start = end_point
@@ -175,7 +175,7 @@ def current_model(t, t0, distance):
     b = 1.207e+01 -2.770e+02*distance +  3.254e+03*distance**2 -1.752e+04*distance**3 + 3.520e+04*distance**4
     c = 2.342e+00 +1.226e+01*distance -2.173e+02*distance**2 + 1.835e+03*distance**3 -3.8275e+03*distance**4
     c *= 1e-19
-    
+
     d = 0.538 + 1.560*distance -37.691*distance**2 + 146.602*distance**3 -165.668*distance**4
     a = (1.603e-19-c*d)/b
     t0 += 2.795 + 0.944*distance -9.457*distance**2 + 61.892*distance**3
@@ -221,7 +221,7 @@ def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
                 total_signal += charge * current_model(time, t0, distance) \
                                 * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2)
                                 # this is the circle sector area
-                
+
     return total_signal
 
 @cuda.jit(device=True)
@@ -281,7 +281,7 @@ def join_pixel_signals(signals, pixels, track_starts, max_length):
 
     Returns:
         :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
-            the value is a list of induced current signals on the pixel
+        the value is a list of induced current signals on the pixel
     """
     active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
                                         value_type=signal_type)
@@ -290,7 +290,7 @@ def join_pixel_signals(signals, pixels, track_starts, max_length):
     for itrk in range(signals.shape[0]):
         t_start = track_starts[itrk]
         t_end = t_start + max_length*t_sampling
-        
+
         for ipix in range(signals.shape[1]):
             pID = int(pixels[itrk][ipix][0]), int(pixels[itrk][ipix][1])
             if pID[0] < 0 or pID[1] < 0:
@@ -353,7 +353,7 @@ def tracks_current(signals, pixels, tracks):
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)
                 z_range_down = ceil(abs(z_poca-z_start)/z_sampling)
                 z_step = (z_end-z_poca)/(z_range_up)
-                
+
                 t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
 
                 # Loop over the slices along the z direction
