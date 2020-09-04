@@ -171,7 +171,23 @@ def attenuated_charge(charge, pixel_point, position):
                                    + (pixel_point[1] - position[1])**2))
 
 @cuda.jit(device=True)
-def diffusion_weight(pixel_point, point, q, start, sigmas, segment):
+def current_model(t, t0, distance):
+    b = 1.207e+01 -2.770e+02*distance +  3.254e+03*distance**2 -1.752e+04*distance**3 + 3.520e+04*distance**4
+    c = 2.342e+00 +1.226e+01*distance -2.173e+02*distance**2 + 1.835e+03*distance**3 -3.8275e+03*distance**4
+    c *= 1e-19
+    
+    d = 0.538 + 1.560*distance -37.691*distance**2 + 146.602*distance**3 -165.668*distance**4
+    a = (1.603e-19-c*d)/b
+    t0 += 2.795 + 0.944*distance -9.457*distance**2 + 61.892*distance**3
+
+    if t0-t > 0:
+        return a * exp((t-t0)/b) + c * exp((t-t0)/d)
+    else:
+        return 0
+
+
+@cuda.jit(device=True)
+def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
     """
     This function calculates the total amount of charge of a segment slice, attenuated by the
     distance between the track and the pixel center.
@@ -187,11 +203,9 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment):
     Returns:
         float: the total attenuated charge in the slice
     """
-    summed_weight = 0
-        
+    total_signal = 0
     r_step = sigmas[2] * 3 / (sampled_points - 1)
     theta_step = 2 * pi / (sampled_points*2 - 1)
-
     # we sample the slice in polar coordinates
     for ir in range(sampled_points):
         for itheta in range(sampled_points*2):
@@ -199,12 +213,16 @@ def diffusion_weight(pixel_point, point, q, start, sigmas, segment):
             theta = itheta*theta_step
             xv = point[0] + r*cos(theta)
             yv = point[1] + r*sin(theta)
-            charge = rho((xv, yv, point[2]), q, start, sigmas, segment)
-            summed_weight += attenuated_charge(charge, pixel_point, (xv, yv)) \
-                             * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2)
-                             # this is the circle sector area
-
-    return summed_weight
+            x_dist = abs(pixel_point[0] - xv)
+            y_dist = abs(pixel_point[1] - yv)
+            if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
+                charge = rho((xv, yv, point[2]), q, start, sigmas, segment)
+                distance = sqrt((pixel_point[0] - xv)**2 + (pixel_point[1] - yv)**2)
+                total_signal += charge * current_model(time, t0, distance) \
+                                * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2)
+                                # this is the circle sector area
+                
+    return total_signal
 
 @cuda.jit(device=True)
 def track_point(start, direction, z):
@@ -224,22 +242,6 @@ def track_point(start, direction, z):
     yl = start[1] + l * direction[1]
 
     return xl, yl
-
-@cuda.jit(device=True)
-def current_signal(time, t0):
-    """
-    This function returns the induced current function at `time`.
-
-    Args:
-        time (float): time where the function is evaluated
-        t0 (float): time when the electron reaches the pixel
-
-    Returns:
-        float: value of the induced current
-    """
-    A = 1
-    B = 5
-    return A*exp((time-t0)/B)
 
 @nb.njit
 def pixel_response(pixel_signals, anode_t):
@@ -360,12 +362,13 @@ def tracks_current(signals, pixels, tracks):
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
                     x_t, y_t = track_point(start, direction, z_t)
                     time_tick = t_start + it*t_sampling
-                    if time_tick < t0:
-                        diff_weight = diffusion_weight(this_pixel_point,
-                                                       (x_t, y_t, z_t),
-                                                       t[i.n_electrons],
-                                                       start, sigmas, segment) * z_step
-                        signals[itrk][ipix][it] += current_signal(time_tick, t0) * diff_weight
+                    if time_tick < t0+5:
+                        signals[itrk][ipix][it] += current_signal(this_pixel_point,
+                                                                  (x_t, y_t, z_t),
+                                                                  t[i.n_electrons],
+                                                                  start, sigmas, segment,
+                                                                  time_tick, t0) * z_step
+#                         signals[itrk][ipix][it] += current_signal(time_tick, t0) * diff_weight
 
 @nb.jit(forceobj=True)
 def pixel_from_coordinates(x, y, n_pixels):
