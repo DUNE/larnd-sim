@@ -13,33 +13,27 @@ sys.path.insert(0,parentdir)
 from larndsim import detsim
 from larndsim import drifting
 from larndsim import consts
+from larndsim import indeces as i
+
+from math import ceil
 
 class TestDrifting:
-    tracks = np.zeros((100, 9))
-    tracks[:, 0] = np.random.uniform(-150, 150, 100)
-    tracks[:, 1] = np.random.uniform(1e6, 1e7, 100)
-
-    col = nb.typed.Dict()
-    col["z"] = 0
-    col["NElectrons"] = 1
-    col["z_start"] = 2
-    col["z_end"] = 3
-    col["t_start"] = 4
-    col["t"] = 5
-    col["t_end"] = 6
-    col["tranDiff"] = 7
-    col["longDiff"] = 8
+    tracks = np.zeros((100, 29))
+    tracks[:, i.z] = np.random.uniform(-150, 150, 100)
+    tracks[:, i.n_electrons] = np.random.uniform(1e6, 1e7, 100)
 
     def test_lifetime(self):
         zAnode = consts.tpc_borders[2][0]
-        driftDistance = np.abs(self.tracks[:, self.col["z"]] - zAnode)
+        driftDistance = np.abs(self.tracks[:, i.z] - zAnode)
         driftTime = driftDistance / consts.vdrift
 
         lifetime = np.exp(-driftTime / consts.lifetime)
 
         tracks = self.tracks
-        electronsAtAnode = tracks[:, self.col["NElectrons"]] * lifetime
+        electronsAtAnode = tracks[:, i.n_electrons] * lifetime
 
-        drifting.Drift(tracks, self.col)
+        TPB = 128
+        BPG = ceil(tracks.shape[0] / TPB)
+        drifting.Drift[TPB,BPG](tracks)
 
-        assert tracks[:, self.col["NElectrons"]] == pytest.approx(electronsAtAnode)
+        assert tracks[:, i.n_electrons] == pytest.approx(electronsAtAnode)
