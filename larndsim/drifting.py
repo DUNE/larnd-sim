@@ -9,8 +9,8 @@ from numba import cuda
 from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
 from . import indeces as i
 
-# @nb.njit(parallel=True, fastmath=True)
-def Drift(tracks, cols):
+@cuda.jit
+def Drift(tracks):
     """
     This function takes as input an array of track segments and calculates
     the properties of the segments at the anode:
@@ -23,36 +23,6 @@ def Drift(tracks, cols):
 
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
-        cols (:obj:`numba.typed.Dict`): Numba dictionary containing columns names for
-          the track array
-    """
-    z_anode = tpc_borders[2][0]
-
-    for index in nb.prange(tracks.shape[0]):
-        drift_distance = fabs(tracks[index, cols["z"]] - z_anode)
-        drift_start = fabs(tracks[index, cols["z_start"]] - z_anode)
-        drift_end = fabs(tracks[index, cols["z_end"]] - z_anode)
-
-        drift_time = drift_distance / vdrift
-        tracks[index, cols["z"]] = z_anode
-
-        lifetime_red = exp(-drift_time / lifetime)
-        tracks[index, cols["NElectrons"]] *= lifetime_red
-
-        tracks[index, cols["longDiff"]] = sqrt(drift_time) * long_diff
-        tracks[index, cols["tranDiff"]] = sqrt(drift_time) * tran_diff
-        tracks[index, cols["t"]] += drift_time + tracks[index, cols["tranDiff"]] / vdrift
-        tracks[index, cols["t_start"]] += (drift_start + tracks[index, cols["tranDiff"]]) / vdrift
-        tracks[index, cols["t_end"]] += (drift_end + tracks[index, cols["tranDiff"]]) / vdrift
-
-@cuda.jit
-def GPU_Drift(tracks):
-
-    """
-    CUDA version of `Drift`
-
-    Args:
-        tracks (:obj:`numpy.array`): array containing the tracks segment information
     """
     z_anode = tpc_borders[2][0]
 
