@@ -10,7 +10,7 @@ import numpy as np
 
 from numba import cuda
 from .consts import tpc_borders, vdrift, pixel_size, time_padding
-from .consts import t_sampling, time_ticks, time_interval, sampled_points
+from .consts import t_sampling, time_interval, sampled_points
 from . import indeces as i
 
 @cuda.jit
@@ -347,7 +347,7 @@ def tracks_current(signals, pixels, tracks):
 
             z_sampling = t_sampling * vdrift
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-                
+
             if z_start != 0 and z_end != 0:
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)
                 z_range_down = ceil(abs(z_poca-z_start)/z_sampling)
@@ -360,7 +360,7 @@ def tracks_current(signals, pixels, tracks):
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
                     x_t, y_t = track_point(start, direction, z_t)
                     time_tick = t_start + it*t_sampling
-                    
+
                     if time_tick < t0+5:
                         signals[itrk][ipix][it] += current_signal(this_pixel_point,
                                                                   (x_t, y_t, z_t),
