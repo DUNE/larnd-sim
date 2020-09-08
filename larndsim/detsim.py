@@ -53,8 +53,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     Returns:
         tuple: `z` coordinate of the point of closest approach (POCA),
-            `z` coordinate of the first slice, `z` coordinate of the last slice.
-            (0,0,0) if POCA > tolerance.
+               `z` coordinate of the first slice, `z` coordinate of the last slice.
+               (0,0,0) if POCA > tolerance.
     """
     if start_point[0] > end_point[0]:
         start = end_point
@@ -204,7 +204,7 @@ def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
         float: the total attenuated charge in the slice
     """
     total_signal = 0
-    r_step = sigmas[2] * 3 / (sampled_points - 1)
+    r_step = sigmas[0] * 3 / (sampled_points - 1)
     theta_step = 2 * pi / (sampled_points*2 - 1)
     # we sample the slice in polar coordinates
     for ir in range(sampled_points):
@@ -281,7 +281,7 @@ def join_pixel_signals(signals, pixels, track_starts, max_length):
 
     Returns:
         :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
-            the value is a list of induced current signals on the pixel
+                                 the value is a list of induced current signals on the pixel
     """
     active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
                                         value_type=signal_type)
@@ -321,7 +321,6 @@ def tracks_current(signals, pixels, tracks):
         pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is
             the number of track segments, P is the number of pixels and the third dimension
             contains the two pixel ID numbers.
-
     """
     itrk, ipix, it = cuda.grid(3)
 
@@ -348,27 +347,26 @@ def tracks_current(signals, pixels, tracks):
 
             z_sampling = t_sampling * vdrift
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
+                
             if z_start != 0 and z_end != 0:
                 z_range_up = ceil(abs(z_end-z_poca)/z_sampling)
                 z_range_down = ceil(abs(z_poca-z_start)/z_sampling)
                 z_step = (z_end-z_poca)/(z_range_up)
-                
-                t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
 
+                t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
                 # Loop over the slices along the z direction
                 for iz in range(-z_range_down, z_range_up+1):
                     z_t = z_poca + iz*z_step
                     t0 = (z_t - tpc_borders[2][0]) / vdrift
                     x_t, y_t = track_point(start, direction, z_t)
                     time_tick = t_start + it*t_sampling
+                    
                     if time_tick < t0+5:
                         signals[itrk][ipix][it] += current_signal(this_pixel_point,
                                                                   (x_t, y_t, z_t),
                                                                   t[i.n_electrons],
                                                                   start, sigmas, segment,
                                                                   time_tick, t0) * z_step
-#                         signals[itrk][ipix][it] += current_signal(time_tick, t0) * diff_weight
 
 @nb.jit(forceobj=True)
 def pixel_from_coordinates(x, y, n_pixels):
@@ -383,6 +381,6 @@ def pixel_from_coordinates(x, y, n_pixels):
         tuple: the pixel ID
     """
 
-    x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels)
-    y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels)
+    x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels[0])
+    y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels[1])
     return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
