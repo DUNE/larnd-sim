@@ -12,26 +12,25 @@ sys.path.insert(0,parentdir)
 
 from larndsim import quenching
 from larndsim import consts
+from larndsim import indeces as i
 
+from math import ceil
 
 class TestQuenching:
-    tracks = np.zeros((100, 3))
-    tracks[:, 0] = np.random.uniform(40, 90, 100)
-    tracks[:, 1] = np.random.uniform(1, 4, 100)
-    col = nb.typed.Dict()
-    col['dE'] = 0
-    col['dEdx'] = 1
-    col['NElectrons'] = 2
+    tracks = np.zeros((100, 20))
+    tracks[:, i.dE] = np.random.uniform(40, 90, 100)
+    tracks[:, i.dEdx] = np.random.uniform(1, 4, 100)
 
     def test_birksModel(self):
         tracks_birks = np.copy(self.tracks)
 
-        dedx = self.tracks[:, self.col['dEdx']]
-        de = self.tracks[:, self.col['dE']]
+        dedx = self.tracks[:, i.dEdx]
+        de = self.tracks[:, i.dE]
+        TPB = 128
+        BPG = ceil(tracks_birks.shape[0] / TPB)
+        quenching.Quench[TPB,BPG](tracks_birks, consts.birks)
 
-        quenching.Quench(tracks_birks, self.col, mode="birks")
-
-        nelectrons = tracks_birks[:, self.col['NElectrons']]
+        nelectrons = tracks_birks[:, i.n_electrons]
 
         recomb = consts.Ab / (1 + consts.kb * dedx / (consts.eField * consts.lArDensity))
 
@@ -40,14 +39,15 @@ class TestQuenching:
     def test_boxModel(self):
         tracks_box = np.copy(self.tracks)
 
-        dedx = self.tracks[:, self.col['dEdx']]
-        de = self.tracks[:, self.col['dE']]
-
-        quenching.Quench(tracks_box, self.col, mode="box")
+        dedx = self.tracks[:, i.dEdx]
+        de = self.tracks[:, i.dE]
+        TPB = 128
+        BPG = ceil(tracks_box.shape[0] / TPB)
+        quenching.Quench[TPB,BPG](tracks_box, consts.box)
 
         csi = consts.beta * dedx / (consts.eField * consts.lArDensity)
         recomb = np.log(consts.alpha + csi)/csi
 
-        nelectrons = tracks_box[:, self.col['NElectrons']]
+        nelectrons = tracks_box[:, i.n_electrons]
 
         assert nelectrons == pytest.approx(recomb * de * consts.MeVToElectrons)
