@@ -28,6 +28,17 @@ Detector simulation stage
 .. automodule:: larndsim.detsim
     :members:
 
+Pixel finder utility
+####################
+
+.. automodule:: larndsim.pixels_from_track
+    :members:
+
+Constants
+####################
+
+.. automodule:: larndsim.consts
+    :members:
 
 Indices and tables
 ==================
