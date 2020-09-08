@@ -27,11 +27,11 @@ TPC_PARAMS
 """
 vdrift = 0.153812 # cm / us,
 lifetime = 10e3 # us,
-tpc_borders = np.array([(0, 100), (-50, 50), (-50, 50)]) # cm,
+tpc_borders = np.array([(0, 100), (-150, 150), (0, 100)]) # cm,
 t_sampling = 0.1
-time_interval = (0., 3000.) # us
+time_interval = (0., 700.) # us
 time_padding = 50
-sampled_points = 25
+sampled_points = 50
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
                          int(round(time_interval[1]-time_interval[0])/t_sampling))
@@ -42,9 +42,9 @@ tran_diff = 8.8e-3 # cm
 PIXEL CONFIG
 """
 
-n_pixels = 333
-x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels
-y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels
+n_pixels = 333, 999
+x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels[0]
+y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels[1]
 pixel_size = np.array([x_pixel_size, y_pixel_size])
 
 """
