@@ -42,7 +42,10 @@ sampled_points = 50
 long_diff = 4.0e-3 # cm * cm / us,
 #: Transverse diffusion coefficient in :math:`cm`
 tran_diff = 8.8e-3 # cm
-
+#: Numpy array containing all the time ticks in the drift time window
+time_ticks = np.linspace(time_interval[0],
+                         time_interval[1],
+                         int(round(time_interval[1]-time_interval[0])/t_sampling))
 ## Pixel params
 #: Number of pixels per axis
 n_pixels = 333, 999
