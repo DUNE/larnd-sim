@@ -5,12 +5,12 @@ through the detector
 
 from math import log, isnan
 from numba import cuda
-import numba as nb
+
 from . import consts
 from . import indeces as i
 
 @cuda.jit
-def Quench(tracks, mode):
+def quench(tracks, mode):
     """
     This CUDA kernel takes as input an array of track segments and calculates
     the number of electrons that reach the anode plane after recombination.
