@@ -38,7 +38,7 @@ time_padding = 50
 #: Number of sampled points for each segment slice
 sampled_points = 50
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-long_diff = 4.0e0 # cm * cm / us,
+long_diff = 4.0e-3 # cm * cm / us,
 #: Transverse diffusion coefficient in :math:`cm`
 tran_diff = 8.8e-3 # cm
 #: Numpy array containing all the time ticks in the drift time window
