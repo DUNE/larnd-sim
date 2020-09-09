@@ -171,15 +171,36 @@ def attenuated_charge(charge, pixel_point, position):
                                    + (pixel_point[1] - position[1])**2))
 
 @cuda.jit(device=True)
-def current_model(t, t0, distance):
-    b = 1.207e+01 -2.770e+02*distance +  3.254e+03*distance**2 -1.752e+04*distance**3 + 3.520e+04*distance**4
-    c = 2.342e+00 +1.226e+01*distance -2.173e+02*distance**2 + 1.835e+03*distance**3 -3.8275e+03*distance**4
+def current_model(t, t0, x, y):
+    """
+    Parametrization of the induced current on the pixel, which depends 
+    on the of arrival at the anode (:math:`t_0`) and on the position
+    on the pixel pad.
+    
+    Args:
+        t (float): time where we evaluate the current
+        t0 (float): time of arrival at the anode
+        x (float): distance between the point on the pixel and the pixel center
+            on the :math:`x` axis
+        y (float): distance between the point on the pixel and the pixel center
+            on the :math:`y` axis
+    
+    Returns:
+        float: the induced current at time :math:`t`
+    """
+    B_params = (40.74727999, -288.41137404, -288.41137404, 1247.51482664, 517.99360585, 517.99360585)
+    C_params = (2.504075, -4.98133949, -4.98133949, -5.01073463, 81.93629314, 81.93629314)
+    D_params = (0.68403238, -1.11708586, -1.11708586, 9.08695733, -5.55778424, -5.55778424)
+    t0_params = (2.94805382, -2.70495514, -2.70495514, 4.82499082, 20.81401515, 20.81401515)
+    
+    b = B_params[0] + B_params[1]*x + B_params[2]*y + B_params[3]*x*y + B_params[4]*x*x + B_params[5]*y*y
+    c = C_params[0] + C_params[1]*x + C_params[2]*y + C_params[3]*x*y + C_params[4]*x*x + C_params[5]*y*y
+    d = D_params[0] + D_params[1]*x + D_params[2]*y + D_params[3]*x*y + D_params[4]*x*x + D_params[5]*y*y
+    t0 += t0_params[0] + t0_params[1]*x + t0_params[2]*y + t0_params[3]*x*y + t0_params[4]*x*x + t0_params[5]*y*y
+
     c *= 1e-19
-
-    d = 0.538 + 1.560*distance -37.691*distance**2 + 146.602*distance**3 -165.668*distance**4
     a = (1.603e-19-c*d)/b
-    t0 += 2.795 + 0.944*distance -9.457*distance**2 + 61.892*distance**3
-
+    
     if t0-t > 0:
         return a * exp((t-t0)/b) + c * exp((t-t0)/d)
     else:
@@ -217,8 +238,7 @@ def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
             y_dist = abs(pixel_point[1] - yv)
             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
                 charge = rho((xv, yv, point[2]), q, start, sigmas, segment)
-                distance = sqrt((pixel_point[0] - xv)**2 + (pixel_point[1] - yv)**2)
-                total_signal += charge * current_model(time, t0, distance) \
+                total_signal += charge * current_model(time, t0, x_dist, y_dist) \
                                 * 1./2. * theta_step * r_step**2 *((ir+1)**2 - ir**2)
                                 # this is the circle sector area
 

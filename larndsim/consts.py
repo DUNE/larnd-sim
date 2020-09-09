@@ -39,7 +39,7 @@ time_padding = 50
 #: Number of sampled points for each segment slice
 sampled_points = 50
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-long_diff = 4.0e-3 # cm * cm / us,
+long_diff = 4.0e0 # cm * cm / us,
 #: Transverse diffusion coefficient in :math:`cm`
 tran_diff = 8.8e-3 # cm
 #: Numpy array containing all the time ticks in the drift time window
@@ -48,7 +48,7 @@ time_ticks = np.linspace(time_interval[0],
                          int(round(time_interval[1]-time_interval[0])/t_sampling))
 ## Pixel params
 #: Number of pixels per axis
-n_pixels = 333, 999
+n_pixels = 250, 750
 x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels[0]
 y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels[1]
 #: Size of pixels per axis in :math:`cm`
