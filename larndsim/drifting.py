@@ -4,13 +4,12 @@ electrons towards the anode.
 """
 
 from math import fabs, exp, sqrt
-import numba as nb
 from numba import cuda
 from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
 from . import indeces as i
 
 @cuda.jit
-def Drift(tracks):
+def drift(tracks):
     """
     This function takes as input an array of track segments and calculates
     the properties of the segments at the anode:
