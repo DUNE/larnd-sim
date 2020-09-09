@@ -10,7 +10,7 @@ import numpy as np
 
 from numba import cuda
 from .consts import tpc_borders, vdrift, pixel_size, time_padding
-from .consts import t_sampling, time_interval, sampled_points
+from .consts import t_sampling, sampled_points
 from . import indeces as i
 
 @cuda.jit
@@ -173,10 +173,10 @@ def attenuated_charge(charge, pixel_point, position):
 @cuda.jit(device=True)
 def current_model(t, t0, x, y):
     """
-    Parametrization of the induced current on the pixel, which depends 
+    Parametrization of the induced current on the pixel, which depends
     on the of arrival at the anode (:math:`t_0`) and on the position
     on the pixel pad.
-    
+
     Args:
         t (float): time where we evaluate the current
         t0 (float): time of arrival at the anode
@@ -184,23 +184,27 @@ def current_model(t, t0, x, y):
             on the :math:`x` axis
         y (float): distance between the point on the pixel and the pixel center
             on the :math:`y` axis
-    
+
     Returns:
         float: the induced current at time :math:`t`
     """
-    B_params = (40.74727999, -288.41137404, -288.41137404, 1247.51482664, 517.99360585, 517.99360585)
-    C_params = (2.504075, -4.98133949, -4.98133949, -5.01073463, 81.93629314, 81.93629314)
-    D_params = (0.68403238, -1.11708586, -1.11708586, 9.08695733, -5.55778424, -5.55778424)
+    b_params = (40.74727999, -288.41137404, -288.41137404, 1247.51482664, 517.99360585, 517.993605)
+    c_params = (2.504075, -4.98133949, -4.98133949, -5.01073463, 81.93629314, 81.93629314)
+    d_params = (0.68403238, -1.11708586, -1.11708586, 9.08695733, -5.55778424, -5.55778424)
     t0_params = (2.94805382, -2.70495514, -2.70495514, 4.82499082, 20.81401515, 20.81401515)
-    
-    b = B_params[0] + B_params[1]*x + B_params[2]*y + B_params[3]*x*y + B_params[4]*x*x + B_params[5]*y*y
-    c = C_params[0] + C_params[1]*x + C_params[2]*y + C_params[3]*x*y + C_params[4]*x*x + C_params[5]*y*y
-    d = D_params[0] + D_params[1]*x + D_params[2]*y + D_params[3]*x*y + D_params[4]*x*x + D_params[5]*y*y
-    t0 += t0_params[0] + t0_params[1]*x + t0_params[2]*y + t0_params[3]*x*y + t0_params[4]*x*x + t0_params[5]*y*y
+
+    b = b_params[0] + b_params[1]*x + b_params[2]*y \
+        + b_params[3]*x*y + b_params[4]*x*x + b_params[5]*y*y
+    c = c_params[0] + c_params[1]*x + c_params[2]*y \
+        + c_params[3]*x*y + c_params[4]*x*x + c_params[5]*y*y
+    d = d_params[0] + d_params[1]*x + d_params[2]*y \
+        + d_params[3]*x*y + d_params[4]*x*x + d_params[5]*y*y
+    t0 += t0_params[0] + t0_params[1]*x + t0_params[2]*y \
+          + t0_params[3]*x*y + t0_params[4]*x*x + t0_params[5]*y*y
 
     c *= 1e-19
     a = (1.603e-19-c*d)/b
-    
+
     if t0-t > 0:
         return a * exp((t-t0)/b) + c * exp((t-t0)/d)
     else:
