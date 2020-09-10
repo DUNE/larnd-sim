@@ -8,6 +8,19 @@ from numba import cuda
 from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
 from . import indeces as i
 
+print("""DRIFTING MODULE PARAMETERS
+
+##############
+TPC parameters
+##############
+Drift velocity: %g us/cm
+Longitudinal diffusion coefficient: %g cm^2 / us,
+Transverse diffusion coefficient: %g cm
+Electron lifetime: %g us
+TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
+""" % (vdrift, long_diff, tran_diff, lifetime,
+       *tpc_borders[0], *tpc_borders[1], *tpc_borders[2]))
+
 @cuda.jit
 def drift(tracks):
     """
