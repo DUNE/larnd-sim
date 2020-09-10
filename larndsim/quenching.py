@@ -9,6 +9,27 @@ from numba import cuda
 from . import consts
 from . import indeces as i
 
+print("""QUENCHING MODULE PARAMETERS
+
+##############
+TPC parameters
+##############
+Electric field magnitude: %g kV/cm
+Liquid argon density: %g g/cm^3
+Box alpha parameter: %g
+Box beta parameter: %g cm/MeV
+Birks A_b parameter: %g
+Birks k_b parameter: %g g/cm^2/MeV
+
+###############
+Unit conversion
+###############
+Number of electrons per MeV: %g 
+""" % (consts.eField, consts.lArDensity,
+       consts.alpha, consts.beta,
+       consts.Ab, consts.kb,
+       consts.MeVToElectrons))
+
 @cuda.jit
 def quench(tracks, mode):
     """
