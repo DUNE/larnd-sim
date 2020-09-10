@@ -13,6 +13,25 @@ from .consts import tpc_borders, vdrift, pixel_size, time_padding
 from .consts import t_sampling, sampled_points
 from . import indeces as i
 
+print("""DETSIM MODULE PARAMETERS
+
+##############
+TPC parameters
+##############
+Drift velocity: %g us/cm
+Time sampling: %g us
+Time padding: %g us
+TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
+Sampled points per slice: %g
+
+################
+Pixel parameters
+################
+Pixel size: (%g x %g) cm^2
+""" % (vdrift, t_sampling, time_padding,
+       *tpc_borders[0], *tpc_borders[1], *tpc_borders[2],
+       sampled_points, *pixel_size))
+
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
     """
