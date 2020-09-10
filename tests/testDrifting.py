@@ -34,6 +34,6 @@ class TestDrifting:
 
         TPB = 128
         BPG = ceil(tracks.shape[0] / TPB)
-        drifting.Drift[TPB,BPG](tracks)
+        drifting.drift[TPB,BPG](tracks)
 
         assert tracks[:, i.n_electrons] == pytest.approx(electronsAtAnode)
