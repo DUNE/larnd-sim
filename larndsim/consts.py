@@ -34,7 +34,7 @@ t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0., 700.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 50
+time_padding = 10
 #: Number of sampled points for each segment slice
 sampled_points = 50
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
