@@ -13,24 +13,21 @@ from .consts import tpc_borders, vdrift, pixel_size, time_padding
 from .consts import t_sampling, sampled_points
 from . import indeces as i
 
-print("""DETSIM MODULE PARAMETERS
-
-##############
-TPC parameters
-##############
+import logging
+logging.basicConfig()
+logger = logging.getLogger('detsim')
+logger.setLevel(logging.INFO)
+logger.info("DETSIM MODULE PARAMETERS")
+logger.info("""TPC parameters
 Drift velocity: %g us/cm
 Time sampling: %g us
 Time padding: %g us
 TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
-Sampled points per slice: %g
+Sampled points per slice: %g""" % (vdrift, t_sampling, time_padding, *tpc_borders[0], *tpc_borders[1], *tpc_borders[2], sampled_points))
 
-################
-Pixel parameters
-################
+logger.info("""Pixel parameters
 Pixel size: (%g x %g) cm^2
-""" % (vdrift, t_sampling, time_padding,
-       *tpc_borders[0], *tpc_borders[1], *tpc_borders[2],
-       sampled_points, *pixel_size))
+""" % (pixel_size[0], pixel_size[1]))
 
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
@@ -172,22 +169,6 @@ def rho(point, q, start, sigmas, segment):
 
     return expo * integral * factor
 
-@cuda.jit(device=True)
-def attenuated_charge(charge, pixel_point, position):
-    """
-    This function returns the charge at `position`, attenuated by the distance
-    between `position` and `pixel_point`
-
-    Args:
-        charge (float): amount of charge
-        pixel_point (tuple): pixel center coordinates
-        position (tuple): position coordinates
-
-    Returns:
-        float: the attenuated charge at `position`
-    """
-    return charge * exp(-10 * sqrt((pixel_point[0] - position[0])**2 \
-                                   + (pixel_point[1] - position[1])**2))
 
 @cuda.jit(device=True)
 def current_model(t, t0, x, y):
@@ -233,8 +214,8 @@ def current_model(t, t0, x, y):
 @cuda.jit(device=True)
 def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
     """
-    This function calculates the total amount of charge of a segment slice, attenuated by the
-    distance between the track and the pixel center.
+    This function calculates current induces on a pixel by a segment, which depends
+    on the distance between the segment projection on the anode and the pixel center.
 
     Args:
         pixel_point (tuple): pixel coordinates
@@ -243,9 +224,11 @@ def current_signal(pixel_point, point, q, start, sigmas, segment, time, t0):
         start (tuple): segment start coordinates
         sigmas (tuple): diffusion coefficients in the spatial dimensions?
         segment (tuple): segment sizes in the spatial dimensions
+        time (float): time when we evault the induced current
+        t0 (float): time when the segment reaches the anode
 
     Returns:
-        float: the total attenuated charge in the slice
+        float: the induced current on the pixel at time :math:`t`.
     """
     total_signal = 0
     r_step = sigmas[0] * 3 / (sampled_points - 1)
@@ -427,3 +410,14 @@ def pixel_from_coordinates(x, y, n_pixels):
     x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels[0])
     y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels[1])
     return np.digitize(x, x_pixel), np.digitize(y, y_pixel)
+
+@cuda.jit
+def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
+    it, ipix, itick = cuda.grid(3)
+    
+    if it < signals.shape[0] and ipix < signals.shape[1]:
+        index = index_map[it][ipix]
+        start_tick = track_starts[it] // t_sampling
+        if itick < signals.shape[2] and index >= 0:
+            itime = int(start_tick+itick)
+            cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
