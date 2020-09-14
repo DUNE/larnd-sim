@@ -8,12 +8,12 @@ from numba import cuda
 from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
 from . import indeces as i
 
-print("""DRIFTING MODULE PARAMETERS
-
-##############
-TPC parameters
-##############
-Drift velocity: %g us/cm
+import logging
+logging.basicConfig()
+logger = logging.getLogger('drifting')
+logger.setLevel(logging.INFO)
+logger.info("DRIFTING MODULE PARAMETERS")
+logger.info("""Drift velocity: %g us/cm
 Longitudinal diffusion coefficient: %g cm^2 / us,
 Transverse diffusion coefficient: %g cm
 Electron lifetime: %g us
