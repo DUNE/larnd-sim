@@ -8,6 +8,18 @@ from numba import cuda
 from .consts import tpc_borders, pixel_size
 from . import indeces as i
 
+import logging
+logging.basicConfig()
+logger = logging.getLogger('pixels_from_track')
+logger.setLevel(logging.INFO)
+logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
+logger.info("""TPC parameters
+TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
+""" % (*tpc_borders[0], *tpc_borders[1], *tpc_borders[2]))
+logger.info("""Pixel parameters
+Pixel size: (%g x %g) cm^2
+""" % (pixel_size[0], pixel_size[1]))
+
 @cuda.jit
 def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list):
     """
