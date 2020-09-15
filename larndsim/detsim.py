@@ -269,72 +269,6 @@ def track_point(start, direction, z):
 
     return xl, yl
 
-@nb.njit
-def pixel_response(pixel_signals, anode_t):
-    """
-    This function joins signals at different times but in the same pixel
-
-    Args:
-        pixel_signals (:obj:`numba.typed.Dict`): dictionary containing
-           the pixel signals at different times
-        anode_t (:obj:`numpy.ndarray`): numpy array containing the time ticks
-
-    Returns:
-        :obj:`numpy.ndarray`: array contaning the joined signals
-    """
-    current = np.zeros_like(anode_t)
-
-    for signal in pixel_signals:
-        current[(anode_t >= signal[0]) & (anode_t <= signal[1])] += signal[2]
-
-    return current
-
-float_array = nb.types.float32[::1]
-pixelID_type = nb.types.Tuple((nb.int64, nb.int64))
-signal_type = nb.types.ListType(nb.types.Tuple((nb.float64, nb.float64, float_array)))
-
-@nb.njit
-def join_pixel_signals(signals, pixels, track_starts, max_length):
-    """
-    This function returns a dictionary where the key is the pixel ID and
-    the value is a list of induced current signals on the pixel.
-
-    Args:
-        signals (:obj:`numpy.ndarray`): 3D array containing the induced
-            current signals for each segment and each pixel
-        pixels (:obj:`numpy.ndarray`): 3D array containg the pixel IDs for
-            each segment
-
-    Returns:
-        :obj:`numba.typed.Dict`: dictionary where the key is the pixel ID and
-        the value is a list of induced current signals on the pixel
-    """
-    active_pixels = nb.typed.Dict.empty(key_type=pixelID_type,
-                                        value_type=signal_type)
-
-
-    for itrk in range(signals.shape[0]):
-        t_start = track_starts[itrk]
-        t_end = t_start + max_length*t_sampling
-
-        for ipix in range(signals.shape[1]):
-            pID = int(pixels[itrk][ipix][0]), int(pixels[itrk][ipix][1])
-            if pID[0] < 0 or pID[1] < 0:
-                continue
-
-            signal = signals[itrk][ipix]
-            if not signal.any():
-                continue
-
-            if pID in active_pixels:
-                active_pixels[pID].append((t_start, t_end, signal))
-            else:
-                this_pixel_signal = nb.typed.List()
-                this_pixel_signal.append((t_start, t_end, signal))
-                active_pixels[pID] = this_pixel_signal
-
-    return active_pixels
-
 @cuda.jit
 def tracks_current(signals, pixels, tracks):
     """
@@ -396,7 +330,8 @@ def tracks_current(signals, pixels, tracks):
 
 @nb.jit(forceobj=True)
 def pixel_from_coordinates(x, y, n_pixels):
-    """This function returns the ID of the pixel that covers the specified point
+    """
+    This function returns the ID of the pixel that covers the specified point
 
     Args:
         x (float): x coordinate
@@ -413,6 +348,21 @@ def pixel_from_coordinates(x, y, n_pixels):
 
 @cuda.jit
 def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
+    """
+    This function sums the induced current signals on the same pixel.
+    
+    Args:
+        pixels_signals (:obj:`numpy.array`): 2D array that will contain the
+            summed signal for each pixel. First dimension is the pixel ID, second
+            dimension is the time tick
+        signals (:obj:`numpy.array`): 3D array with dimensions S x P x T,
+            where S is the number of track segments, P is the number of pixels, and T is
+            the number of time ticks.
+        track_starts (:obj:`numpy.array`): 1D array containing the starting time of 
+            each track
+        index_map (:obj:`numpy.array`): 2D array containing the correspondence between
+            the track index and the pixel ID index.
+    """
     it, ipix, itick = cuda.grid(3)
     
     if it < signals.shape[0] and ipix < signals.shape[1]:
