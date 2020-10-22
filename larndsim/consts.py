@@ -21,6 +21,8 @@ beta = 0.2061
 Ab = 0.800
 #: Recombination :math:`k_b` value for the Birks Model in :math:`g/cm^2/MeV`
 kb = 0.0486 # g/cm2/MeV Amoruso, et al NIM A 523 (2004) 275
+#: Electron charge in Coulomb
+e_charge = 1.602e-19
 
 ## TPC params
 #: Drift velocity in :math:`cm/\mu s`
@@ -30,7 +32,7 @@ lifetime = 10e3 # us,
 #: TPC borders coordinates in :math:`cm`
 tpc_borders = np.array([(0, 100), (-150, 150), (0, 100)]) # cm,
 #: Time sampling in :math:`\mu s`
-t_sampling = 0.1 # us
+t_sampling = 0.05 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0., 700.) # us
 #: Signal time window padding in :math:`\mu s`
