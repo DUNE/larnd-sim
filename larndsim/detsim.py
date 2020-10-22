@@ -183,13 +183,13 @@ def current_model(t, t0, x, y):
     Parametrization of the induced current on the pixel, which depends
     on the of arrival at the anode (:math:`t_0`) and on the position
     on the pixel pad.
+
     Args:
         t (float): time where we evaluate the current
         t0 (float): time of arrival at the anode
-        x (float): distance between the point on the pixel and the pixel center
-            on the :math:`x` axis
-        y (float): distance between the point on the pixel and the pixel center
-            on the :math:`y` axis
+        x (float): distance between the point on the pixel and the pixel center on the :math:`x` axis
+        y (float): distance between the point on the pixel and the pixel center on the :math:`y` axis
+
     Returns:
         float: the induced current at time :math:`t`
     """
