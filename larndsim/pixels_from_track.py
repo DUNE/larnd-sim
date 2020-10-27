@@ -90,7 +90,10 @@ def get_active_pixels(x0, y0, x1, y1, active_pixels):
     y = 0
 
     for x in range(dx + 1):
-        active_pixels[x] = (x0 + x*xx + y*yx, y0 + x*xy + y*yy)
+        x_id = x0 + x*xx + y*yx
+        y_id = y0 + x*xy + y*yy
+        if x_id > 0 and y_id > 0:
+            active_pixels[x] = x_id, y_id
         if D >= 0:
             y += 1
             D -= 2*dx
@@ -133,7 +136,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         is_unique = False
                         break
                         
-                if is_unique:
+                if is_unique and new_pixel[0] > 0 and new_pixel[1] > 0:
                     neighboring_pixels[count] = new_pixel
                     count += 1
                     

@@ -2,6 +2,9 @@
 Module containing constants needed by the simulation
 """
 import numpy as np
+import larpixgeometry.pixelplane
+import yaml
+import os, sys
 
 ## Detector constants
 #: Liquid argon density in :math:`g/cm^3`
@@ -29,8 +32,6 @@ e_charge = 1.602e-19
 vdrift = 0.153812 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
-#: TPC borders coordinates in :math:`cm`
-tpc_borders = np.array([(0, 100), (-150, 150), (0, 100)]) # cm,
 #: Time sampling in :math:`\mu s`
 t_sampling = 0.05 # us
 #: Drift time window in :math:`\mu s`
@@ -49,13 +50,26 @@ time_ticks = np.linspace(time_interval[0],
                          int(round(time_interval[1]-time_interval[0])/t_sampling))
 
 ## Pixel params
+with open(os.path.join(sys.path[0], "examples/pixel_geometry.yaml"), 'r') as f:
+    board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
+    xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
+    ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+
 #: Number of pixels per axis
-n_pixels = 250, 750
-x_pixel_size = (tpc_borders[0][1] - tpc_borders[0][0]) / n_pixels[0]
-y_pixel_size = (tpc_borders[1][1] - tpc_borders[1][0]) / n_pixels[1]
+n_pixels = len(np.unique(xs)), len(np.unique(ys))
+x_pixel_size = (max(xs)-min(xs)) / (n_pixels[0] - 1) 
+y_pixel_size = (max(ys)-min(xs)) / (n_pixels[1] - 1) 
 #: Size of pixels per axis in :math:`cm`
 pixel_size = np.array([x_pixel_size, y_pixel_size])
+
+#: TPC borders coordinates in :math:`cm`
+tpc_borders = np.array([(min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2), 
+                        (min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2), 
+                        (0, 150)])
 
 ## Quenching parameters
 box = 1
 birks = 2
+
+def get_pixel_coordinates(pixel_id):
+    return pixel_id[0]*pixel_size[0]+tpc_borders[0][0]+pixel_size[0]/2, pixel_id[1]*pixel_size[1]+tpc_borders[1][0]+pixel_size[1]/2
