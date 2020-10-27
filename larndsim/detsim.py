@@ -171,6 +171,10 @@ def rho(point, q, start, sigmas, segment):
 
 @cuda.jit(device=True)
 def truncexpon(x, loc=0, scale=1):
+    """
+    A truncated exponential distribution.
+    To shift and/or scale the distribution use the `loc` and `scale` parameters.
+    """
     y = (x-loc)/scale
     if y > 0:
         return exp(-y)/scale
@@ -193,10 +197,11 @@ def current_model(t, t0, x, y):
     Returns:
         float: the induced current at time :math:`t`
     """
-    B_params = [1.0600932635572657, -0.90919045948633, -0.909190459486328, 5.856209524843485, 0.20695712744177674, 0.2069571274417692]
-    C_params = [0.6791689153281965, -1.0825775131100155, -1.0825775131100177, 8.771835867015769, -5.5205719878713175, -5.520571987871333]
-    D_params = [2.64410513598735, -9.17433034324227, -9.174330343242229, 13.483013774120986, 45.88679668772865, 45.88679668772866]
-    t0_params = [2.94805382, -2.70495514, -2.70495514, 4.82499082, 20.81401515, 20.81401515]
+    B_params = (1.060, -0.909, -0.909, 5.856, 0.207, 0.207)
+    C_params = (0.679, -1.083, -1.083, 8.772, -5.521, -5.521)
+    D_params = (2.644, -9.174, -9.174, 13.483, 45.887, 45.887)
+    t0_params = (2.948, -2.705, -2.705, 4.825, 20.814, 20.814)
+    
     a = B_params[0] + B_params[1]*x+B_params[2]*y+B_params[3]*x*y+B_params[4]*x*x+B_params[5]*y*y
     b = C_params[0] + C_params[1]*x+C_params[2]*y+C_params[3]*x*y+C_params[4]*x*x+C_params[5]*y*y
     c = D_params[0] + D_params[1]*x+D_params[2]*y+D_params[3]*x*y+D_params[4]*x*x+D_params[5]*y*y
