@@ -7,10 +7,73 @@ from numba import cuda
 
 from . import consts
 
-MAX_ADC_VALUES = 2
-DISCRIMINATION_THRESHOLD = 1e-15
+from larpix.packet import Packet_v2
+from larpix.packet import PacketCollection
+from larpix.format import hdf5format
+
+MAX_ADC_VALUES = 5
+
+#: Discrimination threshold :math:`\mu s`
+DISCRIMINATION_THRESHOLD = 0.1e-15
+#: ADC hold delay in :math:`\mu s`
 ADC_HOLD_DELAY = 12
+#: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
+#: Front-end gain in :math:`mV/ke-`
+GAIN = 4/1e3
+#: Common-mode voltage in :math:`mV`
+V_CM = 77 
+#: Reference voltage in :math:`mV`
+V_REF = 1539 
+#: Pedestal voltage in :math:`mV`
+V_PEDESTAL = 0#550
+#: Number of ADC counts
+ADC_COUNTS = 2**8
+
+def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
+    """
+    Saves the ADC counts in the LArPix HDF5 format.
+    """
+    packet_dset_name = 'packets'
+    pc = []
+    first_packet = True
+
+    for itick, adcs in enumerate(adc_list):
+        ts = adc_ticks_list[itick]
+        pixel_id = unique_pix[itick]
+        pix_x, pix_y = consts.get_pixel_coordinates(pixel_id)
+        pix_x *= 10
+        pix_y *= 10
+        for t, adc in zip(ts, adcs):
+            if adc > 0:
+                p = Packet_v2()
+                connection_list = consts.board.channels_where(lambda pixel: np.isclose(pixel.x,pix_x) and np.isclose(pixel.y,pix_y))
+                chip, channel = connection_list[0]
+                p.dataword = int(adc)
+                p.timestamp = int(np.floor(t/CLOCK_CYCLE))
+                p.chip_id = chip.chipid
+                p.channel = channel
+                p.packet_type = 0
+                if first_packet:
+                    p.first_packet = 1
+                    first_packet = False
+                p.assign_parity()
+                pc.append(p)
+
+    packet_list = PacketCollection(pc, read_id=0, message='')
+    hdf5format.to_file(filename, packet_list)
+    
+    return packet_list
+    
+def digitize(adc_list):
+    """
+    The function takes as input the integrated charge and returns the digitized
+    ADC counts.
+    """
+    adcs = np.floor(np.maximum((adc_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM),0)*ADC_COUNTS/(V_REF-V_CM))
+    adcs[adcs>ADC_COUNTS]=ADC_COUNTS
+    
+    return adcs
 
 @cuda.jit
 def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
