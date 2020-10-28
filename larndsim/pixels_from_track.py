@@ -5,7 +5,7 @@ pixels.
 """
 
 from numba import cuda
-from .consts import tpc_borders, pixel_size
+from .consts import tpc_borders, pixel_size, n_pixels
 from . import indeces as i
 
 import logging
@@ -92,7 +92,7 @@ def get_active_pixels(x0, y0, x1, y1, active_pixels):
     for x in range(dx + 1):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
-        if x_id > 0 and y_id > 0:
+        if 0 < x_id < n_pixels[0] and 0 < y_id < n_pixels[1]:
             active_pixels[x] = x_id, y_id
         if D >= 0:
             y += 1
@@ -136,7 +136,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         is_unique = False
                         break
                         
-                if is_unique and new_pixel[0] > 0 and new_pixel[1] > 0:
+                if is_unique and 0 < new_pixel[0] < n_pixels[0] and 0 < new_pixel[1] < n_pixels[1]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
                     
