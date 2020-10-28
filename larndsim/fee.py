@@ -14,9 +14,9 @@ from larpix.format import hdf5format
 MAX_ADC_VALUES = 5
 
 #: Discrimination threshold :math:`\mu s`
-DISCRIMINATION_THRESHOLD = 0.1e-15
-#: ADC hold delay in :math:`\mu s`
-ADC_HOLD_DELAY = 12
+DISCRIMINATION_THRESHOLD = 5e3*consts.e_charge#0.1e-15
+#: ADC hold delay in clock cycles
+ADC_HOLD_DELAY = 15
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
@@ -26,7 +26,7 @@ V_CM = 77
 #: Reference voltage in :math:`mV`
 V_REF = 1539 
 #: Pedestal voltage in :math:`mV`
-V_PEDESTAL = 0#550
+V_PEDESTAL = 550
 #: Number of ADC counts
 ADC_COUNTS = 2**8
 
@@ -45,15 +45,21 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
         pix_x *= 10
         pix_y *= 10
         for t, adc in zip(ts, adcs):
-            if adc > 0:
+            if adc > digitize(0):
                 p = Packet_v2()
                 connection_list = consts.board.channels_where(lambda pixel: np.isclose(pixel.x,pix_x) and np.isclose(pixel.y,pix_y))
-                chip, channel = connection_list[0]
+                
+                try:
+                    chip, channel = connection_list[0]
+                except IndexError:
+                    print("Pixel coordinates not valid", pix_x, pix_y, pixel_id, adc)
+                    
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
                 p.chip_id = chip.chipid
-                p.channel = channel
+                p.channel_id = channel
                 p.packet_type = 0
+
                 if first_packet:
                     p.first_packet = 1
                     first_packet = False
@@ -70,8 +76,7 @@ def digitize(adc_list):
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
     """
-    adcs = np.floor(np.maximum((adc_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM),0)*ADC_COUNTS/(V_REF-V_CM))
-    adcs[adcs>ADC_COUNTS]=ADC_COUNTS
+    adcs = np.minimum(np.floor(np.maximum((adc_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM),0)*ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
     
     return adcs
 
@@ -94,7 +99,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
 
             if q_sum >= DISCRIMINATION_THRESHOLD:     
 
-                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY) / consts.t_sampling)        
+                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)        
                 integrate_end = ic+interval
 
                 while ic <= integrate_end and ic <= curre.shape[0]:                
