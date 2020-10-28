@@ -34,6 +34,12 @@ Pixel finder utility
 .. automodule:: larndsim.pixels_from_track
     :members:
 
+Electronics module
+##################
+
+.. automodule:: larndsim.fee
+    :members:
+
 Constants
 ####################
 
