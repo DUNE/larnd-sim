@@ -36,6 +36,14 @@ larndsim.quenching module
    :undoc-members:
    :show-inheritance:
 
+larndsim.fee module
+-------------------------
+
+.. automodule:: larndsim.fee
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 
 Module contents
 ---------------
