@@ -19,15 +19,18 @@ logger = logging.getLogger('detsim')
 logger.setLevel(logging.INFO)
 logger.info("DETSIM MODULE PARAMETERS")
 logger.info("""TPC parameters
-Drift velocity: %g us/cm
-Time sampling: %g us
-Time padding: %g us
-TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
-Sampled points per slice: %g""" % (vdrift, t_sampling, time_padding, *tpc_borders[0], *tpc_borders[1], *tpc_borders[2], sampled_points))
+Drift velocity: {vdrift} us/cm
+Time sampling: {t_sampling} us
+Time padding: {time_padding} us
+TPC borders:
+({tpc_borders[0][0]} cm, {tpc_borders[0][1]} cm) x,
+({tpc_borders[1][0]} cm, {tpc_borders[1][1]} cm) y,
+({tpc_borders[2][0]} cm, {tpc_borders[2][1]} cm) z
+Sampled points per slice: {sampled_points}""")
 
 logger.info("""Pixel parameters
-Pixel size: (%g x %g) cm^2
-""" % (pixel_size[0], pixel_size[1]))
+Pixel size: ({pixel_size[0]} x {pixel_size[1]}) cm^2
+""")
 
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
@@ -191,8 +194,10 @@ def current_model(t, t0, x, y):
     Args:
         t (float): time where we evaluate the current
         t0 (float): time of arrival at the anode
-        x (float): distance between the point on the pixel and the pixel center on the :math:`x` axis
-        y (float): distance between the point on the pixel and the pixel center on the :math:`y` axis
+        x (float): distance between the point on the pixel and the pixel center
+            on the :math:`x` axis
+        y (float): distance between the point on the pixel and the pixel center
+            on the :math:`y` axis
 
     Returns:
         float: the induced current at time :math:`t`
@@ -201,11 +206,12 @@ def current_model(t, t0, x, y):
     C_params = (0.679, -1.083, -1.083, 8.772, -5.521, -5.521)
     D_params = (2.644, -9.174, -9.174, 13.483, 45.887, 45.887)
     t0_params = (2.948, -2.705, -2.705, 4.825, 20.814, 20.814)
-    
+
     a = B_params[0] + B_params[1]*x+B_params[2]*y+B_params[3]*x*y+B_params[4]*x*x+B_params[5]*y*y
     b = C_params[0] + C_params[1]*x+C_params[2]*y+C_params[3]*x*y+C_params[4]*x*x+C_params[5]*y*y
     c = D_params[0] + D_params[1]*x+D_params[2]*y+D_params[3]*x*y+D_params[4]*x*x+D_params[5]*y*y
-    shifted_t0 = t0 + t0_params[0] + t0_params[1]*x+t0_params[2]*y+t0_params[3]*x*y+t0_params[4]*x*x+t0_params[5]*y*y
+    shifted_t0 = t0 + t0_params[0] + t0_params[1]*x + t0_params[2]*y + \
+                 t0_params[3]*x*y + t0_params[4]*x*x + t0_params[5]*y*y
 
     a = min(a, 1)
 
@@ -275,10 +281,10 @@ def tracks_current(signals, pixels, tracks):
     This CUDA kernel calculates the charge induced on the pixels by the input tracks.
 
     Args:
-        signals (:obj:`numpy.array`): empty 3D array with dimensions S x P x T,
+        signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
             where S is the number of track segments, P is the number of pixels, and T is
             the number of time ticks. The output is stored here.
-        pixels (:obj:`numpy.array`): 3D array with dimensions S x P x 2, where S is
+        pixels (:obj:`numpy.ndarray`): 3D array with dimensions S x P x 2, where S is
             the number of track segments, P is the number of pixels and the third dimension
             contains the two pixel ID numbers.
     """
@@ -352,15 +358,15 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
     This function sums the induced current signals on the same pixel.
 
     Args:
-        pixels_signals (:obj:`numpy.array`): 2D array that will contain the
+        pixels_signals (:obj:`numpy.ndarray`): 2D array that will contain the
             summed signal for each pixel. First dimension is the pixel ID, second
             dimension is the time tick
-        signals (:obj:`numpy.array`): 3D array with dimensions S x P x T,
+        signals (:obj:`numpy.ndarray`): 3D array with dimensions S x P x T,
             where S is the number of track segments, P is the number of pixels, and T is
             the number of time ticks.
-        track_starts (:obj:`numpy.array`): 1D array containing the starting time of
+        track_starts (:obj:`numpy.ndarray`): 1D array containing the starting time of
             each track
-        index_map (:obj:`numpy.array`): 2D array containing the correspondence between
+        index_map (:obj:`numpy.ndarray`): 2D array containing the correspondence between
             the track index and the pixel ID index.
     """
     it, ipix, itick = cuda.grid(3)

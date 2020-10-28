@@ -13,13 +13,15 @@ logging.basicConfig()
 logger = logging.getLogger('drifting')
 logger.setLevel(logging.INFO)
 logger.info("DRIFTING MODULE PARAMETERS")
-logger.info("""Drift velocity: %g us/cm
-Longitudinal diffusion coefficient: %g cm^2 / us,
-Transverse diffusion coefficient: %g cm
-Electron lifetime: %g us
-TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
-""" % (vdrift, long_diff, tran_diff, lifetime,
-       *tpc_borders[0], *tpc_borders[1], *tpc_borders[2]))
+logger.info("""Drift velocity: {vdrift} us/cm
+Longitudinal diffusion coefficient: {long_diff} cm^2 / us,
+Transverse diffusion coefficient: {tran_diff} cm
+Electron lifetime: {lifetime} us
+TPC borders:
+({tpc_borders[0][0]} cm, {tpc_borders[0][1]} cm) x,
+({tpc_borders[1][0]} cm, {tpc_borders[1][1]} cm) y,
+({tpc_borders[2][0]} cm, {tpc_borders[2][1]} cm) z
+""")
 
 @cuda.jit
 def drift(tracks):
