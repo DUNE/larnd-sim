@@ -11,7 +11,7 @@ from . import indeces as i
 import logging
 logging.basicConfig()
 logger = logging.getLogger('pixels_from_track')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
 logger.info("""TPC parameters
 TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
@@ -135,7 +135,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                     if new_pixel[0] == neighboring_pixels[ipix][0] and new_pixel[1] == neighboring_pixels[ipix][1]:
                         is_unique = False
                         break
-                        
+
                 if is_unique and 0 < new_pixel[0] < n_pixels[0] and 0 < new_pixel[1] < n_pixels[1]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
