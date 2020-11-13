@@ -11,7 +11,7 @@ from . import indeces as i
 import logging
 logging.basicConfig()
 logger = logging.getLogger('drifting')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 logger.info("DRIFTING MODULE PARAMETERS")
 logger.info("""Drift velocity: {vdrift} us/cm
 Longitudinal diffusion coefficient: {long_diff} cm^2 / us,
@@ -38,7 +38,7 @@ def drift(tracks):
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
     """
-    z_anode = tpc_borders[2][0]
+    z_anode = tpc_borders[2][0] 
 
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
@@ -57,5 +57,5 @@ def drift(tracks):
         track[i.long_diff] = sqrt(drift_time) * long_diff
         track[i.tran_diff] = sqrt(drift_time) * tran_diff
         track[i.t] += drift_time + track[i.tran_diff] / vdrift
-        track[i.t_start] += (drift_start + track[i.tran_diff]) / vdrift
-        track[i.t_end] += (drift_end + track[i.tran_diff]) / vdrift
+        track[i.t_start] += (drift_start + track[i.tran_diff]) / vdrift 
+        track[i.t_end] += (drift_end + track[i.tran_diff]) / vdrift 
