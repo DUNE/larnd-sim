@@ -35,15 +35,15 @@ lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
 t_sampling = 0.05 # us
 #: Drift time window in :math:`\mu s`
-time_interval = (0., 700.) # us
+time_interval = (0, 40.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 10
+time_padding = 1
 #: Number of sampled points for each segment slice
 sampled_points = 50
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-long_diff = 4.0e-3 # cm * cm / us,
+long_diff = 4.0e-6 # cm * cm / us,
 #: Transverse diffusion coefficient in :math:`cm`
-tran_diff = 8.8e-3 # cm
+tran_diff = 8.8e-6 # cm
 #: Numpy array containing all the time ticks in the drift time window
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
@@ -52,8 +52,17 @@ time_ticks = np.linspace(time_interval[0],
 ## Pixel params
 with open(os.path.join(sys.path[0], "examples/pixel_geometry.yaml"), 'r') as f:
     board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
-    xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
-    ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+    
+xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
+ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+    
+def load_pixel_geometry(filename):
+    global xs
+    global ys
+    with open(filename, 'r') as f:
+        board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
+        xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
+        ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
 
 #: Number of pixels per axis
 n_pixels = len(np.unique(xs)), len(np.unique(ys))
@@ -62,10 +71,17 @@ y_pixel_size = (max(ys)-min(xs)) / (n_pixels[1] - 1)
 #: Size of pixels per axis in :math:`cm`
 pixel_size = np.array([x_pixel_size, y_pixel_size])
 
+pixel_connection_dict = {}
+chipids = list(board.chips.keys())
+for chip in chipids:
+    for channel, pixel in enumerate(board.chips[chip].channel_connections):
+        if pixel.x !=0 and pixel.y != 0:
+            pixel_connection_dict[(round(pixel.x/pixel_size[0]), round(pixel.y/pixel_size[1]))] = channel, chip
+
 #: TPC borders coordinates in :math:`cm`
 tpc_borders = np.array([(min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2), 
                         (min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2), 
-                        (0, 150)])
+                        (0, 3)])
 
 ## Quenching parameters
 box = 1
