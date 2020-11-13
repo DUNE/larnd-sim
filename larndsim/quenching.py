@@ -12,7 +12,7 @@ from . import indeces as i
 import logging
 logging.basicConfig()
 logger = logging.getLogger('quenching')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 logger.info("QUENCHING MODULE PARAMETERS")
 logger.info("""TPC parameters
 Electric field magnitude: %g kV/cm
