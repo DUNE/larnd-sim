@@ -5,5 +5,6 @@ numba
 sphinx-rtd-theme
 travis-sphinx
 pandas
+tqdm
 larpix-control
 larpix-geometry
