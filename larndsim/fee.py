@@ -5,10 +5,10 @@ Module that simulates the front-end electronics (triggering, ADC)
 import numpy as np
 from numba import cuda
 
-from larpix.packet import Packet_v2
+from larpix.packet import Packet_v2, TimestampPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
-
+from tqdm import tqdm
 from . import consts
 
 #: Maximum number of ADC values stored per pixel
@@ -22,11 +22,11 @@ CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
 GAIN = 4/1e3
 #: Common-mode voltage in :math:`mV`
-V_CM = 77
+V_CM = 288
 #: Reference voltage in :math:`mV`
-V_REF = 1539
+V_REF = 1540
 #: Pedestal voltage in :math:`mV`
-V_PEDESTAL = 550
+V_PEDESTAL = 580
 #: Number of ADC counts
 ADC_COUNTS = 2**8
 
@@ -44,37 +44,34 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
         list: list of LArPix packets
     """
     pc = []
-    first_packet = True
-
-    for itick, adcs in enumerate(adc_list):
+    pc.append(TimestampPacket())
+    for itick, adcs in enumerate(tqdm(adc_list,desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
         pix_x, pix_y = consts.get_pixel_coordinates(pixel_id)
         pix_x *= 10
         pix_y *= 10
-
-        for t, adc in zip(ts, adcs):
+        for iadc, adc in enumerate(adcs):
+            t = ts[iadc] 
             if adc > digitize(0):
                 p = Packet_v2()
-                connection_list = consts.board.channels_where(lambda pixel: np.isclose(pixel.x, pix_x) and np.isclose(pixel.y, pix_y))
 
                 try:
-                    chip, channel = connection_list[0]
+                    channel, chip = consts.pixel_connection_dict[(round(pix_x/consts.pixel_size[0]),round(pix_y/consts.pixel_size[1]))]
                 except IndexError:
                     print("Pixel coordinates not valid", pix_x, pix_y, pixel_id, adc)
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-                p.chip_id = chip.chipid
+                p.chip_id = chip
                 p.channel_id = channel
                 p.packet_type = 0
-
-                if first_packet:
-                    p.first_packet = 1
-                    first_packet = False
+                p.first_packet = 1
 
                 p.assign_parity()
                 pc.append(p)
+            else:
+                break
 
     packet_list = PacketCollection(pc, read_id=0, message='')
     hdf5format.to_file(filename, packet_list)
@@ -98,7 +95,7 @@ def digitize(integral_list):
     return adcs
 
 @cuda.jit
-def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
+def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding):
     """
     Implementation of self-trigger logic
 
@@ -115,7 +112,6 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
 
     if ip < pixels_signals.shape[0]:
         curre = pixels_signals[ip]
-
         ic = 0
         q_sum = 0
         adc = 0
@@ -125,9 +121,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
             q = curre[ic]*consts.t_sampling
             q_sum += q
             adc += q_sum
-
             if q_sum >= DISCRIMINATION_THRESHOLD:
-
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
 
@@ -142,7 +136,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list):
                     break
 
                 adc_list[ip][iadc] = adc
-                adc_ticks_list[ip][iadc] = time_ticks[ic]
+                adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = 0
