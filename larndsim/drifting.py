@@ -45,8 +45,8 @@ def drift(tracks):
         track = tracks[itrk]
 
         drift_distance = fabs(track[i.z] - z_anode)
-        drift_start = fabs(track[i.z_start] - z_anode)
-        drift_end = fabs(track[i.z_end] - z_anode)
+        drift_start = fabs(min(track[i.z_start],track[i.z_end]) - z_anode)
+        drift_end = fabs(max(track[i.z_start],track[i.z_end]) - z_anode)
 
         drift_time = drift_distance / vdrift
         track[i.z] = z_anode
@@ -54,8 +54,8 @@ def drift(tracks):
         lifetime_red = exp(-drift_time / lifetime)
         track[i.n_electrons] *= lifetime_red
 
-        track[i.long_diff] = sqrt(drift_time) * long_diff
-        track[i.tran_diff] = sqrt(drift_time) * tran_diff
-        track[i.t] += drift_time + track[i.tran_diff] / vdrift
-        track[i.t_start] += (drift_start + track[i.tran_diff]) / vdrift 
-        track[i.t_end] += (drift_end + track[i.tran_diff]) / vdrift 
+        track[i.long_diff] = sqrt(drift_time*2*long_diff)
+        track[i.tran_diff] = sqrt(drift_time*2*tran_diff)
+        track[i.t] += drift_time
+        track[i.t_start] += drift_start / vdrift 
+        track[i.t_end] += drift_end / vdrift 
