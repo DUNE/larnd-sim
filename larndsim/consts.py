@@ -33,21 +33,21 @@ vdrift = 0.153812 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
-t_sampling = 0.05 # us
+t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0, 40.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 1
+time_padding = 3
 #: Number of sampled points for each segment slice
-sampled_points = 50
+sampled_points = 41
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-long_diff = 4.0e-6 # cm * cm / us,
-#: Transverse diffusion coefficient in :math:`cm`
-tran_diff = 8.8e-6 # cm
+long_diff = 4.0e-6 # cm * cm / us
+#: Transverse diffusion coefficient in :math:`cm^2/\mu s`
+tran_diff = 8.8e-6 # cm * cm / us
 #: Numpy array containing all the time ticks in the drift time window
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
-                         int(round(time_interval[1]-time_interval[0])/t_sampling))
+                         int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
 
 ## Pixel params
 with open(os.path.join(sys.path[0], "examples/pixel_geometry.yaml"), 'r') as f:

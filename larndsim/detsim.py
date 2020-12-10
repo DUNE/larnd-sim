@@ -3,7 +3,7 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, cos, sin, acos, floor
+from math import pi, ceil, sqrt, erf, exp, cos, sin, acos, floor, log
 
 import numba as nb
 import numpy as np
@@ -50,8 +50,8 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = (track[i.t_end] + time_padding) // t_sampling * t_sampling
-        t_start = (track[i.t_start] - time_padding) // t_sampling * t_sampling
+        t_end = min(time_interval[1],(track[i.t_end] + time_padding) // t_sampling * t_sampling)
+        t_start = max(time_interval[0],(track[i.t_start] - time_padding) // t_sampling * t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
         cuda.atomic.max(time_max, 0, ceil(t_length / t_sampling))
@@ -96,7 +96,6 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
 
     length = sqrt((end[0]-start[0])**2+(end[1]-start[1])**2+(end[2]-start[2])**2)
     dir3D = (end[0] - start[0])/length, (end[1] - start[1])/length, (end[2] - start[2])/length
-
 
     if x_poca < start[0]:
         doca = sqrt((x_p - start[0])**2 + (y_p - start[1])**2)
@@ -164,13 +163,16 @@ def rho(point, q, start, sigmas, segment):
             (y-start[1])*(y-start[1])/(2*sigmas[1]*sigmas[1]) + \
             (z-start[2])*(z-start[2])/(2*sigmas[2]*sigmas[2])
 
-    expo = exp(b*b/(4*a) - delta)
-
     integral = sqrt(pi) * \
                (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
                sqrt_a_2
+    
+    expo = 0
 
-    return expo * integral * factor
+    if factor and integral:
+        expo = exp(b*b/(4*a) - delta + log(factor) + log(integral))
+
+    return expo 
 
 @cuda.jit(device=True)
 def truncexpon(x, loc=0, scale=1):
@@ -216,44 +218,7 @@ def current_model(t, t0, x, y):
     a = min(a, 1)
 
     return a*truncexpon(-t, -shifted_t0, b) + (1-a)*truncexpon(-t, -shifted_t0, c)
-
-@cuda.jit(device=True)
-def current_signal(pixel_point, z, q, start, sigmas, segment, time, t0, verbose):
-    """
-    This function calculates current induces on a pixel by a segment, which depends
-    on the distance between the segment projection on the anode and the pixel center.
-
-    Args:
-        pixel_point (tuple): pixel coordinates
-        point (tuple): coordinates of the segment in the slice
-        q (float): total track charge
-        start (tuple): segment start coordinates
-        sigmas (tuple): diffusion coefficients in the spatial dimensions?
-        segment (tuple): segment sizes in the spatial dimensions
-        time (float): time when we evault the induced current
-        t0 (float): time when the segment reaches the anode
-
-    Returns:
-        float: the induced current on the pixel at time :math:`t`.
-    """
-    total_signal = 0
-    
-    x_step = (abs(segment[0])+8*sigmas[0]) / (sampled_points-1)
-    y_step = (abs(segment[1])+8*sigmas[1]) / (sampled_points-1)
-    
-    for ix in range(sampled_points):
-        x = start[0] + (ix*x_step - 4*sigmas[0]) * sign(segment[0])
-        for iy in range(sampled_points):
-            y = start[1] + (iy*y_step - 4*sigmas[1]) * sign(segment[1])
-            x_dist = abs(pixel_point[0] - x)
-            y_dist = abs(pixel_point[1] - y)
-            if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                total_signal += rho((x, y, z), q, start, sigmas, segment) \
-                                * current_model(time, t0, x_dist, y_dist) \
-                                * abs(x_step) * abs(y_step)                 
-    
-    return total_signal
-
+ 
 @cuda.jit(device=True)
 def track_point(start, direction, z):
     """
@@ -287,7 +252,6 @@ def tracks_current(signals, pixels, tracks):
             contains the two pixel ID numbers.
     """
     itrk, ipix, it = cuda.grid(3)
-
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
@@ -298,10 +262,14 @@ def tracks_current(signals, pixels, tracks):
             x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
             y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
             this_pixel_point = (x_p, y_p)
-            impact_factor = sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2
 
-            start = (t[i.x_start], t[i.y_start], t[i.z_start])
-            end = (t[i.x_end], t[i.y_end], t[i.z_end])
+            if t[i.z_start] < t[i.z_end]:
+                start = (t[i.x_start], t[i.y_start], t[i.z_start])
+                end = (t[i.x_end], t[i.y_end], t[i.z_end])
+            else:
+                end = (t[i.x_start], t[i.y_start], t[i.z_start])
+                start = (t[i.x_end], t[i.y_end], t[i.z_end])
+                
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
             length_2d = sqrt(segment[0]**2 + segment[1]**2)
@@ -309,41 +277,45 @@ def tracks_current(signals, pixels, tracks):
             theta = acos(costheta)
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
-
             sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
+            
+            impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
-            if z_start != 0 and z_end != 0:
                 
-                if sign(direction[2]) > 0:
-                    z_start = max(start[2], z_start)
-                    z_end = min(end[2], z_end)
-                else:
-                    z_start = max(z_start, end[2])
-                    z_end = min(start[2], z_end)
-                    
-                z_step = (z_end-z_start)/ (sampled_points-1)
+            if z_start != 0 and z_end != 0:
+                z_start = max(start[2]-3*sigmas[2], z_start)
+                z_end = min(end[2]+3*sigmas[2], z_end)
+
+                x_start, y_start = track_point(start, direction, z_start)
+                x_end, y_end = track_point(start, direction, z_end)
+
+                y_step = (abs(y_end-y_start) + 6*sigmas[1]) / (sampled_points - 1)
+                x_step = (abs(x_end-x_start) + 6*sigmas[0]) / (sampled_points - 1)
+
+                z_sampling = t_sampling / 2.
+                z_steps = max(sampled_points, ceil(abs(z_end-z_start) / z_sampling))
+
+                z_step = (z_end-z_start) / (z_steps-1)
                 t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
+                
+                for iz in range(z_steps):
+                    z = z_start + iz*z_step
 
-                # Loop over the slices along the z direction
-                for iz in range(sampled_points-1):
-                    z_t1 = z_start + iz*z_step
-                    x_t1, y_t1 = track_point(start, direction, z_t1)
-        
-                    z_t2 = z_start + (iz+1)*z_step
-                    x_t2, y_t2 = track_point(start, direction, z_t2)
-
-                    segment_length = sqrt((x_t1-x_t2)**2+(y_t1-y_t2)**2++(z_t1-z_t2)**2)
-                        
                     time_tick = t_start + it*t_sampling
-                    t0 = (z_t1 - tpc_borders[2][0]) / vdrift
+                    t0 = (z - tpc_borders[2][0]) / vdrift
                     
-                    x_dist = abs(x_p - (x_t1+x_t2)/2)
-                    y_dist = abs(y_p - (y_t1+y_t2)/2)
-                    if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                        signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) \
-                                                   * segment_length/length * t[i.n_electrons] * e_charge
+                    for ix in range(sampled_points):
+                        for iy in range(sampled_points):
+                            
+                            y = y_start + iy*sign(direction[1])*y_step - 3*sign(direction[1])*sigmas[1]
+                            x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
+
+                            x_dist = abs(x_p - x)
+                            y_dist = abs(y_p - y)
+                            if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
+                                charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
+                                signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * e_charge
 
 @cuda.jit(device=True)
 def sign(x):
@@ -392,6 +364,3 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
         if itick < signals.shape[2] and index >= 0:
             itime = int(start_tick+itick)
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
-
-def sum_pixels(signals, track_starts, index_map):
-    return True
