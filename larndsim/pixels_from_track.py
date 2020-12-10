@@ -21,7 +21,7 @@ Pixel size: (%g x %g) cm^2
 """ % (pixel_size[0], pixel_size[1]))
 
 @cuda.jit
-def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list):
+def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
     """
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
@@ -49,14 +49,13 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list):
         get_active_pixels(start_pixel[0], start_pixel[1],
                           end_pixel[0], end_pixel[1],
                           active_pixels[itrk])
-        radius = 1
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
 
 
 @cuda.jit(device=True)
-def get_active_pixels(x0, y0, x1, y1, active_pixels):
+def get_active_pixels(x0, y0, x1, y1, tot_pixels):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
@@ -92,8 +91,9 @@ def get_active_pixels(x0, y0, x1, y1, active_pixels):
     for x in range(dx + 1):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
-        if 0 < x_id < n_pixels[0] and 0 < y_id < n_pixels[1]:
-            active_pixels[x] = x_id, y_id
+        
+        if 0 <= x_id < n_pixels[0] and 0 <= y_id < n_pixels[1]:
+            tot_pixels[x] = x_id, y_id
         if D >= 0:
             y += 1
             D -= 2*dx
@@ -123,8 +123,8 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
     
     for pix in range(active_pixels.shape[0]):
         
-        if (active_pixels[pix][0] == 0) and (active_pixels[pix][1] == 0):
-            break
+        if (active_pixels[pix][0] == -1) and (active_pixels[pix][1] == -1):
+            continue
             
         for x_r in range(-radius, radius+1):
             for y_r in range(-radius, radius+1):
@@ -136,7 +136,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         is_unique = False
                         break
 
-                if is_unique and 0 < new_pixel[0] < n_pixels[0] and 0 < new_pixel[1] < n_pixels[1]:
+                if is_unique and 0 <= new_pixel[0] < n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
                     
