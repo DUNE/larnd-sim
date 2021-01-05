@@ -11,39 +11,60 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir)
 from math import pi, exp
 from larndsim import detsim
-from larndsim import drifting
+from larndsim import drifting, quenching, pixels_from_track
 from larndsim import consts
 from larndsim import indeces as i
 
 from math import ceil
 
-class TestDrifting:
-    tracks = np.zeros((1, 29))
-    tracks[:, i.z_start] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][1], 1)
-    tracks[:, i.z_end] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][1], 1)
-    tracks[:, i.y_start] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+consts.y_pixel_size, 1)
-    tracks[:, i.y_end] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+consts.y_pixel_size, 1)
-    tracks[:, i.x_start] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+consts.x_pixel_size, 1)
-    tracks[:, i.x_end] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+consts.x_pixel_size, 1)
-    tracks[:, i.n_electrons] = np.random.uniform(1e6, 1e7, 1)
-    tracks[:, i.tran_diff] = 1e-6
-    tracks[:, i.long_diff] = 1e-6
-    tracks[:, i.t_start] = tracks[:, i.z_start] - consts.tpc_borders[2][0]
-    t0 = np.random.uniform(consts.time_interval[0], consts.time_interval[1], 1)
-
-    x_pos = np.random.uniform(0, consts.x_pixel_size/2, 1)
-    y_pos = np.random.uniform(0, consts.y_pixel_size/2, 1)
+class TestTrackCurrent:
+    tracks = np.zeros((10, 29))
+    tracks[:, i.z_start] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
+    tracks[:, i.z_end] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
+    tracks[:, i.z] = (tracks[:, i.z_end]+tracks[:, i.z_start])/2.
+    tracks[:, i.y_start] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
+    tracks[:, i.y_end] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
+    tracks[:, i.x_start] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
+    tracks[:, i.x_end] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
+    tracks[:, i.x] = (tracks[:, i.x_end]+tracks[:, i.x_start])/2.
+    tracks[:, i.y] = (tracks[:, i.y_end]+tracks[:, i.y_start])/2.
+    tracks[:, i.dx] = np.sqrt((tracks[:, i.x_end]-tracks[:, i.x_start])**2+(tracks[:, i.y_end]-tracks[:, i.y_start])**2+(tracks[:, i.z_end]-tracks[:, i.z_start])**2)
+    tracks[:, i.dEdx] = [2]*10
+    tracks[:, i.dE] = tracks[:, i.dEdx]*tracks[:, i.dx]
+    tracks[:, i.tran_diff] = [1e-1]*10
+    tracks[:, i.long_diff] = [1e-1]*10
 
     def test_current_model(self):
-        integral = 0
+         
+        tracks = np.copy(self.tracks)
+        threadsperblock = 128
+        blockspergrid = ceil(tracks.shape[0] / threadsperblock)
+        quenching.quench[blockspergrid,threadsperblock](tracks, consts.box)
+        drifting.drift[blockspergrid,threadsperblock](tracks)
 
-        x = self.x_pos
-        y = self.y_pos
+        MAX_PIXELS = 110
+        MAX_ACTIVE_PIXELS = 50
 
-        for t in consts.time_ticks:
-            integral += detsim.current_model(t, self.t0, x, y)
+        active_pixels = np.full((tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
+        neighboring_pixels = np.full((tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
+        
+        n_pixels_list = np.zeros(shape=(tracks.shape[0]))
+        blockspergrid = ceil(tracks.shape[0] / threadsperblock)
+        pixels_from_track.get_pixels[blockspergrid,threadsperblock](tracks, 
+                                                                    active_pixels, 
+                                                                    neighboring_pixels, 
+                                                                    n_pixels_list,
+                                                                    2)
+        signals = np.zeros((tracks.shape[0], 
+                            neighboring_pixels.shape[1], 
+                            consts.time_ticks.shape[0]), dtype=np.float32)
+        threadsperblock = (4,4,4)
+        blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
+        blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
+        blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
+        blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
+        detsim.tracks_current[blockspergrid,threadsperblock](signals, 
+                                                             neighboring_pixels, 
+                                                             tracks)
 
-        assert pytest.approx(integral * consts.t_sampling, rel=0.05) == consts.e_charge
-
-a = TestDrifting()
-a.test_current_model()
+        assert np.sum(signals)*consts.t_sampling/consts.e_charge == pytest.approx(np.sum(tracks[:,i.n_electrons]), rel=0.05)
