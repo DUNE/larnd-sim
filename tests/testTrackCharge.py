@@ -18,9 +18,9 @@ class TestTrackCharge:
     sigmas = np.array([random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)])
 
     def test_rho(self):
-        xx = np.linspace(-10, 10, 100)
-        yy = np.linspace(-10, 10, 100)
-        zz = np.linspace(-10, 10, 100)
+        xx = np.linspace(-10, 10, 20)
+        yy = np.linspace(-10, 10, 20)
+        zz = np.linspace(-10, 10, 20)
 
         weights = np.empty(len(xx)*len(yy)*len(zz))
         segment = self.end-self.start
