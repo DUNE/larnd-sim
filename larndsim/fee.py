@@ -12,7 +12,7 @@ from tqdm import tqdm
 from . import consts
 
 #: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 5
+MAX_ADC_VALUES = 10
 #: Discrimination threshold :math:`\mu s`
 DISCRIMINATION_THRESHOLD = 5e3*consts.e_charge
 #: ADC hold delay in clock cycles
@@ -24,7 +24,7 @@ GAIN = 4/1e3
 #: Common-mode voltage in :math:`mV`
 V_CM = 288
 #: Reference voltage in :math:`mV`
-V_REF = 1540
+V_REF = 1300
 #: Pedestal voltage in :math:`mV`
 V_PEDESTAL = 580
 #: Number of ADC counts
@@ -51,6 +51,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
         pix_x, pix_y = consts.get_pixel_coordinates(pixel_id)
         pix_x *= 10
         pix_y *= 10
+
         for iadc, adc in enumerate(adcs):
             t = ts[iadc] 
             if adc > digitize(0):
@@ -89,6 +90,7 @@ def digitize(integral_list):
     Returns:
         numpy.ndarray: list of ADC values for each pixel
     """
+
     adcs = np.minimum(np.floor(np.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
                       * ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
 
