@@ -264,24 +264,21 @@ def tracks_current(signals, pixels, tracks):
             this_pixel_point = (x_p, y_p)
 
             if t[i.z_start] < t[i.z_end]:
-                start = (t[i.x_start], t[i.y_start], t[i.z_start])
-                end = (t[i.x_end], t[i.y_end], t[i.z_end])
+                start = (t[i.x_start], t[i.y_start], t[i.z_start]-0.2)
+                end = (t[i.x_end], t[i.y_end], t[i.z_end]+0.2)
             else:
-                end = (t[i.x_start], t[i.y_start], t[i.z_start])
-                start = (t[i.x_end], t[i.y_end], t[i.z_end])
+                end = (t[i.x_start], t[i.y_start], t[i.z_start]+0.2)
+                start = (t[i.x_end], t[i.y_end], t[i.z_end]-0.2)
                 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
-            length_2d = sqrt(segment[0]**2 + segment[1]**2)
-            costheta = length_2d/length
-            theta = acos(costheta)
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
-            
             impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+
                 
             if z_start != 0 and z_end != 0:
                 z_start = max(start[2]-3*sigmas[2], z_start)
@@ -297,7 +294,7 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(sampled_points, ceil(abs(z_end-z_start) / z_sampling))
 
                 z_step = (z_end-z_start) / (z_steps-1)
-                t_start = (t[i.t_start] - time_padding) // t_sampling * t_sampling
+                t_start =  max(time_interval[0],(t[i.t_start] - time_padding) // t_sampling * t_sampling)
                 
                 for iz in range(z_steps):
                     z = z_start + iz*z_step
@@ -305,15 +302,20 @@ def tracks_current(signals, pixels, tracks):
                     time_tick = t_start + it*t_sampling
                     t0 = (z - tpc_borders[2][0]) / vdrift
                     
+                    # FIXME: this sampling is far from ideal, we should sample around the track 
+                    # and not in a cube containing the track
                     for ix in range(sampled_points):
+                        
+                        x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
+                        x_dist = abs(x_p - x)
+                        
                         for iy in range(sampled_points):
                             
                             y = y_start + iy*sign(direction[1])*y_step - 3*sign(direction[1])*sigmas[1]
-                            x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
-
-                            x_dist = abs(x_p - x)
                             y_dist = abs(y_p - y)
+                            
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
+                                
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
                                 signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * e_charge
 
