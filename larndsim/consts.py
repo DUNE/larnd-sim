@@ -35,11 +35,11 @@ lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
 t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
-time_interval = (0, 40.) # us
+time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 3
+time_padding = 4
 #: Number of sampled points for each segment slice
-sampled_points = 41
+sampled_points = 30
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
 long_diff = 4.0e-6 # cm * cm / us
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
@@ -81,7 +81,7 @@ for chip in chipids:
 #: TPC borders coordinates in :math:`cm`
 tpc_borders = np.array([(min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2), 
                         (min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2), 
-                        (0, 3)])
+                        (0, 30)])
 
 ## Quenching parameters
 box = 1
