@@ -22,12 +22,14 @@ import numba as nb
 import pandas as pd
 
 from numba import cuda
+from numba.cuda.random import create_xoroshiro128p_states
+
 from math import ceil, sqrt, pi, exp, erf
 from time import time
 
 from tqdm import tqdm
 
-def run_simulation(input_filename='../examples/cosmic_qc_tpc.p', 
+def run_simulation(input_filename='../examples/singlecube_100k.p', 
                    output_filename='singlecube_cosmics.h5',
                    pixel_geometry='../examples/pixel_geometry.yaml',
                    n_tracks=100000):
@@ -140,12 +142,14 @@ def run_simulation(input_filename='../examples/cosmic_qc_tpc.p',
         adc_ticks_list = np.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
         TPB = 128
         BPG = ceil(pixels_signals.shape[0] / TPB)
-
+        
+        rng_states = create_xoroshiro128p_states(TPB * BPG, seed=itrk)
         fee.get_adc_values[BPG,TPB](pixels_signals, 
                                     time_ticks, 
                                     integral_list, 
                                     adc_ticks_list, 
-                                    consts.time_interval[1]*3*tot_events)
+                                    consts.time_interval[1]*3*tot_events,
+                                    rng_states)
 
         adc_list = fee.digitize(integral_list)
         adc_tot_list = np.append(adc_tot_list, adc_list,axis=0)
