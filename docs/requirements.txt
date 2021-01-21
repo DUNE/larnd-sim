@@ -1,1 +1,8 @@
 sphinx-rtd-theme
+numpy
+pytest
+numba
+travis-sphinx
+tqdm
+larpix-control
+larpix-geometry
