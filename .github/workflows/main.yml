@@ -40,5 +40,4 @@ jobs:
       - name: Run tests
         run: |
           export NUMBA_ENABLE_CUDASIM=1,
-          cd larnd-sim,
-          pytest tests/testDrifting.py.
+          pytest $GITHUB_WORKSPACE/tests/testDrifting.py.
