@@ -3,9 +3,9 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
   <title>Welcome to larnd-sim’s documentation! &mdash; larnd-sim 0.0.1 documentation</title>
   
@@ -16,7 +16,10 @@
 
   
   
+
   
+  
+
   
 
   
@@ -30,7 +33,6 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
-        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -50,7 +52,7 @@
           
 
           
-            <a href="#" class="icon icon-home" alt="Documentation Home"> larnd-sim
+            <a href="#" class="icon icon-home"> larnd-sim
           
 
           
@@ -84,12 +86,12 @@
               <!-- Local TOC -->
               <div class="local-toc"><ul>
 <li><a class="reference internal" href="#">Welcome to larnd-sim’s documentation!</a><ul>
-<li><a class="reference internal" href="#module-larndsim.quenching">Quenching stage</a></li>
-<li><a class="reference internal" href="#module-larndsim.drifting">Drifting stage</a></li>
-<li><a class="reference internal" href="#module-larndsim.detsim">Detector simulation stage</a></li>
-<li><a class="reference internal" href="#module-larndsim.pixels_from_track">Pixel finder utility</a></li>
-<li><a class="reference internal" href="#module-larndsim.fee">Electronics module</a></li>
-<li><a class="reference internal" href="#module-larndsim.consts">Constants</a></li>
+<li><a class="reference internal" href="#quenching-stage">Quenching stage</a></li>
+<li><a class="reference internal" href="#drifting-stage">Drifting stage</a></li>
+<li><a class="reference internal" href="#detector-simulation-stage">Detector simulation stage</a></li>
+<li><a class="reference internal" href="#pixel-finder-utility">Pixel finder utility</a></li>
+<li><a class="reference internal" href="#electronics-module">Electronics module</a></li>
+<li><a class="reference internal" href="#constants">Constants</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
@@ -133,6 +135,8 @@
 
 
 
+
+
 <div role="navigation" aria-label="breadcrumbs navigation">
 
   <ul class="wy-breadcrumbs">
@@ -144,7 +148,7 @@
     
       <li class="wy-breadcrumbs-aside">
         
-            
+          
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
           
         
@@ -162,580 +166,23 @@
 <h1>Welcome to larnd-sim’s documentation!<a class="headerlink" href="#welcome-to-larnd-sim-s-documentation" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 </div>
-<div class="section" id="module-larndsim.quenching">
-<span id="quenching-stage"></span><h2>Quenching stage<a class="headerlink" href="#module-larndsim.quenching" title="Permalink to this headline">¶</a></h2>
-<p>Module to implement the quenching of the ionized electrons
-through the detector</p>
-<dl class="py function">
-<dt id="larndsim.quenching.quench">
-<code class="sig-prename descclassname">larndsim.quenching.</code><code class="sig-name descname">quench</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tracks</span></em>, <em class="sig-param"><span class="n">mode</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.quenching.quench" title="Permalink to this definition">¶</a></dt>
-<dd><p>This CUDA kernel takes as input an array of track segments and calculates
-the number of electrons that reach the anode plane after recombination.
-It is possible to pick among two models: Box (Baller, 2013 JINST 8 P08005) or
-Birks (Amoruso, et al NIM A 523 (2004) 275).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p></li>
-<li><p><strong>mode</strong> (<em>int</em>) – recombination model.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="quenching-stage">
+<h2>Quenching stage<a class="headerlink" href="#quenching-stage" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-larndsim.drifting">
-<span id="drifting-stage"></span><h2>Drifting stage<a class="headerlink" href="#module-larndsim.drifting" title="Permalink to this headline">¶</a></h2>
-<p>Module to implement the propagation of the
-electrons towards the anode.</p>
-<dl class="py function">
-<dt id="larndsim.drifting.drift">
-<code class="sig-prename descclassname">larndsim.drifting.</code><code class="sig-name descname">drift</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tracks</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.drifting.drift" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function takes as input an array of track segments and calculates
-the properties of the segments at the anode:</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>z coordinate at the anode</p></li>
-<li><p>number of electrons taking into account electron lifetime</p></li>
-<li><p>longitudinal diffusion</p></li>
-<li><p>transverse diffusion</p></li>
-<li><p>time of arrival at the anode</p></li>
-</ul>
-</div></blockquote>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="drifting-stage">
+<h2>Drifting stage<a class="headerlink" href="#drifting-stage" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-larndsim.detsim">
-<span id="detector-simulation-stage"></span><h2>Detector simulation stage<a class="headerlink" href="#module-larndsim.detsim" title="Permalink to this headline">¶</a></h2>
-<p>Module that calculates the current induced by edep-sim track segments
-on the pixels</p>
-<dl class="py function">
-<dt id="larndsim.detsim.current_model">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">current_model</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">t0</span></em>, <em class="sig-param"><span class="n">x</span></em>, <em class="sig-param"><span class="n">y</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.current_model" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parametrization of the induced current on the pixel, which depends
-on the of arrival at the anode (<span class="math notranslate nohighlight">\(t_0\)</span>) and on the position
-on the pixel pad.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>t</strong> (<em>float</em>) – time where we evaluate the current</p></li>
-<li><p><strong>t0</strong> (<em>float</em>) – time of arrival at the anode</p></li>
-<li><p><strong>x</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
-on the <span class="math notranslate nohighlight">\(x\)</span> axis</p></li>
-<li><p><strong>y</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
-on the <span class="math notranslate nohighlight">\(y\)</span> axis</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the induced current at time <span class="math notranslate nohighlight">\(t\)</span></p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.current_signal">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">current_signal</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pixel_point</span></em>, <em class="sig-param"><span class="n">point</span></em>, <em class="sig-param"><span class="n">q</span></em>, <em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">sigmas</span></em>, <em class="sig-param"><span class="n">segment</span></em>, <em class="sig-param"><span class="n">time</span></em>, <em class="sig-param"><span class="n">t0</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.current_signal" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function calculates current induces on a pixel by a segment, which depends
-on the distance between the segment projection on the anode and the pixel center.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pixel_point</strong> (<em>tuple</em>) – pixel coordinates</p></li>
-<li><p><strong>point</strong> (<em>tuple</em>) – coordinates of the segment in the slice</p></li>
-<li><p><strong>q</strong> (<em>float</em>) – total track charge</p></li>
-<li><p><strong>start</strong> (<em>tuple</em>) – segment start coordinates</p></li>
-<li><p><strong>sigmas</strong> (<em>tuple</em>) – diffusion coefficients in the spatial dimensions?</p></li>
-<li><p><strong>segment</strong> (<em>tuple</em>) – segment sizes in the spatial dimensions</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – time when we evault the induced current</p></li>
-<li><p><strong>t0</strong> (<em>float</em>) – time when the segment reaches the anode</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the induced current on the pixel at time <span class="math notranslate nohighlight">\(t\)</span>.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.pixel_from_coordinates">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">pixel_from_coordinates</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="n">n_pixels</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.pixel_from_coordinates" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function returns the ID of the pixel that covers the specified point</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> (<em>float</em>) – x coordinate</p></li>
-<li><p><strong>y</strong> (<em>float</em>) – y coordinate</p></li>
-<li><p><strong>n_pixels</strong> (<em>int</em>) – number of pixels for each axis</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the pixel ID</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.rho">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">rho</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">point</span></em>, <em class="sig-param"><span class="n">q</span></em>, <em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">sigmas</span></em>, <em class="sig-param"><span class="n">segment</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.rho" title="Permalink to this definition">¶</a></dt>
-<dd><p>Function that returns the amount of charge at a certain point in space</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>point</strong> (<em>tuple</em>) – point coordinates</p></li>
-<li><p><strong>q</strong> (<em>float</em>) – total charge</p></li>
-<li><p><strong>start</strong> (<em>tuple</em>) – segment start coordinates</p></li>
-<li><p><strong>sigmas</strong> (<em>tuple</em>) – diffusion coefficients</p></li>
-<li><p><strong>segment</strong> (<em>tuple</em>) – segment sizes</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the amount of charge at <cite>point</cite>.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.sum_pixel_signals">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">sum_pixel_signals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pixels_signals</span></em>, <em class="sig-param"><span class="n">signals</span></em>, <em class="sig-param"><span class="n">track_starts</span></em>, <em class="sig-param"><span class="n">index_map</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.sum_pixel_signals" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function sums the induced current signals on the same pixel.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
-summed signal for each pixel. First dimension is the pixel ID, second
-dimension is the time tick</p></li>
-<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x T,
-where S is the number of track segments, P is the number of pixels, and T is
-the number of time ticks.</p></li>
-<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the starting time of
-each track</p></li>
-<li><p><strong>index_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the correspondence between
-the track index and the pixel ID index.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.time_intervals">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">time_intervals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">track_starts</span></em>, <em class="sig-param"><span class="n">time_max</span></em>, <em class="sig-param"><span class="n">tracks</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.time_intervals" title="Permalink to this definition">¶</a></dt>
-<dd><p>Find the value of the longest signal time and stores the start
-time of each segment.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where
-we store the segments start time</p></li>
-<li><p><strong>time_max</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the longest signal time</p></li>
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the segment
-information</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.track_point">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">track_point</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">direction</span></em>, <em class="sig-param"><span class="n">z</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.track_point" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function returns the segment coordinates for a point along the <cite>z</cite> coordinate</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>start</strong> (<em>tuple</em>) – start coordinates</p></li>
-<li><p><strong>direction</strong> (<em>tuple</em>) – direction coordinates</p></li>
-<li><p><strong>z</strong> (<em>float</em>) – <cite>z</cite> coordinate corresponding to the <cite>x</cite>, <cite>y</cite> coordinates</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the (x,y) pair of coordinates for the segment at <cite>z</cite></p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.tracks_current">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">tracks_current</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">signals</span></em>, <em class="sig-param"><span class="n">pixels</span></em>, <em class="sig-param"><span class="n">tracks</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.tracks_current" title="Permalink to this definition">¶</a></dt>
-<dd><p>This CUDA kernel calculates the charge induced on the pixels by the input tracks.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
-where S is the number of track segments, P is the number of pixels, and T is
-the number of time ticks. The output is stored here.</p></li>
-<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x 2, where S is
-the number of track segments, P is the number of pixels and the third dimension
-contains the two pixel ID numbers.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.truncexpon">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">truncexpon</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x</span></em>, <em class="sig-param"><span class="n">loc</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">scale</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.truncexpon" title="Permalink to this definition">¶</a></dt>
-<dd><p>A truncated exponential distribution.
-To shift and/or scale the distribution use the <cite>loc</cite> and <cite>scale</cite> parameters.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.detsim.z_interval">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">z_interval</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start_point</span></em>, <em class="sig-param"><span class="n">end_point</span></em>, <em class="sig-param"><span class="n">x_p</span></em>, <em class="sig-param"><span class="n">y_p</span></em>, <em class="sig-param"><span class="n">tolerance</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.z_interval" title="Permalink to this definition">¶</a></dt>
-<dd><p>Here we calculate the interval in the drift direction for the pixel pID
-using the impact factor</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>start_point</strong> (<em>tuple</em>) – coordinates of the segment start</p></li>
-<li><p><strong>end_point</strong> (<em>tuple</em>) – coordinates of the segment end</p></li>
-<li><p><strong>x_p</strong> (<em>float</em>) – pixel center <cite>x</cite> coordinate</p></li>
-<li><p><strong>y_p</strong> (<em>float</em>) – pixel center <cite>y</cite> coordinate</p></li>
-<li><p><strong>tolerance</strong> (<em>float</em>) – maximum distance between the pixel center and
-the segment</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p><cite>z</cite> coordinate of the point of closest approach (POCA),
-<cite>z</cite> coordinate of the first slice, <cite>z</cite> coordinate of the last slice.
-(0,0,0) if POCA &gt; tolerance.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="detector-simulation-stage">
+<h2>Detector simulation stage<a class="headerlink" href="#detector-simulation-stage" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-larndsim.pixels_from_track">
-<span id="pixel-finder-utility"></span><h2>Pixel finder utility<a class="headerlink" href="#module-larndsim.pixels_from_track" title="Permalink to this headline">¶</a></h2>
-<p>Module that finds which pixels lie on the projection on the anode plane
-of each track segment. It can eventually include also the neighboring
-pixels.</p>
-<dl class="py function">
-<dt id="larndsim.pixels_from_track.get_active_pixels">
-<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_active_pixels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x0</span></em>, <em class="sig-param"><span class="n">y0</span></em>, <em class="sig-param"><span class="n">x1</span></em>, <em class="sig-param"><span class="n">y1</span></em>, <em class="sig-param"><span class="n">active_pixels</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_active_pixels" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts track segement to an array of active pixels
-using Bresenham algorithm used to convert line to grid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x0</strong> (<em>float</em>) – start <cite>x</cite> coordinate</p></li>
-<li><p><strong>y0</strong> (<em>float</em>) – start <cite>y</cite> coordinate</p></li>
-<li><p><strong>x1</strong> (<em>float</em>) – end <cite>x</cite> coordinate</p></li>
-<li><p><strong>y1</strong> (<em>float</em>) – end <cite>y</cite> coordinate</p></li>
-<li><p><strong>active_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the IDs of the pixels directly below the projection of
-the segments</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.pixels_from_track.get_neighboring_pixels">
-<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_neighboring_pixels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">active_pixels</span></em>, <em class="sig-param"><span class="n">radius</span></em>, <em class="sig-param"><span class="n">neighboring_pixels</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_neighboring_pixels" title="Permalink to this definition">¶</a></dt>
-<dd><p>For each active_pixel, it includes all
-neighboring pixels within a specified radius</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>active_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the IDs of the pixels directly below the projection of
-the segments</p></li>
-<li><p><strong>radius</strong> (<em>int</em>) – number of layers of neighboring pixels we
-want to consider</p></li>
-<li><p><strong>neighboring_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the IDs of the pixels directly below the projection of
-the segments and the ones next to them</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>number of total involved pixels</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.pixels_from_track.get_pixels">
-<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_pixels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tracks</span></em>, <em class="sig-param"><span class="n">active_pixels</span></em>, <em class="sig-param"><span class="n">neighboring_pixels</span></em>, <em class="sig-param"><span class="n">n_pixels_list</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_pixels" title="Permalink to this definition">¶</a></dt>
-<dd><p>For all tracks, takes the xy start and end position
-and calculates all impacted pixels by the track segment</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>track</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store the
-track segments information</p></li>
-<li><p><strong>active_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the IDs of the pixels directly below the projection of
-the segments</p></li>
-<li><p><strong>neighboring_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
-the IDs of the pixels directly below the projection of
-the segments and the ones next to them</p></li>
-<li><p><strong>n_pixels_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – number of total involved
-pixels</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="pixel-finder-utility">
+<h2>Pixel finder utility<a class="headerlink" href="#pixel-finder-utility" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-larndsim.fee">
-<span id="electronics-module"></span><h2>Electronics module<a class="headerlink" href="#module-larndsim.fee" title="Permalink to this headline">¶</a></h2>
-<p>Module that simulates the front-end electronics (triggering, ADC)</p>
-<dl class="py data">
-<dt id="larndsim.fee.ADC_COUNTS">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">ADC_COUNTS</code><em class="property"> = 256</em><a class="headerlink" href="#larndsim.fee.ADC_COUNTS" title="Permalink to this definition">¶</a></dt>
-<dd><p>Number of ADC counts</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.ADC_HOLD_DELAY">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">ADC_HOLD_DELAY</code><em class="property"> = 15</em><a class="headerlink" href="#larndsim.fee.ADC_HOLD_DELAY" title="Permalink to this definition">¶</a></dt>
-<dd><p>ADC hold delay in clock cycles</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.CLOCK_CYCLE">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">CLOCK_CYCLE</code><em class="property"> = 0.1</em><a class="headerlink" href="#larndsim.fee.CLOCK_CYCLE" title="Permalink to this definition">¶</a></dt>
-<dd><p>Clock cycle time in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.DISCRIMINATION_THRESHOLD">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">DISCRIMINATION_THRESHOLD</code><em class="property"> = 8.01e-16</em><a class="headerlink" href="#larndsim.fee.DISCRIMINATION_THRESHOLD" title="Permalink to this definition">¶</a></dt>
-<dd><p>Discrimination threshold <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.GAIN">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">GAIN</code><em class="property"> = 0.004</em><a class="headerlink" href="#larndsim.fee.GAIN" title="Permalink to this definition">¶</a></dt>
-<dd><p>Front-end gain in <span class="math notranslate nohighlight">\(mV/ke-\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.MAX_ADC_VALUES">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">MAX_ADC_VALUES</code><em class="property"> = 5</em><a class="headerlink" href="#larndsim.fee.MAX_ADC_VALUES" title="Permalink to this definition">¶</a></dt>
-<dd><p>Maximum number of ADC values stored per pixel</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.V_CM">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_CM</code><em class="property"> = 77</em><a class="headerlink" href="#larndsim.fee.V_CM" title="Permalink to this definition">¶</a></dt>
-<dd><p>Common-mode voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.V_PEDESTAL">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_PEDESTAL</code><em class="property"> = 550</em><a class="headerlink" href="#larndsim.fee.V_PEDESTAL" title="Permalink to this definition">¶</a></dt>
-<dd><p>Pedestal voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.fee.V_REF">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_REF</code><em class="property"> = 1539</em><a class="headerlink" href="#larndsim.fee.V_REF" title="Permalink to this definition">¶</a></dt>
-<dd><p>Reference voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.fee.digitize">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">digitize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">integral_list</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.digitize" title="Permalink to this definition">¶</a></dt>
-<dd><p>The function takes as input the integrated charge and returns the digitized
-ADC counts.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>integral_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of charge collected by each pixel</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>list of ADC values for each pixel</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)">numpy.ndarray</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.fee.export_to_hdf5">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">adc_list</span></em>, <em class="sig-param"><span class="n">adc_ticks_list</span></em>, <em class="sig-param"><span class="n">unique_pix</span></em>, <em class="sig-param"><span class="n">filename</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
-<dd><p>Saves the ADC counts in the LArPix HDF5 format.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p></li>
-<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
-<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of pixel IDs</p></li>
-<li><p><strong>filename</strong> (<em>str</em>) – filename of HDF5 output file</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>list of LArPix packets</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>list</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="larndsim.fee.get_adc_values">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">get_adc_values</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pixels_signals</span></em>, <em class="sig-param"><span class="n">time_ticks</span></em>, <em class="sig-param"><span class="n">adc_list</span></em>, <em class="sig-param"><span class="n">adc_ticks_list</span></em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.get_adc_values" title="Permalink to this definition">¶</a></dt>
-<dd><p>Implementation of self-trigger logic</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents for
-each pixel</p></li>
-<li><p><strong>time_ticks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
-<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of integrated charges for each
-pixel</p></li>
-<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.19)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of the time ticks that
-correspond to each integrated charge.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="electronics-module">
+<h2>Electronics module<a class="headerlink" href="#electronics-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-larndsim.consts">
-<span id="constants"></span><h2>Constants<a class="headerlink" href="#module-larndsim.consts" title="Permalink to this headline">¶</a></h2>
-<p>Module containing constants needed by the simulation</p>
-<dl class="py data">
-<dt id="larndsim.consts.Ab">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">Ab</code><em class="property"> = 0.8</em><a class="headerlink" href="#larndsim.consts.Ab" title="Permalink to this definition">¶</a></dt>
-<dd><p>Recombination <span class="math notranslate nohighlight">\(A_b\)</span> value for the Birks Model</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.alpha">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">alpha</code><em class="property"> = 0.847</em><a class="headerlink" href="#larndsim.consts.alpha" title="Permalink to this definition">¶</a></dt>
-<dd><p>Recombination <span class="math notranslate nohighlight">\(\alpha\)</span> constant for the Box model</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.beta">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">beta</code><em class="property"> = 0.2061</em><a class="headerlink" href="#larndsim.consts.beta" title="Permalink to this definition">¶</a></dt>
-<dd><p>Recombination <span class="math notranslate nohighlight">\(\beta\)</span> value for the Box model in <span class="math notranslate nohighlight">\(cm/MeV\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.eField">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">eField</code><em class="property"> = 0.5</em><a class="headerlink" href="#larndsim.consts.eField" title="Permalink to this definition">¶</a></dt>
-<dd><p>Electric field magnitude in <span class="math notranslate nohighlight">\(kV/cm\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.e_charge">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">e_charge</code><em class="property"> = 1.602e-19</em><a class="headerlink" href="#larndsim.consts.e_charge" title="Permalink to this definition">¶</a></dt>
-<dd><p>Electron charge in Coulomb</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.kb">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">kb</code><em class="property"> = 0.0486</em><a class="headerlink" href="#larndsim.consts.kb" title="Permalink to this definition">¶</a></dt>
-<dd><p>Recombination <span class="math notranslate nohighlight">\(k_b\)</span> value for the Birks Model in <span class="math notranslate nohighlight">\(g/cm^2/MeV\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.lArDensity">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">lArDensity</code><em class="property"> = 1.38</em><a class="headerlink" href="#larndsim.consts.lArDensity" title="Permalink to this definition">¶</a></dt>
-<dd><p>Liquid argon density in <span class="math notranslate nohighlight">\(g/cm^3\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.lifetime">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">lifetime</code><em class="property"> = 10000.0</em><a class="headerlink" href="#larndsim.consts.lifetime" title="Permalink to this definition">¶</a></dt>
-<dd><p>Electron lifetime in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.long_diff">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">long_diff</code><em class="property"> = 0.004</em><a class="headerlink" href="#larndsim.consts.long_diff" title="Permalink to this definition">¶</a></dt>
-<dd><p>Longitudinal diffusion coefficient in <span class="math notranslate nohighlight">\(cm^2/\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.n_pixels">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">n_pixels</code><em class="property"> = (70, 70)</em><a class="headerlink" href="#larndsim.consts.n_pixels" title="Permalink to this definition">¶</a></dt>
-<dd><p>Number of pixels per axis</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.pixel_size">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">pixel_size</code><em class="property"> = array([0.4434, 0.4434])</em><a class="headerlink" href="#larndsim.consts.pixel_size" title="Permalink to this definition">¶</a></dt>
-<dd><p>Size of pixels per axis in <span class="math notranslate nohighlight">\(cm\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.sampled_points">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">sampled_points</code><em class="property"> = 50</em><a class="headerlink" href="#larndsim.consts.sampled_points" title="Permalink to this definition">¶</a></dt>
-<dd><p>Number of sampled points for each segment slice</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.t_sampling">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">t_sampling</code><em class="property"> = 0.05</em><a class="headerlink" href="#larndsim.consts.t_sampling" title="Permalink to this definition">¶</a></dt>
-<dd><p>Time sampling in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.time_interval">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">time_interval</code><em class="property"> = (0.0, 700.0)</em><a class="headerlink" href="#larndsim.consts.time_interval" title="Permalink to this definition">¶</a></dt>
-<dd><p>Drift time window in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.time_padding">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">time_padding</code><em class="property"> = 10</em><a class="headerlink" href="#larndsim.consts.time_padding" title="Permalink to this definition">¶</a></dt>
-<dd><p>Signal time window padding in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.time_ticks">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">time_ticks</code><em class="property"> = array([0.00000000e+00, 5.00035717e-02, 1.00007143e-01, ...,        6.99899993e+02, 6.99949996e+02, 7.00000000e+02])</em><a class="headerlink" href="#larndsim.consts.time_ticks" title="Permalink to this definition">¶</a></dt>
-<dd><p>Numpy array containing all the time ticks in the drift time window</p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.tpc_borders">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">tpc_borders</code><em class="property"> = array([[-15.519,  15.519],        [-15.519,  15.519],        [  0.   , 150.   ]])</em><a class="headerlink" href="#larndsim.consts.tpc_borders" title="Permalink to this definition">¶</a></dt>
-<dd><p>TPC borders coordinates in <span class="math notranslate nohighlight">\(cm\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.tran_diff">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">tran_diff</code><em class="property"> = 0.0088</em><a class="headerlink" href="#larndsim.consts.tran_diff" title="Permalink to this definition">¶</a></dt>
-<dd><p>Transverse diffusion coefficient in <span class="math notranslate nohighlight">\(cm\)</span></p>
-</dd></dl>
-
-<dl class="py data">
-<dt id="larndsim.consts.vdrift">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">vdrift</code><em class="property"> = 0.153812</em><a class="headerlink" href="#larndsim.consts.vdrift" title="Permalink to this definition">¶</a></dt>
-<dd><p>Drift velocity in <span class="math notranslate nohighlight">\(cm/\mu s\)</span></p>
-</dd></dl>
-
+<div class="section" id="constants">
+<h2>Constants<a class="headerlink" href="#constants" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 <div class="section" id="indices-and-tables">
@@ -752,28 +199,25 @@ correspond to each integrated charge.</p></li>
            
           </div>
           <footer>
-  
 
   <hr/>
 
   <div role="contentinfo">
     <p>
-        
-        &copy; Copyright 2020, DUNE collaboration
+        &#169; Copyright 2020, DUNE collaboration.
 
     </p>
   </div>
     
     
     
-    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     
-    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
     
     provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
-
         </div>
       </div>
 
