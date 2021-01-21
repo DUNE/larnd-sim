@@ -1,8 +1,7 @@
-sphinx-rtd-theme
+sphinx-rtd-theme==0.4.2
 numpy
-pytest
+pytest==4.2
 numba
-travis-sphinx
 tqdm
 larpix-control
 larpix-geometry
