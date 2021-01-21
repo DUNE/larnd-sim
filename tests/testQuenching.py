@@ -28,7 +28,7 @@ class TestQuenching:
         de = self.tracks[:, i.dE]
         TPB = 128
         BPG = ceil(tracks_birks.shape[0] / TPB)
-        quenching.quench[TPB,BPG](tracks_birks, consts.birks)
+        quenching.quench[BPG,TPB](tracks_birks, consts.birks)
 
         nelectrons = tracks_birks[:, i.n_electrons]
 
@@ -43,7 +43,7 @@ class TestQuenching:
         de = self.tracks[:, i.dE]
         TPB = 128
         BPG = ceil(tracks_box.shape[0] / TPB)
-        quenching.quench[TPB,BPG](tracks_box, consts.box)
+        quenching.quench[BPG,TPB](tracks_box, consts.box)
 
         csi = consts.beta * dedx / (consts.eField * consts.lArDensity)
         recomb = np.log(consts.alpha + csi)/csi
