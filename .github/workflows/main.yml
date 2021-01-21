@@ -28,7 +28,7 @@ jobs:
         python-version: '3.8'
     - uses: ammaraskar/sphinx-action@master
       with:
-        pre-build-command: "apt-get install -y build-essential"
+        pre-build-command: "apt-get update -y && apt-get install -y gcc"
         docs-folder: "docs/"
     - uses: actions/upload-artifact@v1
       with:
@@ -81,4 +81,3 @@ jobs:
           export NUMBA_ENABLE_CUDASIM=1
           pytest tests/testDrifting.py
           pytest tests/testQuenching.py
-          pytest tests/testTrackCharge.py
