@@ -29,8 +29,8 @@ from larndsim import quenching, drifting
 
 threadsperblock = 256
 blockspergrid = ceil(tracks.shape[0] / threadsperblock)
-quenching.quench[threadsperblock,blockspergrid](tracks, consts.box)
-drifting.drift[threadsperblock,blockspergrid](tracks)
+quenching.quench[blockspergrid,threadsperblock](tracks, consts.box)
+drifting.drift[blockspergrid,threadsperblock](tracks)
 ```
 
 ### Pixel simulation stage
@@ -41,7 +41,7 @@ First, we find the pixels interesected by the projection of each track segment o
 ```python
 from larndsim import pixels_from_track
 ...
-pixels_from_track.get_pixels[threadsperblock,blockspergrid](segments,
+pixels_from_track.get_pixels[blockspergrid,threadsperblock](segments,
                                                             active_pixels,
                                                             neighboring_pixels,
                                                             n_pixels_list)
@@ -52,7 +52,7 @@ Finally, we calculate the current induced on each pixel using the `tracks_curren
 ```python
 from larndsim import detsim
 ...
-detsim.tracks_current[threadsperblock, blockspergrid](signals,
+detsim.tracks_current[blockspergrid,threadsperblock](signals,
                                                       neighboring_pixels,
                                                       segments)
 ```
@@ -66,7 +66,7 @@ from larndsim import detsim
 ...
 max_length = np.array([0])
 track_starts = np.empty(segments.shape[0])
-detsim.time_intervals[threadsperblock, blockspergrid](track_starts,
+detsim.time_intervals[blockspergrid,threadsperblock](track_starts,
                                                       max_length,
                                                       segments)
 ```
