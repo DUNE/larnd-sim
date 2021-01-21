@@ -39,7 +39,7 @@ time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
 time_padding = 4
 #: Number of sampled points for each segment slice
-sampled_points = 30
+sampled_points = 15
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
 long_diff = 4.0e-6 # cm * cm / us
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
@@ -49,43 +49,80 @@ time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
                          int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
 
+mm2cm = 0.1
+
+board = pixel_size = tpc_borders = tpc_size = pixel_connection_dict =  n_pixels = xs = ys = module_borders = 0
+
+tpc_centers = np.array([
+        [-487.949,-218.236,-335.],
+        [-182.051,-218.236,-335.],
+        [182.051,-218.236,-335.],
+        [487.949,-218.236,-335.],
+        [-487.949,-218.236,335.],
+        [-182.051,-218.236,335.],
+        [182.051,-218.236,335.],
+        [487.949,-218.236,335.],
+])
+
+# Swap z->x
+tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]] 
+tpc_centers *= mm2cm
+
 ## Pixel params
-with open(os.path.join(sys.path[0], "examples/pixel_geometry.yaml"), 'r') as f:
-    board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
-    
-xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
-ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
-    
 def load_pixel_geometry(filename):
+    global board
+    global pixel_size
+    global tpc_borders
+    global tpc_size
+    global pixel_connection_dict
+    global module_borders
+    global n_pixels
     global xs
     global ys
+    
     with open(filename, 'r') as f:
         board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
         xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
         ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+        
+    #: Number of pixels per axis
+    n_pixels = len(np.unique(xs)), len(np.unique(ys))
+    x_pixel_size = (max(xs)-min(xs)) / (n_pixels[0] - 1)
+    y_pixel_size = (max(ys)-min(ys)) / (n_pixels[1] - 1)
+    
+    #: Size of pixels per axis in :math:`cm`
+    pixel_size = np.array([x_pixel_size, y_pixel_size])
 
-#: Number of pixels per axis
-n_pixels = len(np.unique(xs)), len(np.unique(ys))
-x_pixel_size = (max(xs)-min(xs)) / (n_pixels[0] - 1) 
-y_pixel_size = (max(ys)-min(xs)) / (n_pixels[1] - 1) 
-#: Size of pixels per axis in :math:`cm`
-pixel_size = np.array([x_pixel_size, y_pixel_size])
+    pixel_connection_dict = {}
+    chipids = list(board.chips.keys())
+    
+    for chip in chipids:
+        for channel, pixel in enumerate(board.chips[chip].channel_connections):
+            if pixel.x !=0 and pixel.y != 0:
+                pixel_connection_dict[(round(pixel.x/pixel_size[0]), round(pixel.y/pixel_size[1]))] = channel, chip
 
-pixel_connection_dict = {}
-chipids = list(board.chips.keys())
-for chip in chipids:
-    for channel, pixel in enumerate(board.chips[chip].channel_connections):
-        if pixel.x !=0 and pixel.y != 0:
-            pixel_connection_dict[(round(pixel.x/pixel_size[0]), round(pixel.y/pixel_size[1]))] = channel, chip
+    #: TPC borders coordinates in :math:`cm`
+    tpc_borders = np.array([[min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2],
+                            [min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2],
+                            [-15, 15]])
+    tpc_size = np.array([tpc_borders[0][1]-tpc_borders[0][0],tpc_borders[1][1]-tpc_borders[1][0],tpc_borders[2][1]-tpc_borders[2][0]])
+    
+    module_borders = []
+    for tpc_center in tpc_centers:
+        module_borders.append((tpc_borders.T+tpc_center).T)
 
-#: TPC borders coordinates in :math:`cm`
-tpc_borders = np.array([(min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2), 
-                        (min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2), 
-                        (0, 30)])
+load_pixel_geometry(sys.path[0]+"/examples/pixel_geometry.yaml")
 
 ## Quenching parameters
 box = 1
 birks = 2
 
 def get_pixel_coordinates(pixel_id):
-    return pixel_id[0]*pixel_size[0]+tpc_borders[0][0]+pixel_size[0]/2, pixel_id[1]*pixel_size[1]+tpc_borders[1][0]+pixel_size[1]/2
+    plane_id = pixel_id[0] // n_pixels[0]
+    this_border = module_borders[plane_id]
+    
+    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
+    pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
+    
+    return pix_x, pix_y
+           
