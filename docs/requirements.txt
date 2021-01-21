@@ -3,4 +3,5 @@ numpy
 pytest==4.2
 numba
 tqdm
-
+larpix-control
+larpix-geometry
