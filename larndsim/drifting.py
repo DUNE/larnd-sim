@@ -39,19 +39,19 @@ def drift(tracks):
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
     """
     itrk = cuda.grid(1)
-    
+
     if itrk < tracks.shape[0]:
         pixel_plane = 0
-        
+
         track = tracks[itrk]
-        
+
         for ip,plane in enumerate(module_borders):
             if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1]:
                 pixel_plane = ip
                 break
-        
-        track[i.pixel_plane] = ip
-        z_anode = module_borders[ip][2][0] 
+
+        track[i.pixel_plane] = pixel_plane
+        z_anode = module_borders[pixel_plane][2][0]
 
         drift_distance = fabs(track[i.z] - z_anode)
         drift_start = fabs(min(track[i.z_start],track[i.z_end]) - z_anode)
@@ -66,5 +66,5 @@ def drift(tracks):
         track[i.long_diff] = sqrt(drift_time*2*long_diff)
         track[i.tran_diff] = sqrt(drift_time*2*tran_diff)
         track[i.t] += drift_time
-        track[i.t_start] += drift_start / vdrift 
-        track[i.t_end] += drift_end / vdrift 
+        track[i.t_start] += drift_start / vdrift
+        track[i.t_end] += drift_end / vdrift

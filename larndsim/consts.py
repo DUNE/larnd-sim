@@ -65,7 +65,7 @@ tpc_centers = np.array([
 ])
 
 # Swap z->x
-tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]] 
+tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
 tpc_centers *= mm2cm
 
 ## Pixel params
@@ -79,23 +79,23 @@ def load_pixel_geometry(filename):
     global n_pixels
     global xs
     global ys
-    
+
     with open(filename, 'r') as f:
         board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
         xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
         ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
-        
+
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs)), len(np.unique(ys))
     x_pixel_size = (max(xs)-min(xs)) / (n_pixels[0] - 1)
     y_pixel_size = (max(ys)-min(ys)) / (n_pixels[1] - 1)
-    
+
     #: Size of pixels per axis in :math:`cm`
     pixel_size = np.array([x_pixel_size, y_pixel_size])
 
     pixel_connection_dict = {}
     chipids = list(board.chips.keys())
-    
+
     for chip in chipids:
         for channel, pixel in enumerate(board.chips[chip].channel_connections):
             if pixel.x !=0 and pixel.y != 0:
@@ -106,12 +106,12 @@ def load_pixel_geometry(filename):
                             [min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2],
                             [-15, 15]])
     tpc_size = np.array([tpc_borders[0][1]-tpc_borders[0][0],tpc_borders[1][1]-tpc_borders[1][0],tpc_borders[2][1]-tpc_borders[2][0]])
-    
+
     module_borders = []
     for tpc_center in tpc_centers:
         module_borders.append((tpc_borders.T+tpc_center).T)
 
-load_pixel_geometry(sys.path[0]+"/examples/pixel_geometry.yaml")
+load_pixel_geometry(sys.path[0]+"/examples/layout-2.5.0.yaml")
 
 ## Quenching parameters
 box = 1
@@ -120,9 +120,8 @@ birks = 2
 def get_pixel_coordinates(pixel_id):
     plane_id = pixel_id[0] // n_pixels[0]
     this_border = module_borders[plane_id]
-    
+
     pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
     pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
-    
+
     return pix_x, pix_y
-           
