@@ -40,4 +40,4 @@ jobs:
       - name: Run tests
         run: |
           export NUMBA_ENABLE_CUDASIM=1,
-          ls tests
+          pytest tests/testDrifting.py
