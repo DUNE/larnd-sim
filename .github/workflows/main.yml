@@ -20,14 +20,14 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
+    - name: Install GCC
+      run: gcc -v
     - uses: actions/checkout@v2
     - name: Set up Python 3.8
       uses: actions/setup-python@v2
       with:
         # Semantic version range syntax or exact version of a Python version
         python-version: '3.8'
-    - name: Install GCC
-      run: sudo apt-get install build-essential
     - uses: ammaraskar/sphinx-action@master
       with:
         docs-folder: "docs/"
