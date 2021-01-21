@@ -1,4 +1,5 @@
-# larnd-sim [![Build Status](https://travis-ci.com/soleti/larnd-sim.svg?token=ySJqJBz9YiZ99571Y3et&branch=master)](https://travis-ci.com/soleti/larnd-sim)
+# larnd-sim ![CI status](https://github.com/DUNE/larnd-sim/workflows/CI/badge.svg)
+
 
 <img alt="larnd-sim" src="docs/logo.png" height="160">
 
