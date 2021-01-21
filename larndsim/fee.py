@@ -67,7 +67,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-                p.chip_id = chip
+                p.chip_key = chip
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1

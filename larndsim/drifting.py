@@ -5,7 +5,7 @@ electrons towards the anode.
 
 from math import fabs, exp, sqrt
 from numba import cuda
-from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime
+from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime, module_borders
 from . import indeces as i
 
 import logging
@@ -38,11 +38,20 @@ def drift(tracks):
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
     """
-    z_anode = tpc_borders[2][0] 
-
     itrk = cuda.grid(1)
+    
     if itrk < tracks.shape[0]:
+        pixel_plane = 0
+        
         track = tracks[itrk]
+        
+        for ip,plane in enumerate(module_borders):
+            if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1]:
+                pixel_plane = ip
+                break
+        
+        track[i.pixel_plane] = ip
+        z_anode = module_borders[ip][2][0] 
 
         drift_distance = fabs(track[i.z] - z_anode)
         drift_start = fabs(min(track[i.z_start],track[i.z_end]) - z_anode)
