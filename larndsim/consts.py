@@ -5,6 +5,7 @@ import numpy as np
 import larpixgeometry.pixelplane
 import yaml
 import os, sys
+from numba import cuda
 
 ## Detector constants
 #: Liquid argon density in :math:`g/cm^3`
@@ -33,11 +34,11 @@ vdrift = 0.153812 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
-t_sampling = 0.1 # us
+t_sampling = 0.05 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 4
+time_padding = 5
 #: Number of sampled points for each segment slice
 sampled_points = 15
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
@@ -110,18 +111,10 @@ def load_pixel_geometry(filename):
     module_borders = []
     for tpc_center in tpc_centers:
         module_borders.append((tpc_borders.T+tpc_center).T)
+    module_borders = np.array(module_borders)
 
 load_pixel_geometry(sys.path[0]+"/examples/layout-2.5.0.yaml")
 
 ## Quenching parameters
 box = 1
 birks = 2
-
-def get_pixel_coordinates(pixel_id):
-    plane_id = pixel_id[0] // n_pixels[0]
-    this_border = module_borders[plane_id]
-
-    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
-    pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
-
-    return pix_x, pix_y

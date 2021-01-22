@@ -9,8 +9,8 @@ import numba as nb
 import numpy as np
 
 from numba import cuda
-from .consts import tpc_borders, vdrift, pixel_size, time_padding
-from .consts import t_sampling, sampled_points, e_charge, time_interval
+from .consts import tpc_borders, vdrift, pixel_size, time_padding, module_borders
+from .consts import t_sampling, sampled_points, e_charge, time_interval, n_pixels
 from . import indeces as i
 
 import logging
@@ -238,6 +238,18 @@ def track_point(start, direction, z):
 
     return xl, yl
 
+
+@cuda.jit(device=True)
+def get_pixel_coordinates(pixel_id):
+    plane_id = pixel_id[0] // n_pixels[0]
+    this_border = module_borders[plane_id]
+
+    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
+    pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
+
+    return pix_x, pix_y
+
+
 @cuda.jit
 def tracks_current(signals, pixels, tracks):
     """
@@ -259,8 +271,7 @@ def tracks_current(signals, pixels, tracks):
         if pID[0] >= 0 and pID[1] >= 0:
 
             # Pixel coordinates
-            x_p = pID[0] * pixel_size[0] + tpc_borders[0][0] + pixel_size[0] / 2
-            y_p = pID[1] * pixel_size[1] + tpc_borders[1][0] + pixel_size[1] / 2
+            x_p, y_p = get_pixel_coordinates(pID)
             this_pixel_point = (x_p, y_p)
 
             if t[i.z_start] < t[i.z_end]:
@@ -270,6 +281,7 @@ def tracks_current(signals, pixels, tracks):
                 end = (t[i.x_start], t[i.y_start], t[i.z_start]+0.2)
                 start = (t[i.x_end], t[i.y_end], t[i.z_end]-0.2)
                 
+
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
 
@@ -278,8 +290,8 @@ def tracks_current(signals, pixels, tracks):
             impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
-                
+            if it == 0:
+                print(start[0],start[1],start[2],z_start,z_end)
             if z_start != 0 and z_end != 0:
                 z_start = max(start[2]-3*sigmas[2], z_start)
                 z_end = min(end[2]+3*sigmas[2], z_end)
@@ -300,8 +312,8 @@ def tracks_current(signals, pixels, tracks):
                     z = z_start + iz*z_step
 
                     time_tick = t_start + it*t_sampling
-                    t0 = (z - tpc_borders[2][0]) / vdrift
-                    
+                    t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / vdrift
+
                     # FIXME: this sampling is far from ideal, we should sample around the track 
                     # and not in a cube containing the track
                     for ix in range(sampled_points):
@@ -315,10 +327,10 @@ def tracks_current(signals, pixels, tracks):
                             y_dist = abs(y_p - y)
                             
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
                                 signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * e_charge
 
+                
 @cuda.jit(device=True)
 def sign(x):
     return 1 if x >= 0 else -1
