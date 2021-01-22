@@ -18,18 +18,18 @@ from larndsim import indeces as i
 from math import ceil
 
 class TestDrifting:
-    tracks = np.zeros((1, 29))
-    tracks[:, i.z] = np.random.uniform(-15, 15, 1)
-    tracks[:, i.n_electrons] = np.random.uniform(1e6, 1e7, 1)
+    tracks = np.zeros((10, 29))
+    tracks[:, i.z] = np.random.uniform(-15, 15, 10)
+    tracks[:, i.n_electrons] = np.random.uniform(1e6, 1e7, 10)
 
     def test_lifetime(self):
 
-        pixel_plane = 0
+        pixel_plane = -1
         for itrk in range(self.tracks.shape[0]):
             track = self.tracks[itrk]
 
             for ip,plane in enumerate(consts.module_borders):
-                if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1]:
+                if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1] and plane[2][0] < track[i.z] < plane[2][1]:
                     pixel_plane = ip
                     break
 
