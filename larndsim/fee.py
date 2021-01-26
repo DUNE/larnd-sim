@@ -10,7 +10,7 @@ from larpix.packet import Packet_v2, TimestampPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
-from . import consts
+from . import consts, detsim
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -46,24 +46,32 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
     Returns:
         list: list of LArPix packets
     """
-    pc = []
-    pc.append(TimestampPacket())
+
+    packets = {}
+    for ic in range(len(consts.tpc_centers)):
+        packets[ic] = []
+
     for itick, adcs in enumerate(tqdm(adc_list,desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
-        pix_x, pix_y = consts.get_pixel_coordinates(pixel_id)
+        plane_id = pixel_id[0] // consts.n_pixels[0]
+        pix_x, pix_y = detsim.get_pixel_coordinates_cpu(pixel_id)
+        pix_x -= consts.tpc_centers[int(plane_id)][0]
+        pix_y -= consts.tpc_centers[int(plane_id)][1]
         pix_x *= 10
         pix_y *= 10
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc] 
+            
             if adc > digitize(0):
                 p = Packet_v2()
 
                 try:
                     channel, chip = consts.pixel_connection_dict[(round(pix_x/consts.pixel_size[0]),round(pix_y/consts.pixel_size[1]))]
-                except IndexError:
+                except KeyError:
                     print("Pixel coordinates not valid", pix_x, pix_y, pixel_id, adc)
+                    continue
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
@@ -71,16 +79,27 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1
-
                 p.assign_parity()
-                pc.append(p)
+                
+                if not packets[ic]:
+                    packets[ic].append(TimestampPacket())
+                    
+                packets[ic].append(p)
             else:
                 break
 
-    packet_list = PacketCollection(pc, read_id=0, message='')
-    hdf5format.to_file(filename, packet_list)
+    for ipc in packets:
+        packet_list = PacketCollection(packets[ipc], read_id=0, message='')
+        
+        if "." in filename:
+            pre_extension, post_extension = filename.rsplit('.', 1)
+            filename_ext = "%s-%i.%s" % (pre_extension, ipc, post_extension)
+        else:
+            filename_ext = "%s-%i" % (filename, ipc)
+            
+        hdf5format.to_file(filename_ext, packet_list)
 
-    return packet_list
+    return packets
 
 def digitize(integral_list):
     """
@@ -123,15 +142,15 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
         iadc = 0
         
         while ic < curre.shape[0]:
-                
+
             q = curre[ic]*consts.t_sampling
             
             if ic == 0:
-                q += xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
+                q += 0#xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
                 
             q_sum += q
 #             adc += q_sum
-            
+#             print(q_sum)
             if q_sum >= DISCRIMINATION_THRESHOLD:
                 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
@@ -152,7 +171,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
-                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
+                q_sum = 0#xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
                 iadc += 1
 
             adc = 0
