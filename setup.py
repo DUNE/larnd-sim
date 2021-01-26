@@ -2,7 +2,7 @@
 
 import setuptools
 
-VER = "0.0.1"
+VER = "0.1.0"
 
 setuptools.setup(
     name="larndsim",
@@ -10,9 +10,9 @@ setuptools.setup(
     author="DUNE collaboration",
     author_email="roberto@lbl.gov",
     description="Simulation framework for the DUNE LArND",
-    url="https://github.com/soleti/larnd-sim",
+    url="https://github.com/DUNE/larnd-sim",
     packages=setuptools.find_packages(),
-    install_requires=["numpy", "pandas", "scipy", "pytest", "numba", "larpix-control", "larpix-geometry"],
+    install_requires=["numpy", "pytest", "numba", "larpix-control", "larpix-geometry", "tqdm"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: by End-User Class :: Developers",
