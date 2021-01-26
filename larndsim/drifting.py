@@ -5,23 +5,15 @@ electrons towards the anode.
 
 from math import fabs, exp, sqrt
 from numba import cuda
-from .consts import long_diff, tran_diff, vdrift, tpc_borders, lifetime, module_borders
+from . import consts
 from . import indeces as i
+from .consts import module_borders
 
 import logging
 logging.basicConfig()
 logger = logging.getLogger('drifting')
 logger.setLevel(logging.WARNING)
 logger.info("DRIFTING MODULE PARAMETERS")
-logger.info("""Drift velocity: {vdrift} us/cm
-Longitudinal diffusion coefficient: {long_diff} cm^2 / us,
-Transverse diffusion coefficient: {tran_diff} cm
-Electron lifetime: {lifetime} us
-TPC borders:
-({tpc_borders[0][0]} cm, {tpc_borders[0][1]} cm) x,
-({tpc_borders[1][0]} cm, {tpc_borders[1][1]} cm) y,
-({tpc_borders[2][0]} cm, {tpc_borders[2][1]} cm) z
-""")
 
 @cuda.jit
 def drift(tracks):
@@ -45,11 +37,11 @@ def drift(tracks):
 
         track = tracks[itrk]
 
-        for ip,plane in enumerate(module_borders):
+        for ip, plane in enumerate(module_borders):
             if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1] and plane[2][0] < track[i.z] < plane[2][1]:
                 pixel_plane = ip
                 break
-
+                
         track[i.pixel_plane] = pixel_plane
         z_anode = module_borders[pixel_plane][2][0]
 
@@ -57,14 +49,14 @@ def drift(tracks):
         drift_start = fabs(min(track[i.z_start],track[i.z_end]) - z_anode)
         drift_end = fabs(max(track[i.z_start],track[i.z_end]) - z_anode)
 
-        drift_time = drift_distance / vdrift
+        drift_time = drift_distance / consts.vdrift
         track[i.z] = z_anode
 
-        lifetime_red = exp(-drift_time / lifetime)
+        lifetime_red = exp(-drift_time / consts.lifetime)
         track[i.n_electrons] *= lifetime_red
 
-        track[i.long_diff] = sqrt(drift_time*2*long_diff)
-        track[i.tran_diff] = sqrt(drift_time*2*tran_diff)
+        track[i.long_diff] = sqrt(drift_time * 2 * consts.long_diff)
+        track[i.tran_diff] = sqrt(drift_time * 2 * consts.tran_diff)
         track[i.t] += drift_time
-        track[i.t_start] += drift_start / vdrift
-        track[i.t_end] += drift_end / vdrift
+        track[i.t_start] += drift_start / consts.vdrift
+        track[i.t_end] += drift_end / consts.vdrift
