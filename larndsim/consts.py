@@ -1,6 +1,7 @@
 """
 Module containing constants needed by the simulation
 """
+
 import numpy as np
 import larpixgeometry.pixelplane
 import yaml
@@ -49,6 +50,9 @@ tran_diff = 8.8e-6 # cm * cm / us
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
                          int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
+## Quenching parameters
+box = 1
+birks = 2
 
 mm2cm = 0.1
 
@@ -111,10 +115,5 @@ def load_pixel_geometry(filename):
     module_borders = []
     for tpc_center in tpc_centers:
         module_borders.append((tpc_borders.T+tpc_center).T)
+        
     module_borders = np.array(module_borders)
-
-load_pixel_geometry(sys.path[0]+"/examples/layout-2.5.0.yaml")
-
-## Quenching parameters
-box = 1
-birks = 2

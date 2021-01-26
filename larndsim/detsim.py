@@ -3,34 +3,21 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, cos, sin, acos, floor, log
+from math import pi, ceil, sqrt, erf, exp, log
 
 import numba as nb
 import numpy as np
 
 from numba import cuda
-from .consts import tpc_borders, vdrift, pixel_size, time_padding, module_borders
-from .consts import t_sampling, sampled_points, e_charge, time_interval, n_pixels
+from .consts import pixel_size, module_borders, time_interval, n_pixels
 from . import indeces as i
+from . import consts
 
 import logging
 logging.basicConfig()
 logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
-logger.info("""TPC parameters
-Drift velocity: {vdrift} us/cm
-Time sampling: {t_sampling} us
-Time padding: {time_padding} us
-TPC borders:
-({tpc_borders[0][0]} cm, {tpc_borders[0][1]} cm) x,
-({tpc_borders[1][0]} cm, {tpc_borders[1][1]} cm) y,
-({tpc_borders[2][0]} cm, {tpc_borders[2][1]} cm) z
-Sampled points per slice: {sampled_points}""")
-
-logger.info("""Pixel parameters
-Pixel size: ({pixel_size[0]} x {pixel_size[1]}) cm^2
-""")
 
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
@@ -43,6 +30,8 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
             we store the segments start time
         time_max (:obj:`numpy.ndarray`): array where we store
             the longest signal time
+        event_id_map (:obj:`numpy.ndarray`): array containing
+            the event ID corresponding to each track
         tracks (:obj:`numpy.ndarray`): array containing the segment
             information
     """
@@ -50,11 +39,11 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1],(track[i.t_end] + time_padding) // t_sampling * t_sampling)
-        t_start = max(time_interval[0],(track[i.t_start] - time_padding) // t_sampling * t_sampling)
+        t_end = min(time_interval[1], (track[i.t_end] + consts.time_padding) // consts.t_sampling * consts.t_sampling)
+        t_start = max(time_interval[0], (track[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
-        cuda.atomic.max(time_max, 0, ceil(t_length / t_sampling))
+        cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
 @cuda.jit(device=True)
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
@@ -217,7 +206,7 @@ def current_model(t, t0, x, y):
 
     a = min(a, 1)
 
-    return a*truncexpon(-t, -shifted_t0, b) + (1-a)*truncexpon(-t, -shifted_t0, c)
+    return a * truncexpon(-t, -shifted_t0, b) + (1-a) * truncexpon(-t, -shifted_t0, c)
  
 @cuda.jit(device=True)
 def track_point(start, direction, z):
@@ -238,9 +227,11 @@ def track_point(start, direction, z):
 
     return xl, yl
 
-
-@cuda.jit(device=True)
+@nb.njit
 def get_pixel_coordinates(pixel_id):
+    """
+    Returns the coordinates of the pixel center given the pixel ID
+    """
     plane_id = pixel_id[0] // n_pixels[0]
     this_border = module_borders[plane_id]
 
@@ -248,7 +239,6 @@ def get_pixel_coordinates(pixel_id):
     pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
 
     return pix_x, pix_y
-
 
 @cuda.jit
 def tracks_current(signals, pixels, tracks):
@@ -262,8 +252,10 @@ def tracks_current(signals, pixels, tracks):
         pixels (:obj:`numpy.ndarray`): 3D array with dimensions S x P x 2, where S is
             the number of track segments, P is the number of pixels and the third dimension
             contains the two pixel ID numbers.
+        tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
     """
     itrk, ipix, it = cuda.grid(3)
+    
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
@@ -290,8 +282,7 @@ def tracks_current(signals, pixels, tracks):
             impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-            if it == 0:
-                print(start[0],start[1],start[2],z_start,z_end)
+
             if z_start != 0 and z_end != 0:
                 z_start = max(start[2]-3*sigmas[2], z_start)
                 z_end = min(end[2]+3*sigmas[2], z_end)
@@ -299,59 +290,43 @@ def tracks_current(signals, pixels, tracks):
                 x_start, y_start = track_point(start, direction, z_start)
                 x_end, y_end = track_point(start, direction, z_end)
 
-                y_step = (abs(y_end-y_start) + 6*sigmas[1]) / (sampled_points - 1)
-                x_step = (abs(x_end-x_start) + 6*sigmas[0]) / (sampled_points - 1)
+                y_step = (abs(y_end-y_start) + 6*sigmas[1]) / (consts.sampled_points - 1)
+                x_step = (abs(x_end-x_start) + 6*sigmas[0]) / (consts.sampled_points - 1)
 
-                z_sampling = t_sampling / 2.
-                z_steps = max(sampled_points, ceil(abs(z_end-z_start) / z_sampling))
+                z_sampling = consts.t_sampling / 2.
+                z_steps = max(consts.sampled_points, ceil(abs(z_end-z_start) / z_sampling))
 
                 z_step = (z_end-z_start) / (z_steps-1)
-                t_start =  max(time_interval[0],(t[i.t_start] - time_padding) // t_sampling * t_sampling)
+                t_start =  max(time_interval[0],(t[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
                 
                 for iz in range(z_steps):
                     z = z_start + iz*z_step
 
-                    time_tick = t_start + it*t_sampling
-                    t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / vdrift
+                    time_tick = t_start + it*consts.t_sampling
+                    t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track 
                     # and not in a cube containing the track
-                    for ix in range(sampled_points):
+                    for ix in range(consts.sampled_points):
                         
                         x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
                         x_dist = abs(x_p - x)
                         
-                        for iy in range(sampled_points):
+                        for iy in range(consts.sampled_points):
                             
                             y = y_start + iy*sign(direction[1])*y_step - 3*sign(direction[1])*sigmas[1]
                             y_dist = abs(y_p - y)
                             
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
-                                signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * e_charge
-
+                                signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
                 
 @cuda.jit(device=True)
 def sign(x):
+    """
+    Sign function
+    """
     return 1 if x >= 0 else -1
-    
-@nb.jit(forceobj=True)
-def pixel_from_coordinates(x, y, n_pixels):
-    """
-    This function returns the ID of the pixel that covers the specified point
-
-    Args:
-        x (float): x coordinate
-        y (float): y coordinate
-        n_pixels (int): number of pixels for each axis
-
-    Returns:
-        tuple: the pixel ID
-    """
-
-    x_pixel = np.linspace(tpc_borders[0][0], tpc_borders[0][1], n_pixels[0])
-    y_pixel = np.linspace(tpc_borders[1][0], tpc_borders[1][1], n_pixels[1])
-    return np.digitize(x, x_pixel)-1, np.digitize(y, y_pixel)-1
 
 @cuda.jit
 def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
@@ -374,7 +349,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
 
     if it < signals.shape[0] and ipix < signals.shape[1]:
         index = index_map[it][ipix]
-        start_tick = track_starts[it] // t_sampling
+        start_tick = track_starts[it] // consts.t_sampling
         if itick < signals.shape[2] and index >= 0:
             itime = int(start_tick+itick)
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])

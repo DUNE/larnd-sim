@@ -14,16 +14,6 @@ logging.basicConfig()
 logger = logging.getLogger('quenching')
 logger.setLevel(logging.WARNING)
 logger.info("QUENCHING MODULE PARAMETERS")
-logger.info("""TPC parameters
-Electric field magnitude: %g kV/cm
-Liquid argon density: %g g/cm^3
-Box alpha parameter: %g
-Box beta parameter: %g cm/MeV
-Birks A_b parameter: %g
-Birks k_b parameter: %g g/cm^2/MeV
-""" % (consts.eField, consts.lArDensity,
-       consts.alpha, consts.beta,
-       consts.Ab, consts.kb))
 
 @cuda.jit
 def quench(tracks, mode):
