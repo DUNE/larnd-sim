@@ -117,3 +117,5 @@ def load_pixel_geometry(filename):
         module_borders.append((tpc_borders.T+tpc_center).T)
         
     module_borders = np.array(module_borders)
+
+load_pixel_geometry(os.path.join(sys.path[0],"examples/layout-2.5.0.yaml"))
