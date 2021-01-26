@@ -13,12 +13,6 @@ logging.basicConfig()
 logger = logging.getLogger('pixels_from_track')
 logger.setLevel(logging.WARNING)
 logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
-logger.info("""TPC parameters
-TPC borders: (%g cm, %g cm) x, (%g cm, %g cm) y, (%g cm, %g cm) z
-""" % (*tpc_borders[0], *tpc_borders[1], *tpc_borders[2]))
-logger.info("""Pixel parameters
-Pixel size: (%g x %g) cm^2
-""" % (pixel_size[0], pixel_size[1]))
 
 @cuda.jit
 def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
@@ -37,6 +31,8 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
             the segments and the ones next to them
         n_pixels_list (:obj:`numpy.ndarray`): number of total involved
             pixels
+        radius (int): number of pixels around the active pixels that
+            we are considering
     """
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
@@ -44,7 +40,7 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
         this_border = module_borders[int(t[i.pixel_plane])]
         start_pixel = (int((t[i.x_start] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t[i.pixel_plane]),
                        int((t[i.y_start] - this_border[1][0]) // pixel_size[1]))
-        end_pixel = (int((t[i.x_end]  - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t[i.pixel_plane]),
+        end_pixel = (int((t[i.x_end] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t[i.pixel_plane]),
                      int((t[i.y_end] - this_border[1][0]) // pixel_size[1]))
 
         get_active_pixels(start_pixel[0], start_pixel[1],
@@ -66,14 +62,13 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
         y0 (float): start `y` coordinate
         x1 (float): end `x` coordinate
         y1 (float): end `y` coordinate
-        active_pixels (:obj:`numpy.ndarray`): array where we store
+        tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of 
             the segments
     """
 
     dx = x1 - x0
     dy = y1 - y0
-
     xsign = 1 if dx > 0 else -1
     ysign = 1 if dy > 0 else -1
 
@@ -92,7 +87,8 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
     for x in range(dx + 1):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
-        if 0 <= x_id < n_pixels[0]*tpc_centers.shape[0] and 0 <= y_id < n_pixels[1]*tpc_centers.shape[0]:
+        plane_id = x_id // n_pixels[0]
+        if 0 <= x_id < n_pixels[0]*(plane_id+1) and 0 <= y_id < n_pixels[1]:
             tot_pixels[x] = x_id, y_id
         if D >= 0:
             y += 1
@@ -136,7 +132,8 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         is_unique = False
                         break
                 
-                if is_unique and 0 <= new_pixel[0] < n_pixels[0]*tpc_centers.shape[0] and 0 <= new_pixel[1] < n_pixels[1]*tpc_centers.shape[0]:
+                plane_id = new_pixel[0] // n_pixels[0] 
+                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
                     
