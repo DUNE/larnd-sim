@@ -30,8 +30,8 @@ from larndsim import quenching, drifting
 
 threadsperblock = 256
 blockspergrid = ceil(tracks.shape[0] / threadsperblock)
-quenching.quench[blockspergrid,threadsperblock](tracks, consts.box)
-drifting.drift[blockspergrid,threadsperblock](tracks)
+quenching.quench[blockspergrid,threadsperblock](segments, consts.box)
+drifting.drift[blockspergrid,threadsperblock](segments)
 ```
 
 ### Pixel simulation stage
@@ -42,10 +42,11 @@ First, we find the pixels interesected by the projection of each track segment o
 ```python
 from larndsim import pixels_from_track
 ...
-pixels_from_track.get_pixels[blockspergrid,threadsperblock](segments,
-                                                            active_pixels,
-                                                            neighboring_pixels,
-                                                            n_pixels_list)
+pixels_from_track.get_pixels[blockspergrid,threadsperblock](segments, 
+                                                            active_pixels, 
+                                                            neighboring_pixels, 
+                                                            n_pixels_list,
+                                                            radius)
 ```
 
 Finally, we calculate the current induced on each pixel using the `tracks_current` function in the `detsim` module. The induced current is stored in the `signals` array, which is a three-dimensional array, where the dimensions correspond to the track segment, the pixel, and the time tick, respectively: `signals[0][1][2]` will contain the current induced by the track `0`, for the pixel `1`, at the time tick `2`.
@@ -54,8 +55,8 @@ Finally, we calculate the current induced on each pixel using the `tracks_curren
 from larndsim import detsim
 ...
 detsim.tracks_current[blockspergrid,threadsperblock](signals,
-                                                      neighboring_pixels,
-                                                      segments)
+                                                     neighboring_pixels,
+                                                     segments)
 ```
 
 ### Accessing the signals
@@ -65,20 +66,43 @@ The three-dimensional array can contain more than one signal for each pixel at d
 ```python
 from larndsim import detsim
 ...
-max_length = np.array([0])
-track_starts = np.empty(segments.shape[0])
 detsim.time_intervals[blockspergrid,threadsperblock](track_starts,
-                                                      max_length,
-                                                      segments)
+                                                     max_length,
+                                                     event_id_map,
+                                                     segments)
 ```
 
-Thus, we join them using `join_pixel_signals`:
+Thus, we join them using `sum_pixel_signals`:
 
 ```python
 from larndsim import detsim
 ...
-joined_pixels = detsim.join_pixel_signals(signals,
-                                          neighboring_pixels,
-                                          track_starts,
-                                          max_length[0])
+detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals, 
+                                                        signals, 
+                                                        track_starts, 
+                                                        pixel_index_map)
+```
+
+### Electronics simulation
+
+Once we have the induced current for each active pixel in the detector we can apply our electronics simulation, which will calculate the ADC values for each pixel:
+
+```python
+from larndsim import fee
+from numba.cuda.random import create_xoroshiro128p_states
+...
+
+rng_states = create_xoroshiro128p_states(TPB * BPG, seed=0)
+fee.get_adc_values[BPG,TPB](pixels_signals, 
+                            time_ticks, 
+                            integral_list, 
+                            adc_ticks_list,
+                            0,
+                            rng_states)
+```
+
+where the random states `rng_states` are neede for the noise simulation.
+The final output can be exported to the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html):
+```python
+fee.export_to_hdf5(adc_list, adc_ticks_list, unique_pix, "example.h5")
 ```
