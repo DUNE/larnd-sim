@@ -4,6 +4,7 @@ import random
 import numpy as np
 import pytest
 from math import sqrt, pi
+
 import os, sys, inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -18,9 +19,9 @@ class TestTrackCharge:
     sigmas = np.array([random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)])
 
     def test_rho(self):
-        xx = np.linspace(-10, 10, 20)
-        yy = np.linspace(-10, 10, 20)
-        zz = np.linspace(-10, 10, 20)
+        xx = np.linspace(-5, 5, 20)
+        yy = np.linspace(-5, 5, 20)
+        zz = np.linspace(-5, 5, 20)
 
         weights = np.empty(len(xx)*len(yy)*len(zz))
         segment = self.end-self.start
