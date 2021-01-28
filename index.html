@@ -171,9 +171,119 @@ electrons towards the anode.</p>
 <p>Module that calculates the current induced by edep-sim track segments
 on the pixels</p>
 <dl class="attribute">
+<dt id="larndsim.detsim.current_model">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">current_model</code><a class="headerlink" href="#larndsim.detsim.current_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parametrization of the induced current on the pixel, which depends
+on the of arrival at the anode (<span class="math notranslate nohighlight">\(t_0\)</span>) and on the position
+on the pixel pad.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>t</strong> (<em>float</em>) – time where we evaluate the current</p></li>
+<li><p><strong>t0</strong> (<em>float</em>) – time of arrival at the anode</p></li>
+<li><p><strong>x</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
+on the <span class="math notranslate nohighlight">\(x\)</span> axis</p></li>
+<li><p><strong>y</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
+on the <span class="math notranslate nohighlight">\(y\)</span> axis</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the induced current at time <span class="math notranslate nohighlight">\(t\)</span></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
 <dt id="larndsim.detsim.get_pixel_coordinates">
 <code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">get_pixel_coordinates</code><a class="headerlink" href="#larndsim.detsim.get_pixel_coordinates" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the coordinates of the pixel center given the pixel ID</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="larndsim.detsim.rho">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">rho</code><a class="headerlink" href="#larndsim.detsim.rho" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function that returns the amount of charge at a certain point in space</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>point</strong> (<em>tuple</em>) – point coordinates</p></li>
+<li><p><strong>q</strong> (<em>float</em>) – total charge</p></li>
+<li><p><strong>start</strong> (<em>tuple</em>) – segment start coordinates</p></li>
+<li><p><strong>sigmas</strong> (<em>tuple</em>) – diffusion coefficients</p></li>
+<li><p><strong>segment</strong> (<em>tuple</em>) – segment sizes</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the amount of charge at <cite>point</cite>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="larndsim.detsim.sign">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">sign</code><a class="headerlink" href="#larndsim.detsim.sign" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sign function</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="larndsim.detsim.track_point">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">track_point</code><a class="headerlink" href="#larndsim.detsim.track_point" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function returns the segment coordinates for a point along the <cite>z</cite> coordinate</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start</strong> (<em>tuple</em>) – start coordinates</p></li>
+<li><p><strong>direction</strong> (<em>tuple</em>) – direction coordinates</p></li>
+<li><p><strong>z</strong> (<em>float</em>) – <cite>z</cite> coordinate corresponding to the <cite>x</cite>, <cite>y</cite> coordinates</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the (x,y) pair of coordinates for the segment at <cite>z</cite></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="larndsim.detsim.truncexpon">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">truncexpon</code><a class="headerlink" href="#larndsim.detsim.truncexpon" title="Permalink to this definition">¶</a></dt>
+<dd><p>A truncated exponential distribution.
+To shift and/or scale the distribution use the <cite>loc</cite> and <cite>scale</cite> parameters.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="larndsim.detsim.z_interval">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">z_interval</code><a class="headerlink" href="#larndsim.detsim.z_interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>Here we calculate the interval in the drift direction for the pixel pID
+using the impact factor</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start_point</strong> (<em>tuple</em>) – coordinates of the segment start</p></li>
+<li><p><strong>end_point</strong> (<em>tuple</em>) – coordinates of the segment end</p></li>
+<li><p><strong>x_p</strong> (<em>float</em>) – pixel center <cite>x</cite> coordinate</p></li>
+<li><p><strong>y_p</strong> (<em>float</em>) – pixel center <cite>y</cite> coordinate</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em>) – maximum distance between the pixel center and
+the segment</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><cite>z</cite> coordinate of the point of closest approach (POCA),
+<cite>z</cite> coordinate of the first slice, <cite>z</cite> coordinate of the last slice.
+(0,0,0) if POCA &gt; tolerance.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
 </dd></dl>
 
 </div>
