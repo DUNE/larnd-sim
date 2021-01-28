@@ -81,3 +81,4 @@ jobs:
           export NUMBA_ENABLE_CUDASIM=1
           pytest tests/testDrifting.py
           pytest tests/testQuenching.py
+          pytest tests/testTrackCharge.py
