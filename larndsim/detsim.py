@@ -45,7 +45,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
-@cuda.jit(device=True)
+@nb.njit
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """
     Here we calculate the interval in the drift direction for the pixel pID
@@ -116,13 +116,13 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
     else:
         return 0, 0, 0
 
-@cuda.jit(device=True)
+@nb.njit
 def _b(x, y, z, start, sigmas, segment, Deltar):
     return -((x-start[0]) / (sigmas[0]*sigmas[0]) * (segment[0]/Deltar) + \
              (y-start[1]) / (sigmas[1]*sigmas[1]) * (segment[1]/Deltar) + \
              (z-start[2]) / (sigmas[2]*sigmas[2]) * (segment[2]/Deltar))
 
-@cuda.jit(device=True)
+@nb.njit
 def rho(point, q, start, sigmas, segment):
     """
     Function that returns the amount of charge at a certain point in space
@@ -163,7 +163,7 @@ def rho(point, q, start, sigmas, segment):
 
     return expo 
 
-@cuda.jit(device=True)
+@nb.njit
 def truncexpon(x, loc=0, scale=1):
     """
     A truncated exponential distribution.
@@ -175,7 +175,7 @@ def truncexpon(x, loc=0, scale=1):
     else:
         return 0
 
-@cuda.jit(device=True)
+@nb.njit
 def current_model(t, t0, x, y):
     """
     Parametrization of the induced current on the pixel, which depends
@@ -208,7 +208,7 @@ def current_model(t, t0, x, y):
 
     return a * truncexpon(-t, -shifted_t0, b) + (1-a) * truncexpon(-t, -shifted_t0, c)
  
-@cuda.jit(device=True)
+@nb.njit
 def track_point(start, direction, z):
     """
     This function returns the segment coordinates for a point along the `z` coordinate
@@ -239,6 +239,72 @@ def get_pixel_coordinates(pixel_id):
     pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
 
     return pix_x, pix_y
+
+@nb.njit(parallel=True)
+def tracks_current_cpu(signals, pixels, tracks):
+    for itrk in nb.prange(signals.shape[0]):
+        t = tracks[itrk]
+        for ipix in nb.prange(signals.shape[1]):
+            pID = pixels[itrk][ipix]
+            for it in nb.prange(signals.shape[2]):
+                if pID[0] >= 0 and pID[1] >= 0:
+                    x_p, y_p = get_pixel_coordinates(pID)
+                    this_pixel_point = (x_p, y_p)
+
+                    if t[i.z_start] < t[i.z_end]:
+                        start = (t[i.x_start], t[i.y_start], t[i.z_start]-0.2)
+                        end = (t[i.x_end], t[i.y_end], t[i.z_end]+0.2)
+                    else:
+                        end = (t[i.x_start], t[i.y_start], t[i.z_start]+0.2)
+                        start = (t[i.x_end], t[i.y_end], t[i.z_end]-0.2)
+
+
+                    segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
+                    length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
+
+                    direction = (segment[0]/length, segment[1]/length, segment[2]/length)
+                    sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
+                    impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
+
+                    z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
+
+                    if z_start != 0 and z_end != 0:
+                        z_start = max(start[2]-3*sigmas[2], z_start)
+                        z_end = min(end[2]+3*sigmas[2], z_end)
+
+                        x_start, y_start = track_point(start, direction, z_start)
+                        x_end, y_end = track_point(start, direction, z_end)
+
+                        y_step = (abs(y_end-y_start) + 6*sigmas[1]) / (consts.sampled_points - 1)
+                        x_step = (abs(x_end-x_start) + 6*sigmas[0]) / (consts.sampled_points - 1)
+
+                        z_sampling = consts.t_sampling / 2.
+                        z_steps = max(consts.sampled_points, ceil(abs(z_end-z_start) / z_sampling))
+
+                        z_step = (z_end-z_start) / (z_steps-1)
+                        t_start =  max(time_interval[0],(t[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
+
+                        for iz in nb.prange(z_steps):
+                            z = z_start + iz*z_step
+
+                            time_tick = t_start + it*consts.t_sampling
+                            t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / consts.vdrift
+
+                            # FIXME: this sampling is far from ideal, we should sample around the track 
+                            # and not in a cube containing the track
+                            for ix in nb.prange(consts.sampled_points):
+
+                                x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
+                                x_dist = abs(x_p - x)
+
+                                for iy in nb.prange(consts.sampled_points):
+
+                                    y = y_start + iy*sign(direction[1])*y_step - 3*sign(direction[1])*sigmas[1]
+                                    y_dist = abs(y_p - y)
+
+                                    if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
+                                        charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
+                                        signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
 
 @cuda.jit
 def tracks_current(signals, pixels, tracks):
@@ -321,7 +387,7 @@ def tracks_current(signals, pixels, tracks):
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
                                 signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
                 
-@cuda.jit(device=True)
+@nb.njit
 def sign(x):
     """
     Sign function
