@@ -122,3 +122,4 @@ class TestQuenching:
         recomb =  nelectrons/(de * consts.MeVToElectrons)   
         
         assert recomb > 0 and recomb < 1e-6
+        
