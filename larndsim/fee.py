@@ -1,5 +1,5 @@
 """
-Module that simulates the front-end electronics (triggering, ADC)
+Module that si mulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
@@ -11,6 +11,7 @@ from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
 from . import consts, detsim
+from . import indeces as i
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -140,17 +141,16 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
         q_sum = 0
         adc = 0
         iadc = 0
-        
+
         while ic < curre.shape[0]:
 
             q = curre[ic]*consts.t_sampling
             
             if ic == 0:
-                q += 0#xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
+                q += xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
                 
             q_sum += q
-#             adc += q_sum
-#             print(q_sum)
+
             if q_sum >= DISCRIMINATION_THRESHOLD:
                 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
@@ -171,7 +171,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
-                q_sum = 0#xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge 
                 iadc += 1
 
             adc = 0
