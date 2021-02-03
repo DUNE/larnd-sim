@@ -64,6 +64,7 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         `z` coordinate of the first slice, `z` coordinate of the last slice.
         (0,0,0) if POCA > tolerance.
     """
+
     if start_point[0] > end_point[0]:
         start = end_point
         end = start_point
@@ -267,40 +268,42 @@ def tracks_current(signals, pixels, tracks):
             this_pixel_point = (x_p, y_p)
 
             if t[i.z_start] < t[i.z_end]:
-                start = (t[i.x_start], t[i.y_start], t[i.z_start]-0.2)
-                end = (t[i.x_end], t[i.y_end], t[i.z_end]+0.2)
+                start = (t[i.x_start], t[i.y_start], t[i.z_start])
+                end = (t[i.x_end], t[i.y_end], t[i.z_end])
             else:
-                end = (t[i.x_start], t[i.y_start], t[i.z_start]+0.2)
-                start = (t[i.x_end], t[i.y_end], t[i.z_end]-0.2)
-                
+                end = (t[i.x_start], t[i.y_start], t[i.z_start])
+                start = (t[i.x_end], t[i.y_end], t[i.z_end])
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
-            impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
-
+            
+            # The impact factor is the the size of the transverse diffusion or, if too small, 
+            # half the diagonal of the pixel pad
+            impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)
+            
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
+            
             if z_start != 0 and z_end != 0:
-                z_start = max(start[2]-3*sigmas[2], z_start)
-                z_end = min(end[2]+3*sigmas[2], z_end)
-
+                z_start_int = z_start - 4*sigmas[2]
+                z_end_int = z_end + 4*sigmas[2]
                 x_start, y_start = track_point(start, direction, z_start)
+
                 x_end, y_end = track_point(start, direction, z_end)
 
-                y_step = (abs(y_end-y_start) + 6*sigmas[1]) / (consts.sampled_points - 1)
-                x_step = (abs(x_end-x_start) + 6*sigmas[0]) / (consts.sampled_points - 1)
+                y_step = (abs(y_end-y_start) + 8*sigmas[1]) / (consts.sampled_points - 1)
+                x_step = (abs(x_end-x_start) + 8*sigmas[0]) / (consts.sampled_points - 1)
 
                 z_sampling = consts.t_sampling / 2.
-                z_steps = max(consts.sampled_points, ceil(abs(z_end-z_start) / z_sampling))
+                z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
-                z_step = (z_end-z_start) / (z_steps-1)
+                z_step = (z_end_int-z_start_int) / (z_steps-1)
                 t_start =  max(time_interval[0],(t[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
                 
                 for iz in range(z_steps):
-                    z = z_start + iz*z_step
+                    z = z_start_int + iz*z_step
 
                     time_tick = t_start + it*consts.t_sampling
                     t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / consts.vdrift
@@ -309,17 +312,17 @@ def tracks_current(signals, pixels, tracks):
                     # and not in a cube containing the track
                     for ix in range(consts.sampled_points):
                         
-                        x = x_start + ix*sign(direction[0])*x_step - 3*sign(direction[0])*sigmas[0]
+                        x = x_start + sign(direction[0])*(ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
                         
                         for iy in range(consts.sampled_points):
                             
-                            y = y_start + iy*sign(direction[1])*y_step - 3*sign(direction[1])*sigmas[1]
+                            y = y_start + sign(direction[1])*(iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
                             
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
-                                signals[itrk][ipix][it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+                                cuda.atomic.add(signals, (itrk,ipix,it), current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
                 
 @nb.njit
 def sign(x):
