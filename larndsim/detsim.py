@@ -6,7 +6,6 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log
 
 import numba as nb
-import numpy as np
 
 from numba import cuda
 from .consts import pixel_size, module_borders, time_interval, n_pixels
@@ -156,13 +155,13 @@ def rho(point, q, start, sigmas, segment):
     integral = sqrt(pi) * \
                (-erf(b/sqrt_a_2) + erf((b + 2*a*Deltar)/sqrt_a_2)) / \
                sqrt_a_2
-    
+
     expo = 0
 
     if factor and integral:
         expo = exp(b*b/(4*a) - delta + log(factor) + log(integral))
 
-    return expo 
+    return expo
 
 @nb.njit
 def truncexpon(x, loc=0, scale=1):
@@ -208,7 +207,7 @@ def current_model(t, t0, x, y):
     a = min(a, 1)
 
     return a * truncexpon(-t, -shifted_t0, b) + (1-a) * truncexpon(-t, -shifted_t0, c)
- 
+
 @nb.njit
 def track_point(start, direction, z):
     """
@@ -256,7 +255,7 @@ def tracks_current(signals, pixels, tracks):
         tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
     """
     itrk, ipix, it = cuda.grid(3)
-    
+
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
@@ -265,7 +264,6 @@ def tracks_current(signals, pixels, tracks):
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
-            this_pixel_point = (x_p, y_p)
 
             if t[i.z_start] < t[i.z_end]:
                 start = (t[i.x_start], t[i.y_start], t[i.z_start])
@@ -279,13 +277,13 @@ def tracks_current(signals, pixels, tracks):
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
-            
-            # The impact factor is the the size of the transverse diffusion or, if too small, 
+
+            # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
             impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)
-            
+
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-            
+
             if z_start != 0 and z_end != 0:
                 z_start_int = z_start - 4*sigmas[2]
                 z_end_int = z_end + 4*sigmas[2]
@@ -301,29 +299,29 @@ def tracks_current(signals, pixels, tracks):
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
                 t_start =  max(time_interval[0],(t[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
-                
+
                 for iz in range(z_steps):
                     z = z_start_int + iz*z_step
 
                     time_tick = t_start + it*consts.t_sampling
                     t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / consts.vdrift
 
-                    # FIXME: this sampling is far from ideal, we should sample around the track 
+                    # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
                     for ix in range(consts.sampled_points):
-                        
+
                         x = x_start + sign(direction[0])*(ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
-                        
+
                         for iy in range(consts.sampled_points):
-                            
+
                             y = y_start + sign(direction[1])*(iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
-                            
+
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
                                 charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
                                 cuda.atomic.add(signals, (itrk,ipix,it), current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
-                
+
 @nb.njit
 def sign(x):
     """

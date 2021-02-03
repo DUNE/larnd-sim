@@ -2,11 +2,10 @@
 Module containing constants needed by the simulation
 """
 
+import os, sys
 import numpy as np
 import larpixgeometry.pixelplane
 import yaml
-import os, sys
-from numba import cuda
 
 ## Detector constants
 #: Liquid argon density in :math:`g/cm^3`
@@ -21,7 +20,7 @@ MeVToElectrons = 4.237e+04
 #: Recombination :math:`\alpha` constant for the Box model
 alpha = 0.93
 #: Recombination :math:`\beta` value for the Box model in :math:`(kV/cm)(g/cm^2)/MeV`
-beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005 
+beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
 #: Recombination :math:`A_b` value for the Birks Model
 Ab = 0.800
 #: Recombination :math:`k_b` value for the Birks Model in :math:`(kV/cm)(g/cm^2)/MeV`
@@ -56,49 +55,55 @@ birks = 2
 
 mm2cm = 0.1
 
-board = pixel_size = tpc_borders = tpc_size = pixel_connection_dict =  n_pixels = xs = ys = module_borders = 0
-
 tpc_centers = np.array([
-        [-487.949,-218.236,-335.],
-        [-182.051,-218.236,-335.],
-        [182.051,-218.236,-335.],
-        [487.949,-218.236,-335.],
-        [-487.949,-218.236,335.],
-        [-182.051,-218.236,335.],
-        [182.051,-218.236,335.],
-        [487.949,-218.236,335.],
+        [-487.949, -218.236, -335.],
+        [-182.051, -218.236, -335.],
+        [182.051, -218.236, -335.],
+        [487.949, -218.236, -335.],
+        [-487.949, -218.236, 335.],
+        [-182.051, -218.236, 335.],
+        [182.051, -218.236, 335.],
+        [487.949, -218.236, 335.],
 ])
 
 # Swap z->x
 tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
 tpc_centers *= mm2cm
 
+module_borders = np.zeros((tpc_centers.shape[0], 3, 2))
+tpc_borders = np.zeros((3,2))
+tpc_size = np.zeros(3)
+n_pixels = 0, 0
+pixel_connection_dict = {}
+pixel_size = np.zeros(2)
+
 ## Pixel params
 def load_pixel_geometry(filename):
-    global board
+    """
+    The function loads the pixel geometry YAML file
+    and stores the pixel and geometry constants as global
+    variables
+    """
     global pixel_size
     global tpc_borders
     global tpc_size
     global pixel_connection_dict
     global module_borders
     global n_pixels
-    global xs
-    global ys
 
     with open(filename, 'r') as f:
         board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
-        xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
-        ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+
+    xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
+    ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
 
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs)), len(np.unique(ys))
-    x_pixel_size = (max(xs)-min(xs)) / (n_pixels[0] - 1)
-    y_pixel_size = (max(ys)-min(ys)) / (n_pixels[1] - 1)
 
     #: Size of pixels per axis in :math:`cm`
-    pixel_size = np.array([x_pixel_size, y_pixel_size])
+    pixel_size[0] = (max(xs)-min(xs)) / (n_pixels[0] - 1)
+    pixel_size[1] = (max(ys)-min(ys)) / (n_pixels[1] - 1)
 
-    pixel_connection_dict = {}
     chipids = list(board.chips.keys())
 
     for chip in chipids:
@@ -107,15 +112,13 @@ def load_pixel_geometry(filename):
                 pixel_connection_dict[(round(pixel.x/pixel_size[0]), round(pixel.y/pixel_size[1]))] = channel, chip
 
     #: TPC borders coordinates in :math:`cm`
-    tpc_borders = np.array([[min(xs)-x_pixel_size/2, max(xs)+x_pixel_size/2],
-                            [min(ys)-y_pixel_size/2, max(ys)+y_pixel_size/2],
-                            [-15, 15]])
-    tpc_size = np.array([tpc_borders[0][1]-tpc_borders[0][0],tpc_borders[1][1]-tpc_borders[1][0],tpc_borders[2][1]-tpc_borders[2][0]])
+    tpc_borders[0] = [min(xs)-pixel_size[0]/2, max(xs)+pixel_size[0]/2]
+    tpc_borders[1] = [min(ys)-pixel_size[1]/2, max(ys)+pixel_size[1]/2]
+    tpc_borders[2] = [-15, 15]
 
-    module_borders = []
-    for tpc_center in tpc_centers:
-        module_borders.append((tpc_borders.T+tpc_center).T)
-        
-    module_borders = np.array(module_borders)
+    tpc_size = tpc_borders[:,1] - tpc_borders[:,0]
 
-load_pixel_geometry(os.path.join(sys.path[0],"examples/layout-2.5.0.yaml"))
+    for iplane, tpc_center in enumerate(tpc_centers):
+        module_borders[iplane] = (tpc_borders.T+tpc_center).T
+
+load_pixel_geometry(os.path.join(sys.path[0], "examples/layout-2.5.0.yaml"))

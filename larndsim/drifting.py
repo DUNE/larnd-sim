@@ -41,7 +41,7 @@ def drift(tracks):
             if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1] and plane[2][0] < track[i.z] < plane[2][1]:
                 pixel_plane = ip
                 break
-                
+
         track[i.pixel_plane] = pixel_plane
         z_anode = module_borders[pixel_plane][2][0]
 
