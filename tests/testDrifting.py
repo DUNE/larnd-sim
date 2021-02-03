@@ -1,24 +1,18 @@
 #!/usr/bin/env python
 
-import random
 import numpy as np
-import numba as nb
 import pytest
 
-import os, sys, inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir)
+from math import ceil
 
-from larndsim import detsim
 from larndsim import drifting
 from larndsim import consts
 from larndsim import indeces as i
 
-from math import ceil
+consts.load_pixel_geometry("larndsim/pixel_layouts/layout-2.5.0.yaml")
 
 class TestDrifting:
-    
+
     tracks = np.zeros((1, 29))
     tracks[:, i.z] = np.random.uniform(consts.module_borders[0][2][0], consts.module_borders[0][2][1], 1)
     tracks[:, i.x] = np.random.uniform(consts.module_borders[0][0][0], consts.module_borders[0][0][1], 1)
