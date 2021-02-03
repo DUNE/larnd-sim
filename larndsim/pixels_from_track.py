@@ -1,11 +1,11 @@
 """
-Module that finds which pixels lie on the projection on the anode plane 
-of each track segment. It can eventually include also the neighboring 
+Module that finds which pixels lie on the projection on the anode plane
+of each track segment. It can eventually include also the neighboring
 pixels.
 """
 
 from numba import cuda
-from .consts import tpc_borders, pixel_size, n_pixels, tpc_centers, tpc_size, module_borders
+from .consts import pixel_size, n_pixels, module_borders
 from . import indeces as i
 
 import logging
@@ -19,15 +19,15 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     """
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
-    
+
     Args:
-        track (:obj:`numpy.ndarray`): array where we store the 
+        track (:obj:`numpy.ndarray`): array where we store the
             track segments information
         active_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of 
+            the IDs of the pixels directly below the projection of
             the segments
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of 
+            the IDs of the pixels directly below the projection of
             the segments and the ones next to them
         n_pixels_list (:obj:`numpy.ndarray`): number of total involved
             pixels
@@ -56,14 +56,14 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
-    
+
     Args:
         x0 (float): start `x` coordinate
         y0 (float): start `y` coordinate
         x1 (float): end `x` coordinate
         y1 (float): end `y` coordinate
         tot_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of 
+            the IDs of the pixels directly below the projection of
             the segments
     """
 
@@ -101,40 +101,40 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
     """
     For each active_pixel, it includes all
     neighboring pixels within a specified radius
-    
+
     Args:
         active_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of 
+            the IDs of the pixels directly below the projection of
             the segments
         radius (int): number of layers of neighboring pixels we
             want to consider
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of 
+            the IDs of the pixels directly below the projection of
             the segments and the ones next to them
-    
+
     Returns:
         int: number of total involved pixels
     """
     count = 0
-    
+
     for pix in range(active_pixels.shape[0]):
-        
+
         if (active_pixels[pix][0] == -1) and (active_pixels[pix][1] == -1):
             continue
-            
+
         for x_r in range(-radius, radius+1):
             for y_r in range(-radius, radius+1):
                 new_pixel = (active_pixels[pix][0]+x_r, active_pixels[pix][1]+y_r)
                 is_unique = True
-                
+
                 for ipix in range(neighboring_pixels.shape[0]):
                     if new_pixel[0] == neighboring_pixels[ipix][0] and new_pixel[1] == neighboring_pixels[ipix][1]:
                         is_unique = False
                         break
-                
-                plane_id = new_pixel[0] // n_pixels[0] 
+
+                plane_id = new_pixel[0] // n_pixels[0]
                 if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
-                    
+
     return count
