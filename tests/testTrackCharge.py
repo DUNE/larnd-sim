@@ -3,12 +3,6 @@
 import random
 import numpy as np
 import pytest
-from math import sqrt, pi
-
-import os, sys, inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir)
 
 from larndsim import detsim
 
@@ -16,20 +10,19 @@ class TestTrackCharge:
     charge = random.randint(100,1000)
     start = np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
     end =  np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
-    sigmas = np.array([random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)])
+    sigmas = np.array([random.uniform(0, 0.5), random.uniform(0, 0.5), random.uniform(0, 0.5)])
 
     def test_rho(self):
-        xx = np.linspace(-5, 5, 20)
-        yy = np.linspace(-5, 5, 20)
-        zz = np.linspace(-5, 5, 20)
+        xx = np.linspace(-5, 5, 50)
+        yy = np.linspace(-5, 5, 50)
+        zz = np.linspace(-5, 5, 50)
 
-        weights = np.empty(len(xx)*len(yy)*len(zz))
         segment = self.end-self.start
-        i = 0
+
+        calculated_charge = 0
         for x in xx:
             for y in yy:
                 for z in zz:
-                    weights[i] = detsim.rho((x, y, z), self.charge, self.start, self.sigmas, segment) * (xx[1]-xx[0]) * (yy[1]-yy[0]) * (zz[1] - zz[0])
-                    i += 1
+                    calculated_charge += detsim.rho((x, y, z), self.charge, self.start, self.sigmas, segment) * (xx[1]-xx[0]) * (yy[1]-yy[0]) * (zz[1] - zz[0])
 
-        assert np.sum(weights) == pytest.approx(self.charge, rel=0.05)
+        assert calculated_charge == pytest.approx(self.charge, rel=0.05)
