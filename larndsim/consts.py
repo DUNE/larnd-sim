@@ -120,5 +120,3 @@ def load_pixel_geometry(filename):
 
     for iplane, tpc_center in enumerate(tpc_centers):
         module_borders[iplane] = (tpc_borders.T+tpc_center).T
-
-load_pixel_geometry(os.path.join(sys.path[0], "examples/layout-2.5.0.yaml"))
