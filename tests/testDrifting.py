@@ -5,11 +5,12 @@ import pytest
 
 from math import ceil
 
-from larndsim import drifting
 from larndsim import consts
-from larndsim import indeces as i
 
-consts.load_pixel_geometry("larndsim/pixel_layouts/layout-2.5.0.yaml")
+consts.load_detector_properties("larndsim/detector_properties/singlecube.yaml","larndsim/pixel_layouts/layout-singlecube.yaml")
+
+from larndsim import indeces as i
+from larndsim import drifting
 
 class TestDrifting:
 
@@ -22,8 +23,9 @@ class TestDrifting:
     def test_lifetime(self):
 
         zAnode = consts.module_borders[0][2][0]
-
+        print(zAnode, consts.module_borders[0][2][0], consts.module_borders[0][2][1])
         driftDistance = np.abs(self.tracks[:, i.z] - zAnode)
+        print(driftDistance)
         driftTime = driftDistance / consts.vdrift
 
         lifetime = np.exp(-driftTime / consts.lifetime)
