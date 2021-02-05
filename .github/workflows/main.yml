@@ -28,7 +28,7 @@ jobs:
         python-version: '3.8'
     - uses: ammaraskar/sphinx-action@master
       with:
-        pre-build-command: "apt-get update -y && apt-get install -y gcc"
+        pre-build-command: "apt-get update -y && apt-get install -y gcc && find larndsim/ -name '*.py' -exec sed -i -e 's/@cuda/#@cuda/g' {} \;"
         docs-folder: "docs/"
     - uses: actions/upload-artifact@v1
       with:
