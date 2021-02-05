@@ -160,11 +160,49 @@
 <span id="quenching-stage"></span><h2>Quenching stage<a class="headerlink" href="#module-larndsim.quenching" title="Permalink to this headline">¶</a></h2>
 <p>Module to implement the quenching of the ionized electrons
 through the detector</p>
+<dl class="function">
+<dt id="larndsim.quenching.quench">
+<code class="sig-prename descclassname">larndsim.quenching.</code><code class="sig-name descname">quench</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">mode</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.quenching.quench" title="Permalink to this definition">¶</a></dt>
+<dd><p>This CUDA kernel takes as input an array of track segments and calculates
+the number of electrons that reach the anode plane after recombination.
+It is possible to pick among two models: Box (Baller, 2013 JINST 8 P08005) or
+Birks (Amoruso, et al NIM A 523 (2004) 275).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p></li>
+<li><p><strong>mode</strong> (<em>int</em>) – recombination model.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 <div class="section" id="module-larndsim.drifting">
 <span id="drifting-stage"></span><h2>Drifting stage<a class="headerlink" href="#module-larndsim.drifting" title="Permalink to this headline">¶</a></h2>
 <p>Module to implement the propagation of the
 electrons towards the anode.</p>
+<dl class="function">
+<dt id="larndsim.drifting.drift">
+<code class="sig-prename descclassname">larndsim.drifting.</code><code class="sig-name descname">drift</code><span class="sig-paren">(</span><em class="sig-param">tracks</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.drifting.drift" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function takes as input an array of track segments and calculates
+the properties of the segments at the anode:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>z coordinate at the anode</p></li>
+<li><p>number of electrons taking into account electron lifetime</p></li>
+<li><p>longitudinal diffusion</p></li>
+<li><p>transverse diffusion</p></li>
+<li><p>time of arrival at the anode</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 <div class="section" id="module-larndsim.detsim">
 <span id="detector-simulation-stage"></span><h2>Detector simulation stage<a class="headerlink" href="#module-larndsim.detsim" title="Permalink to this headline">¶</a></h2>
@@ -231,6 +269,49 @@ on the <span class="math notranslate nohighlight">\(y\)</span> axis</p></li>
 <dd><p>Sign function</p>
 </dd></dl>
 
+<dl class="function">
+<dt id="larndsim.detsim.sum_pixel_signals">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">sum_pixel_signals</code><span class="sig-paren">(</span><em class="sig-param">pixels_signals</em>, <em class="sig-param">signals</em>, <em class="sig-param">track_starts</em>, <em class="sig-param">index_map</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.sum_pixel_signals" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function sums the induced current signals on the same pixel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
+summed signal for each pixel. First dimension is the pixel ID, second
+dimension is the time tick</p></li>
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x T,
+where S is the number of track segments, P is the number of pixels, and T is
+the number of time ticks.</p></li>
+<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the starting time of
+each track</p></li>
+<li><p><strong>index_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the correspondence between
+the track index and the pixel ID index.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.detsim.time_intervals">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">time_intervals</code><span class="sig-paren">(</span><em class="sig-param">track_starts</em>, <em class="sig-param">time_max</em>, <em class="sig-param">event_id_map</em>, <em class="sig-param">tracks</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.time_intervals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the value of the longest signal time and stores the start
+time of each segment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where
+we store the segments start time</p></li>
+<li><p><strong>time_max</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the longest signal time</p></li>
+<li><p><strong>event_id_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing
+the event ID corresponding to each track</p></li>
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the segment
+information</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="attribute">
 <dt id="larndsim.detsim.track_point">
 <code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">track_point</code><a class="headerlink" href="#larndsim.detsim.track_point" title="Permalink to this definition">¶</a></dt>
@@ -248,6 +329,25 @@ on the <span class="math notranslate nohighlight">\(y\)</span> axis</p></li>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.detsim.tracks_current">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">tracks_current</code><span class="sig-paren">(</span><em class="sig-param">signals</em>, <em class="sig-param">pixels</em>, <em class="sig-param">tracks</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.tracks_current" title="Permalink to this definition">¶</a></dt>
+<dd><p>This CUDA kernel calculates the charge induced on the pixels by the input tracks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
+where S is the number of track segments, P is the number of pixels, and T is
+the number of time ticks. The output is stored here.</p></li>
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x 2, where S is
+the number of track segments, P is the number of pixels and the third dimension
+contains the two pixel ID numbers.</p></li>
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -292,6 +392,78 @@ the segment</p></li>
 <p>Module that finds which pixels lie on the projection on the anode plane
 of each track segment. It can eventually include also the neighboring
 pixels.</p>
+<dl class="function">
+<dt id="larndsim.pixels_from_track.get_active_pixels">
+<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_active_pixels</code><span class="sig-paren">(</span><em class="sig-param">x0</em>, <em class="sig-param">y0</em>, <em class="sig-param">x1</em>, <em class="sig-param">y1</em>, <em class="sig-param">tot_pixels</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_active_pixels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts track segement to an array of active pixels
+using Bresenham algorithm used to convert line to grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x0</strong> (<em>float</em>) – start <cite>x</cite> coordinate</p></li>
+<li><p><strong>y0</strong> (<em>float</em>) – start <cite>y</cite> coordinate</p></li>
+<li><p><strong>x1</strong> (<em>float</em>) – end <cite>x</cite> coordinate</p></li>
+<li><p><strong>y1</strong> (<em>float</em>) – end <cite>y</cite> coordinate</p></li>
+<li><p><strong>tot_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the IDs of the pixels directly below the projection of
+the segments</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.pixels_from_track.get_neighboring_pixels">
+<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_neighboring_pixels</code><span class="sig-paren">(</span><em class="sig-param">active_pixels</em>, <em class="sig-param">radius</em>, <em class="sig-param">neighboring_pixels</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_neighboring_pixels" title="Permalink to this definition">¶</a></dt>
+<dd><p>For each active_pixel, it includes all
+neighboring pixels within a specified radius</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>active_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the IDs of the pixels directly below the projection of
+the segments</p></li>
+<li><p><strong>radius</strong> (<em>int</em>) – number of layers of neighboring pixels we
+want to consider</p></li>
+<li><p><strong>neighboring_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the IDs of the pixels directly below the projection of
+the segments and the ones next to them</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>number of total involved pixels</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.pixels_from_track.get_pixels">
+<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_pixels</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">active_pixels</em>, <em class="sig-param">neighboring_pixels</em>, <em class="sig-param">n_pixels_list</em>, <em class="sig-param">radius</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_pixels" title="Permalink to this definition">¶</a></dt>
+<dd><p>For all tracks, takes the xy start and end position
+and calculates all impacted pixels by the track segment</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>track</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store the
+track segments information</p></li>
+<li><p><strong>active_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the IDs of the pixels directly below the projection of
+the segments</p></li>
+<li><p><strong>neighboring_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+the IDs of the pixels directly below the projection of
+the segments and the ones next to them</p></li>
+<li><p><strong>n_pixels_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – number of total involved
+pixels</p></li>
+<li><p><strong>radius</strong> (<em>int</em>) – number of pixels around the active pixels that
+we are considering</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 <div class="section" id="module-larndsim.fee">
 <span id="electronics-module"></span><h2>Electronics module<a class="headerlink" href="#module-larndsim.fee" title="Permalink to this headline">¶</a></h2>
@@ -392,6 +564,25 @@ ADC counts.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.fee.get_adc_values">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">get_adc_values</code><span class="sig-paren">(</span><em class="sig-param">pixels_signals</em>, <em class="sig-param">time_ticks</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">time_padding</em>, <em class="sig-param">rng_states</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.get_adc_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implementation of self-trigger logic</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents for
+each pixel</p></li>
+<li><p><strong>time_ticks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
+<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of integrated charges for each
+pixel</p></li>
+<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of the time ticks that
+correspond to each integrated charge.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
