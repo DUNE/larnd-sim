@@ -319,8 +319,10 @@ def tracks_current(signals, pixels, tracks):
                             y_dist = abs(y_p - y)
 
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
-                                cuda.atomic.add(signals, (itrk,ipix,it), current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
+                                charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) \
+                                         * abs(x_step) * abs(y_step) * abs(z_step)
+                                cuda.atomic.add(signals, (itrk,ipix,it),
+                                                current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
 
 @nb.njit
 def sign(x):

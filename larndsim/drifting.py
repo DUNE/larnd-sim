@@ -38,7 +38,9 @@ def drift(tracks):
         track = tracks[itrk]
 
         for ip, plane in enumerate(module_borders):
-            if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1] and plane[2][0] < track[i.z] < plane[2][1]:
+            if plane[0][0] < track[i.x] < plane[0][1] and \
+               plane[1][0] < track[i.y] < plane[1][1] and \
+               plane[2][0] < track[i.z] < plane[2][1]:
                 pixel_plane = ip
                 break
 
