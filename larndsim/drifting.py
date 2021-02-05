@@ -38,25 +38,24 @@ def drift(tracks):
         track = tracks[itrk]
 
         for ip, plane in enumerate(module_borders):
-            if plane[0][0] < track[i.x] < plane[0][1] and plane[1][0] < track[i.y] < plane[1][1] and plane[2][0] < track[i.z] < plane[2][1]:
+            if plane[0][0] < track['x'] < plane[0][1] and plane[1][0] < track['y'] < plane[1][1] and plane[2][0] < track['z'] < plane[2][1]:
                 pixel_plane = ip
                 break
 
-        track[i.pixel_plane] = pixel_plane
+        track['pixel_plane'] = pixel_plane
         z_anode = module_borders[pixel_plane][2][0]
-
-        drift_distance = fabs(track[i.z] - z_anode)
-        drift_start = fabs(min(track[i.z_start],track[i.z_end]) - z_anode)
-        drift_end = fabs(max(track[i.z_start],track[i.z_end]) - z_anode)
+        drift_distance = fabs(track['z'] - z_anode)
+        drift_start = fabs(min(track['z_start'],track['z_end']) - z_anode)
+        drift_end = fabs(max(track['z_start'],track['z_end']) - z_anode)
 
         drift_time = drift_distance / consts.vdrift
-        track[i.z] = z_anode
+        track['z'] = z_anode
 
         lifetime_red = exp(-drift_time / consts.lifetime)
-        track[i.n_electrons] *= lifetime_red
+        track['n_electrons'] *= lifetime_red
 
-        track[i.long_diff] = sqrt(drift_time * 2 * consts.long_diff)
-        track[i.tran_diff] = sqrt(drift_time * 2 * consts.tran_diff)
-        track[i.t] += drift_time
-        track[i.t_start] += drift_start / consts.vdrift
-        track[i.t_end] += drift_end / consts.vdrift
+        track['long_diff'] = sqrt(drift_time * 2 * consts.long_diff)
+        track['tran_diff'] = sqrt(drift_time * 2 * consts.tran_diff)
+        track['t'] += drift_time
+        track['t_start'] += drift_start / consts.vdrift
+        track['t_end'] += drift_end / consts.vdrift

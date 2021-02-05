@@ -104,9 +104,10 @@ def load_detector_properties(detprop_file, pixel_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     tpc_centers = np.array(detprop['tpc_centers'])
+    time_interval = np.array(detprop['time_interval'])
+    
     vdrift = detprop['vdrift']
     lifetime = detprop['lifetime']
-    time_interval = detprop['time_interval']
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
 
