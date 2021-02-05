@@ -2,7 +2,6 @@
 Module containing constants needed by the simulation
 """
 
-import os, sys
 import numpy as np
 import larpixgeometry.pixelplane
 import yaml
@@ -77,12 +76,16 @@ n_pixels = 0, 0
 pixel_connection_dict = {}
 pixel_size = np.zeros(2)
 
-## Pixel params
-def load_pixel_geometry(filename):
+def load_detector_properties(detprop_file, pixel_file):
     """
-    The function loads the pixel geometry YAML file
-    and stores the pixel and geometry constants as global
-    variables
+    The function loads the detector properties and
+    the pixel geometry YAML files and stores the constants
+    as global variables
+
+    Args:
+        detprop_file (str): detector properties YAML
+            filename
+        pixel_file (str): pixel layout YAML filename
     """
     global pixel_size
     global tpc_borders
@@ -90,9 +93,25 @@ def load_pixel_geometry(filename):
     global pixel_connection_dict
     global module_borders
     global n_pixels
+    global tpc_centers
+    global vdrift
+    global lifetime
+    global time_interval
+    global long_diff
+    global tran_diff
 
-    with open(filename, 'r') as f:
-        board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(f,Loader=yaml.FullLoader))
+    with open(detprop_file) as df:
+        detprop = yaml.load(df, Loader=yaml.FullLoader)
+
+    tpc_centers = np.array(detprop['tpc_centers'])
+    vdrift = detprop['vdrift']
+    lifetime = detprop['lifetime']
+    time_interval = detprop['time_interval']
+    long_diff = detprop['long_diff']
+    tran_diff = detprop['tran_diff']
+
+    with open(pixel_file, 'r') as pf:
+        board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(pf, Loader=yaml.FullLoader))
 
     xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
     ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
@@ -118,5 +137,6 @@ def load_pixel_geometry(filename):
 
     tpc_size = tpc_borders[:,1] - tpc_borders[:,0]
 
+    module_borders = np.zeros((tpc_centers.shape[0], 3, 2))
     for iplane, tpc_center in enumerate(tpc_centers):
         module_borders[iplane] = (tpc_borders.T+tpc_center).T
