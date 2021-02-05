@@ -38,8 +38,8 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1], (track[i.t_end] + consts.time_padding) // consts.t_sampling * consts.t_sampling)
-        t_start = max(time_interval[0], (track[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
+        t_end = min(time_interval[1], (track["t_end"] + consts.time_padding) // consts.t_sampling * consts.t_sampling)
+        t_start = max(time_interval[0], (track["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
@@ -265,18 +265,18 @@ def tracks_current(signals, pixels, tracks):
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
 
-            if t[i.z_start] < t[i.z_end]:
-                start = (t[i.x_start], t[i.y_start], t[i.z_start])
-                end = (t[i.x_end], t[i.y_end], t[i.z_end])
+            if t["z_start"] < t["z_end"]:
+                start = (t["x_start"], t["y_start"], t["z_start"])
+                end = (t["x_end"], t["y_end"], t["z_end"])
             else:
-                end = (t[i.x_start], t[i.y_start], t[i.z_start])
-                start = (t[i.x_end], t[i.y_end], t[i.z_end])
+                end = (t["x_start"], t["y_start"], t["z_start"])
+                start = (t["x_end"], t["y_end"], t["z_end"])
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
-            sigmas = (t[i.tran_diff], t[i.tran_diff], t[i.long_diff])
+            sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
 
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
@@ -298,13 +298,13 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start =  max(time_interval[0],(t[i.t_start] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
+                t_start =  max(time_interval[0],(t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
 
                 for iz in range(z_steps):
                     z = z_start_int + iz*z_step
 
                     time_tick = t_start + it*consts.t_sampling
-                    t0 = (z - module_borders[int(t[i.pixel_plane])][2][0]) / consts.vdrift
+                    t0 = (z - module_borders[int(t["pixel_plane"])][2][0]) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
@@ -319,7 +319,7 @@ def tracks_current(signals, pixels, tracks):
                             y_dist = abs(y_p - y)
 
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                charge = rho((x,y,z), t[i.n_electrons], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
+                                charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
                                 cuda.atomic.add(signals, (itrk,ipix,it), current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
 
 @nb.njit

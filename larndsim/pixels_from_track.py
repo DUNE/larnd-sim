@@ -37,11 +37,11 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
-        this_border = module_borders[int(t[i.pixel_plane])]
-        start_pixel = (int((t[i.x_start] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t[i.pixel_plane]),
-                       int((t[i.y_start] - this_border[1][0]) // pixel_size[1]))
-        end_pixel = (int((t[i.x_end] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t[i.pixel_plane]),
-                     int((t[i.y_end] - this_border[1][0]) // pixel_size[1]))
+        this_border = module_borders[int(t["pixel_plane"])]
+        start_pixel = (int((t["x_start"] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t["pixel_plane"]),
+                       int((t["y_start"] - this_border[1][0]) // pixel_size[1]))
+        end_pixel = (int((t["x_end"] - this_border[0][0]) // pixel_size[0] + n_pixels[0]*t["pixel_plane"]),
+                     int((t["y_end"] - this_border[1][0]) // pixel_size[1]))
 
         get_active_pixels(start_pixel[0], start_pixel[1],
                           end_pixel[0], end_pixel[1],
