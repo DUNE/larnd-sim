@@ -128,7 +128,8 @@ def load_detector_properties(detprop_file, pixel_file):
     for chip in chipids:
         for channel, pixel in enumerate(board.chips[chip].channel_connections):
             if pixel.x !=0 and pixel.y != 0:
-                pixel_connection_dict[(round(pixel.x/pixel_size[0]), round(pixel.y/pixel_size[1]))] = channel, chip
+                pixel_connection_dict[(round(pixel.x/pixel_size[0]),
+                                       round(pixel.y/pixel_size[1]))] = channel, chip
 
     #: TPC borders coordinates in :math:`cm`
     tpc_borders[0] = [min(xs)-pixel_size[0]/2, max(xs)+pixel_size[0]/2]

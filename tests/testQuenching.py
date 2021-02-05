@@ -10,6 +10,9 @@ from larndsim import indeces as i
 from math import ceil
 
 class TestQuenching:
+    """
+    Quenching module testing
+    """
     #normal valid values
     tracks = np.zeros((100, 22))
     tracks[:, i.dE] = np.random.uniform(0.1, 100, 100)
