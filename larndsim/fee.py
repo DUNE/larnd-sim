@@ -3,6 +3,8 @@ Module that si mulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
+import h5py
+
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
@@ -33,7 +35,7 @@ ADC_COUNTS = 2**8
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900
 
-def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
+def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
     Saves the ADC counts in the LArPix HDF5 format.
 
@@ -47,10 +49,16 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
         list: list of LArPix packets
     """
 
+    dtype = np.dtype([('track_ids','(5,)i8')])
     packets = {}
+    packets_mc = {}
+    packets_mc_ds = {}
+    
     for ic in range(consts.tpc_centers.shape[0]):
         packets[ic] = []
-
+        packets_mc[ic] = []
+        packets_mc_ds[ic] = []
+        
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
@@ -80,10 +88,12 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
-
+                        
                 if not packets[plane_id]:
                     packets[plane_id].append(TimestampPacket())
-
+                    packets_mc[plane_id].append([-1]*5)
+                    
+                packets_mc[plane_id].append(track_ids[itick][iadc])
                 packets[plane_id].append(p)
             else:
                 break
@@ -98,8 +108,14 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, filename):
             filename_ext = "%s-%i" % (filename, ipc)
 
         hdf5format.to_file(filename_ext, packet_list)
+        if len(packets[ipc]):
+            packets_mc_ds[ipc] = np.empty(len(packets[ipc]), dtype=dtype)
+            packets_mc_ds[ipc]['track_ids'] = packets_mc[ipc]
 
-    return packets
+        with h5py.File(filename_ext, 'a') as f:
+            f.create_dataset("mc_packets_assn", data=packets_mc_ds[ipc])
+
+    return packets, packets_mc
 
 def digitize(integral_list):
     """
