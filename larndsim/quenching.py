@@ -30,8 +30,8 @@ def quench(tracks, mode):
     itrk = cuda.grid(1)
 
     if itrk < tracks.shape[0]:
-        dEdx = tracks[itrk][i.dEdx]
-        dE = tracks[itrk][i.dE]
+        dEdx = tracks[itrk]["dEdx"]
+        dE = tracks[itrk]["dE"]
 
         recomb = 0
         if mode == consts.box:
@@ -47,4 +47,4 @@ def quench(tracks, mode):
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk][i.n_electrons] = recomb * dE * consts.MeVToElectrons
+        tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
