@@ -7,6 +7,9 @@ import pytest
 from larndsim import detsim
 
 class TestTrackCharge:
+    """
+    Track charge calculation testing
+    """
     charge = random.randint(100,1000)
     start = np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
     end =  np.array([random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5)])
