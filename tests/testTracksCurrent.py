@@ -9,26 +9,25 @@ consts.load_pixel_geometry("larndsim/pixel_layouts/layout-2.5.0.yaml")
 
 from larndsim import detsim
 from larndsim import drifting, quenching, pixels_from_track
-from larndsim import indeces as i
 
 from math import ceil
 
 class TestTrackCurrent:
     tracks = np.zeros((10, 29))
-    tracks[:, i.z_start] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
-    tracks[:, i.z_end] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
-    tracks[:, i.z] = (tracks[:, i.z_end]+tracks[:, i.z_start])/2.
-    tracks[:, i.y_start] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
-    tracks[:, i.y_end] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
-    tracks[:, i.x_start] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
-    tracks[:, i.x_end] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
-    tracks[:, i.x] = (tracks[:, i.x_end]+tracks[:, i.x_start])/2.
-    tracks[:, i.y] = (tracks[:, i.y_end]+tracks[:, i.y_start])/2.
-    tracks[:, i.dx] = np.sqrt((tracks[:, i.x_end]-tracks[:, i.x_start])**2+(tracks[:, i.y_end]-tracks[:, i.y_start])**2+(tracks[:, i.z_end]-tracks[:, i.z_start])**2)
-    tracks[:, i.dEdx] = [2]*10
-    tracks[:, i.dE] = tracks[:, i.dEdx]*tracks[:, i.dx]
-    tracks[:, i.tran_diff] = [1e-1]*10
-    tracks[:, i.long_diff] = [1e-1]*10
+    tracks["z_start"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
+    tracks["z_end"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
+    tracks["z"] = (tracks["z_end]+tracks["z_start])/2.
+    tracks["y_start"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
+    tracks["y_end"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
+    tracks["x_start"] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
+    tracks["x_end"] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
+    tracks["x"] = (tracks["x_end"]+tracks["x_start"])/2.
+    tracks["y"] = (tracks["y_end"]+tracks["y_start"])/2.
+    tracks["dx"] = np.sqrt((tracks["x_end"]-tracks["x_start"])**2+(tracks["y_end"]-tracks["y_start"])**2+(tracks["z_end"]-tracks["z_start"])**2)
+    tracks["dEdx"] = [2]*10
+    tracks["dE"] = tracks["dEdx]*tracks["dx]
+    tracks["tran_diff"] = [1e-1]*10
+    tracks["long_diff"] = [1e-1]*10
 
     def test_current_model(self):
 
