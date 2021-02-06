@@ -9,7 +9,6 @@ import numba as nb
 
 from numba import cuda
 from .consts import pixel_size, module_borders, time_interval, n_pixels
-from . import indeces as i
 from . import consts
 
 import logging
@@ -280,7 +279,8 @@ def tracks_current(signals, pixels, tracks):
 
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
-            impact_factor = max(sqrt((5*sigmas[0])**2+(5*sigmas[1])**2), sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)
+            impact_factor = max(sqrt((5*sigmas[0])**2 + (5*sigmas[1])**2),
+                                sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
@@ -300,27 +300,32 @@ def tracks_current(signals, pixels, tracks):
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
                 t_start =  max(time_interval[0],(t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
 
-                for iz in range(z_steps):
-                    z = z_start_int + iz*z_step
+                total_current = 0.
 
+                for iz in range(z_steps):
+
+                    z = z_start_int + iz*z_step
                     time_tick = t_start + it*consts.t_sampling
-                    t0 = (z - module_borders[int(t["pixel_plane"])][2][0]) / consts.vdrift
+                    t0 = (z - module_borders[t["pixel_plane"]][2][0]) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
                     for ix in range(consts.sampled_points):
 
-                        x = x_start + sign(direction[0])*(ix*x_step - 4*sigmas[0])
+                        x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
                         for iy in range(consts.sampled_points):
 
-                            y = y_start + sign(direction[1])*(iy*y_step - 4*sigmas[1])
+                            y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
                             if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) * abs(x_step) * abs(y_step) * abs(z_step)
-                                cuda.atomic.add(signals, (itrk,ipix,it), current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge)
+                                charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
+                                         * abs(x_step) * abs(y_step) * abs(z_step)
+                                total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+
+                signals[itrk,ipix,it] = total_current
 
 @nb.njit
 def sign(x):
@@ -349,8 +354,11 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
     it, ipix, itick = cuda.grid(3)
 
     if it < signals.shape[0] and ipix < signals.shape[1]:
+
         index = index_map[it][ipix]
-        start_tick = track_starts[it] // consts.t_sampling
+        start_tick = int(track_starts[it] // consts.t_sampling)
+
         if itick < signals.shape[2] and index >= 0:
-            itime = int(start_tick+itick)
+
+            itime = start_tick + itick
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
