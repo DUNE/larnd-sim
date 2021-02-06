@@ -7,7 +7,6 @@ from math import log, isnan
 from numba import cuda
 
 from . import consts
-from . import indeces as i
 
 import logging
 logging.basicConfig()
