@@ -104,6 +104,8 @@ def load_detector_properties(detprop_file, pixel_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     tpc_centers = np.array(detprop['tpc_centers'])
+    tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
+
     time_interval = np.array(detprop['time_interval'])
     
     vdrift = detprop['vdrift']
@@ -135,7 +137,7 @@ def load_detector_properties(detprop_file, pixel_file):
     #: TPC borders coordinates in :math:`cm`
     tpc_borders[0] = [min(xs)-pixel_size[0]/2, max(xs)+pixel_size[0]/2]
     tpc_borders[1] = [min(ys)-pixel_size[1]/2, max(ys)+pixel_size[1]/2]
-    tpc_borders[2] = [-15, 15]
+    tpc_borders[2] = [-15.215525, 15.215525]
 
     tpc_size = tpc_borders[:,1] - tpc_borders[:,0]
 
