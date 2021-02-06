@@ -10,7 +10,6 @@ from larndsim import consts
 consts.load_detector_properties("larndsim/detector_properties/singlecube.yaml",
                                 "larndsim/pixel_layouts/layout-singlecube.yaml")
 
-from larndsim import indeces as i
 from larndsim import drifting
 
 class TestDrifting:

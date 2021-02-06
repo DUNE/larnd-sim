@@ -5,7 +5,6 @@ import pytest
 
 from larndsim import quenching
 from larndsim import consts
-from larndsim import indeces as i
 
 from math import ceil
 
