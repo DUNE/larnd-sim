@@ -6,7 +6,6 @@ pixels.
 
 from numba import cuda
 from .consts import pixel_size, n_pixels, module_borders
-from . import indeces as i
 
 import logging
 logging.basicConfig()
