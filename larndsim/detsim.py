@@ -6,10 +6,12 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log
 
 import numba as nb
+import numpy as np
 
 from numba import cuda
 from .consts import pixel_size, module_borders, time_interval, n_pixels
 from . import consts
+from . import fee
 
 import logging
 logging.basicConfig()
@@ -231,7 +233,7 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    plane_id = pixel_id[0] // n_pixels[0]
+    plane_id = int(pixel_id[0] // n_pixels[0])
     this_border = module_borders[plane_id]
 
     pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
@@ -280,7 +282,7 @@ def tracks_current(signals, pixels, tracks):
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
             impact_factor = max(sqrt((5*sigmas[0])**2 + (5*sigmas[1])**2),
-                                sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)
+                                sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
@@ -362,3 +364,44 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
 
             itime = start_tick + itick
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
+
+@nb.njit
+def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
+
+    for ip in range(adc_list.shape[0]):
+
+        track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
+        track_start_t = tracks["t_start"][track_indeces]
+        track_end_t = tracks["t_end"][track_indeces]
+        track_ids = tracks["trackID"][track_indeces]
+        evid = event_id_map[track_pixel_map[ip][track_pixel_map[ip] >= 0]]
+        
+        for iadc in range(adc_list[ip].shape[0]):
+            
+            if adc_list[ip][iadc] > 73:
+                adc_time = adc_times_list[ip][iadc]
+                for itrk in range(track_indeces.shape[0]):
+                    if track_start_t[itrk] < adc_time - evid[itrk]*time_interval[1]*2 < track_end_t[itrk]+consts.time_padding:
+                        counter = 0
+
+                        while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
+                            counter += 1
+                            
+                        if counter < backtracked_id.shape[2]:
+                            backtracked_id[ip,iadc,counter] = tracks["trackID"][track_indeces[itrk]]
+
+@nb.njit
+def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
+    
+    for itrk in range(pixels.shape[0]):
+        pixIDs = pixels[itrk]
+        
+        for pixID in pixIDs:
+            if pixID[0] != -1:
+                idx = np.where((unique_pix[:,0] == pixID[0]) & (unique_pix[:,1] == pixID[1]))[0][0]
+                imap = 0
+                while imap < track_pixel_map.shape[1] and track_pixel_map[idx][imap] != -1:
+                    imap+=1
+                if imap < track_pixel_map.shape[1]:
+                    track_pixel_map[idx][imap] = itrk
+                    
