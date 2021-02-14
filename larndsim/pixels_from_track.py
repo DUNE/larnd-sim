@@ -132,7 +132,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         break
 
                 plane_id = new_pixel[0] // n_pixels[0]
-                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1]:
+                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1] and plane_id < module_borders.shape[0]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
 
