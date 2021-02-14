@@ -5,6 +5,7 @@ Module that si mulates the front-end electronics (triggering, ADC)
 import numpy as np
 import h5py
 
+import numba as nb
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
@@ -34,6 +35,8 @@ V_PEDESTAL = 580
 ADC_COUNTS = 2**8
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900
+#: Uncorrelated noise in e-
+UNCORRELATED_NOISE_CHARGE = 500
 
 def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
@@ -64,10 +67,15 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
         pixel_id = unique_pix[itick]
         plane_id = pixel_id[0] // consts.n_pixels[0]
         pix_x, pix_y = detsim.get_pixel_coordinates(pixel_id)
-        pix_x -= consts.tpc_centers[int(plane_id)][0]
-        pix_y -= consts.tpc_centers[int(plane_id)][1]
-        pix_x *= 10
-        pix_y *= 10
+        
+        try:
+            pix_x -= consts.tpc_centers[int(plane_id)][0]
+            pix_y -= consts.tpc_centers[int(plane_id)][1]
+        except IndexError:
+            print("Pixel (%i, %i) outside the TPC borders" % (pixel_id[0], pixel_id[1]))
+
+        pix_x *= consts.cm2mm
+        pix_y *= consts.cm2mm
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
@@ -83,7 +91,12 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-                p.chip_key = chip
+                
+                if isinstance(chip, int):
+                    p.chip_id = chip
+                else:
+                    p.chip_key = chip
+
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1
@@ -101,11 +114,14 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     for ipc in packets:
         packet_list = PacketCollection(packets[ipc], read_id=0, message='')
 
-        if "." in filename:
-            pre_extension, post_extension = filename.rsplit('.', 1)
-            filename_ext = "%s-%i.%s" % (pre_extension, ipc, post_extension)
+        if len(packets.keys()) > 1:
+            if "." in filename:
+                pre_extension, post_extension = filename.rsplit('.', 1)
+                filename_ext = "%s-%i.%s" % (pre_extension, ipc, post_extension)
+            else:
+                filename_ext = "%s-%i" % (filename, ipc)
         else:
-            filename_ext = "%s-%i" % (filename, ipc)
+            filename_ext = filename
 
         hdf5format.to_file(filename_ext, packet_list)
         if len(packets[ipc]):
@@ -113,6 +129,8 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
             packets_mc_ds[ipc]['track_ids'] = packets_mc[ipc]
 
         with h5py.File(filename_ext, 'a') as f:
+            if "mc_packets_assn" in f.keys():
+                del f['mc_packets_assn']
             f.create_dataset("mc_packets_assn", data=packets_mc_ds[ipc])
 
     return packets, packets_mc
@@ -153,20 +171,17 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
     if ip < pixels_signals.shape[0]:
         curre = pixels_signals[ip]
         ic = 0
-        q_sum = 0
-        adc = 0
         iadc = 0
+        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
 
         while ic < curre.shape[0]:
 
             q = curre[ic]*consts.t_sampling
 
-            if ic == 0:
-                q += xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
-
             q_sum += q
+            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
-            if q_sum >= DISCRIMINATION_THRESHOLD:
+            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
@@ -176,7 +191,11 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                     q_sum += q
                     ic += 1
 
-                adc = q_sum
+                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+                
+                if adc < DISCRIMINATION_THRESHOLD:
+                    ic += round(CLOCK_CYCLE / consts.t_sampling)
+                    continue
 
                 if iadc >= MAX_ADC_VALUES:
                     print("More ADC values than possible, ", MAX_ADC_VALUES)
@@ -189,5 +208,4 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
                 iadc += 1
 
-            adc = 0
             ic += 1
