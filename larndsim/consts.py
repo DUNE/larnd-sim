@@ -33,7 +33,7 @@ vdrift = 0.153812 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
-t_sampling = 0.05 # us
+t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
@@ -53,6 +53,7 @@ box = 1
 birks = 2
 
 mm2cm = 0.1
+cm2mm = 10
 
 tpc_centers = np.array([
         [-487.949, -218.236, -335.],
@@ -75,6 +76,31 @@ tpc_size = np.zeros(3)
 n_pixels = 0, 0
 pixel_connection_dict = {}
 pixel_size = np.zeros(2)
+
+variable_types = {
+    "eventID": "u4", 
+    "z_end": "f4", 
+    "trackID": "u4", 
+    "tran_diff": "f4",
+    "z_start": "f4", 
+    "x_end": "f4", 
+    "y_end": "f4", 
+    "n_electrons": "u4", 
+    "pdgId": "i4",
+    "x_start": "f4", 
+    "y_start": "f4", 
+    "t_start": "f4", 
+    "dx": "f4", 
+    "long_diff": "f4", 
+    "pixel_plane": "u4", 
+    "t_end": "f4", 
+    "dEdx": "f4", 
+    "dE": "f4", 
+    "t": "f4",
+    "y": "f4",
+    "x": "f4",
+    "z": "f4"
+}
 
 def load_detector_properties(detprop_file, pixel_file):
     """
@@ -137,7 +163,7 @@ def load_detector_properties(detprop_file, pixel_file):
     #: TPC borders coordinates in :math:`cm`
     tpc_borders[0] = [min(xs)-pixel_size[0]/2, max(xs)+pixel_size[0]/2]
     tpc_borders[1] = [min(ys)-pixel_size[1]/2, max(ys)+pixel_size[1]/2]
-    tpc_borders[2] = [-15.215525, 15.215525]
+    tpc_borders[2] = [-detprop['drift_length']/2., detprop['drift_length']/2.]
 
     tpc_size = tpc_borders[:,1] - tpc_borders[:,0]
 
