@@ -16,7 +16,7 @@ class TestTrackCurrent:
     tracks = np.zeros((10, 29))
     tracks["z_start"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
     tracks["z_end"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
-    tracks["z"] = (tracks["z_end]+tracks["z_start])/2.
+    tracks["z"] = (tracks["z_end"]+tracks["z_start"])/2.
     tracks["y_start"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
     tracks["y_end"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
     tracks["x_start"] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
@@ -58,7 +58,7 @@ class TestTrackCurrent:
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
         blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-        print(blockspergrid,threadsperblock,signals.shape)
+        
         detsim.tracks_current[blockspergrid,threadsperblock](signals,
                                                              neighboring_pixels,
                                                              tracks)
