@@ -1,6 +1,5 @@
 # larnd-sim ![CI status](https://github.com/DUNE/larnd-sim/workflows/CI/badge.svg)
 
-
 <img alt="larnd-sim" src="docs/logo.png" height="160">
 
 This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.
