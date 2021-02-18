@@ -170,3 +170,4 @@ def load_detector_properties(detprop_file, pixel_file):
     module_borders = np.zeros((tpc_centers.shape[0], 3, 2))
     for iplane, tpc_center in enumerate(tpc_centers):
         module_borders[iplane] = (tpc_borders.T+tpc_center).T
+

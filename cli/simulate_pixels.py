@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+import os,sys,inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir) 
+
 from math import ceil
 from time import time
 
@@ -32,13 +37,12 @@ def run_simulation(input_filename,
             the detector properties
         n_tracks (int): number of tracks to be simulated
     """
-
     consts.load_detector_properties(detector_properties, pixel_layout)
 
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
     from larndsim import quenching, drifting, detsim, pixels_from_track, fee
-
+    
     # First of all we load the edep-sim output
     # For this sample we need to invert $z$ and $y$ axes
     with h5py.File(input_filename, 'r') as f:
@@ -74,14 +78,13 @@ def run_simulation(input_filename,
     drifting.drift[BPG,TPB](tracks)
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
-
-    step = 800
+    step = 200
     adc_tot_list = np.empty((1,fee.MAX_ADC_VALUES))
     adc_tot_ticks_list = np.empty((1,fee.MAX_ADC_VALUES))
     backtracked_id_tot = np.empty((1,fee.MAX_ADC_VALUES,5))
     unique_pix_tot = np.empty((1,2))
     tot_events = 0
-
+    
     # We divide the sample in portions that can be processed by the GPU
     for itrk in tqdm(range(0, tracks.shape[0], step), desc='Simulating pixels...'):
         selected_tracks = tracks[itrk:itrk+step]
@@ -92,13 +95,12 @@ def run_simulation(input_filename,
         for iev, evID in enumerate(selected_tracks['eventID']):
             event_id_map[iev] = np.where(evID == unique_eventIDs)[0]
         d_event_id_map = cuda.to_device(event_id_map)
-
+        
         # We find the pixels intersected by the projection of the tracks on
         # the anode plane using the Bresenham's algorithm. We also take into
         # account the neighboring pixels, due to the transverse diffusion of the charges.
         longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_size[0])
         max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_size[0])
-
         MAX_PIXELS = (longest_pix*4+6)*max_radius*2
         MAX_ACTIVE_PIXELS = longest_pix*2
         active_pixels = np.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
@@ -111,7 +113,6 @@ def run_simulation(input_filename,
                                                                     neighboring_pixels,
                                                                     n_pixels_list,
                                                                     max_radius+1)
-
         shapes = neighboring_pixels.shape
         joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
         unique_pix = np.unique(joined, axis=0)
@@ -138,7 +139,6 @@ def run_simulation(input_filename,
         detsim.tracks_current[blockspergrid,threadsperblock](d_signals,
                                                              neighboring_pixels,
                                                              selected_tracks)
-
         # Here we create a map between tracks and index in the unique pixel array
         pixel_index_map = np.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
 
@@ -153,7 +153,6 @@ def run_simulation(input_filename,
                     pixel_index_map[itr,ipix] = index[0]
 
         d_pixel_index_map = cuda.to_device(pixel_index_map)
-
         # Here we combine the induced current on the same pixels by different tracks
         threadsperblock = (8,8,8)
         blockspergrid_x = ceil(d_signals.shape[0] / threadsperblock[0])
@@ -166,7 +165,6 @@ def run_simulation(input_filename,
                                                                 d_signals,
                                                                 d_track_starts,
                                                                 d_pixel_index_map)
-
         # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
         time_ticks = np.linspace(0, len(unique_eventIDs)*consts.time_interval[1]*2, pixels_signals.shape[1]+1)
         integral_list = np.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
