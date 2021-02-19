@@ -3,5 +3,6 @@ pytest
 numba
 sphinx-rtd-theme
 tqdm
+fire
 larpix-control
 larpix-geometry
