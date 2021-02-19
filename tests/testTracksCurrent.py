@@ -25,7 +25,7 @@ class TestTrackCurrent:
     tracks["y"] = (tracks["y_end"]+tracks["y_start"])/2.
     tracks["dx"] = np.sqrt((tracks["x_end"]-tracks["x_start"])**2+(tracks["y_end"]-tracks["y_start"])**2+(tracks["z_end"]-tracks["z_start"])**2)
     tracks["dEdx"] = [2]*10
-    tracks["dE"] = tracks["dEdx]*tracks["dx]
+    tracks["dE"] = tracks["dEdx"]*tracks["dx"]
     tracks["tran_diff"] = [1e-1]*10
     tracks["long_diff"] = [1e-1]*10
 
