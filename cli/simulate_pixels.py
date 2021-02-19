@@ -19,6 +19,16 @@ from tqdm import tqdm
 
 from larndsim import consts
 
+logo = """  
+  _                      _            _
+ | |                    | |          (_)
+ | | __ _ _ __ _ __   __| |______ ___ _ _ __ ___
+ | |/ _` | '__| '_ \ / _` |______/ __| | '_ ` _ \\
+ | | (_| | |  | | | | (_| |      \__ \ | | | | | |
+ |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
+
+"""
+
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -37,6 +47,11 @@ def run_simulation(input_filename,
             the detector properties
         n_tracks (int): number of tracks to be simulated
     """
+    print(logo)
+    print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    print("Pixel layout file:", pixel_layout)
+    print("Detector propeties file:", detector_properties)
+    print("edep-sim input file:", input_filename)
     consts.load_detector_properties(detector_properties, pixel_layout)
 
     # Here we load the modules after loading the detector properties
@@ -65,6 +80,7 @@ def run_simulation(input_filename,
     TPB = 256
     BPG = ceil(tracks.shape[0] / TPB)
 
+    print("*******************\nSTARTING SIMULATION\n*******************")
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons...",end='')
@@ -203,6 +219,8 @@ def run_simulation(input_filename,
         fee.export_to_hdf5(adc_tot_list, adc_tot_ticks_list, unique_pix_tot, backtracked_id_tot, output_filename)
     else:
         fee.export_to_hdf5(adc_tot_list, adc_tot_ticks_list, unique_pix_tot, backtracked_id_tot, input_filename)
+
+    print("Output saved in:", output_filename if output_filename else input_filename)
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
