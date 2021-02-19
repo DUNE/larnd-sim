@@ -91,7 +91,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-                
+            
                 if isinstance(chip, int):
                     p.chip_id = chip
                 else:
@@ -186,7 +186,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
 
-                while ic <= integrate_end and ic <= curre.shape[0]:
+                while ic <= integrate_end and ic < curre.shape[0]:
                     q = curre[ic] * consts.t_sampling
                     q_sum += q
                     ic += 1
@@ -203,7 +203,6 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
 
                 adc_list[ip][iadc] = adc
                 adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
-
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
                 iadc += 1

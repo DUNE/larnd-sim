@@ -12,7 +12,7 @@ setuptools.setup(
     description="Simulation framework for the DUNE LArND",
     url="https://github.com/DUNE/larnd-sim",
     packages=setuptools.find_packages(),
-    install_requires=["numpy", "pytest", "numba", "larpix-control", "larpix-geometry", "tqdm"],
+    install_requires=["numpy", "pytest", "numba>=0.52", "larpix-control", "larpix-geometry", "tqdm"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: by End-User Class :: Developers",
@@ -20,5 +20,5 @@ setuptools.setup(
         "Programming Language :: Python",
         "Topic :: Scientific/Engineering :: Physics"
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
 )
