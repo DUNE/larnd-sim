@@ -48,6 +48,7 @@ def run_simulation(input_filename,
         n_tracks (int): number of tracks to be simulated
     """
 
+    import cupy
     from cupy.cuda.nvtx import RangePush, RangePop
 
     RangePush("run_simulation")
@@ -184,19 +185,11 @@ def run_simulation(input_filename,
 
         RangePush("pixel_index_map")
         # Here we create a map between tracks and index in the unique pixel array
-        pixel_index_map = np.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-
-        for itr in range(neighboring_pixels.shape[0]):
-            for ipix in range(neighboring_pixels.shape[1]):
-                pID = neighboring_pixels[itr][ipix]
-                if pID[0] >= 0 and pID[1] >= 0:
-                    try:
-                        index = np.where((unique_pix[:,0] == pID[0]) & (unique_pix[:,1] == pID[1]))
-                    except IndexError:
-                        print(index,"More pixels than maximum value")
-                    pixel_index_map[itr,ipix] = index[0]
-
-        d_pixel_index_map = cuda.to_device(pixel_index_map)
+        d_neighboring_pixels = cupy.array(neighboring_pixels)
+        d_unique_pix = cupy.array(unique_pix)
+        d_pixel_index_map = cupy.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
+        indices = cupy.where((d_neighboring_pixels[..., 0, np.newaxis] == d_unique_pix[:, 0]) & (d_neighboring_pixels[..., 1, np.newaxis] == d_unique_pix[:, 1]))
+        d_pixel_index_map[indices[0], indices[1]] = indices[2]
         RangePop()
 
         RangePush("sum_pixels_signals")
