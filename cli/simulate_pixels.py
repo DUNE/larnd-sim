@@ -47,17 +47,24 @@ def run_simulation(input_filename,
             the detector properties
         n_tracks (int): number of tracks to be simulated
     """
+
+    from cupy.cuda.nvtx import RangePush, RangePop
+
+    RangePush("run_simulation")
+
     print(logo)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Pixel layout file:", pixel_layout)
     print("Detector propeties file:", detector_properties)
     print("edep-sim input file:", input_filename)
+    RangePush("load_detector_properties")
     consts.load_detector_properties(detector_properties, pixel_layout)
+    RangePop()
 
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
     from larndsim import quenching, drifting, detsim, pixels_from_track, fee
-    
+
     # First of all we load the edep-sim output
     # For this sample we need to invert $z$ and $y$ axes
     with h5py.File(input_filename, 'r') as f:
@@ -85,13 +92,17 @@ def run_simulation(input_filename,
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons...",end='')
     start_quenching = time()
+    RangePush("quench")
     quenching.quench[BPG,TPB](tracks, consts.birks)
+    RangePop()
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
     print("Drifting electrons...",end='')
     start_drifting = time()
+    RangePush("drift")
     drifting.drift[BPG,TPB](tracks)
+    RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
     step = 200
@@ -221,6 +232,8 @@ def run_simulation(input_filename,
         fee.export_to_hdf5(adc_tot_list, adc_tot_ticks_list, unique_pix_tot, backtracked_id_tot, input_filename)
 
     print("Output saved in:", output_filename if output_filename else input_filename)
+
+    RangePop()
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
