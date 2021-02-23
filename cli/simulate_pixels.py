@@ -138,8 +138,8 @@ def run_simulation(input_filename,
         RangePush("pixels_from_track")
         longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_size[0])
         max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_size[0])
-        MAX_PIXELS = (longest_pix*4+6)*max_radius*2
-        MAX_ACTIVE_PIXELS = longest_pix*2
+        MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
+        MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
         active_pixels = np.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
         neighboring_pixels = np.full((selected_tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
         n_pixels_list = np.zeros(shape=(selected_tracks.shape[0]))
@@ -152,10 +152,12 @@ def run_simulation(input_filename,
                                                                     max_radius+1)
         RangePop()
 
+        RangePush("unique_pix")
         shapes = neighboring_pixels.shape
         joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
         unique_pix = np.unique(joined, axis=0)
         unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
+        RangePop()
 
         RangePush("time_intervals")
         # Here we find the longest signal in time and we store an array with the start in time of each track
