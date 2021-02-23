@@ -302,8 +302,6 @@ def tracks_current(signals, pixels, tracks):
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
                 t_start =  max(time_interval[0],(t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
 
-                total_current = 0.
-
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
@@ -317,17 +315,20 @@ def tracks_current(signals, pixels, tracks):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
+                        if x_dist > pixel_size[0]/2:
+                            continue
+
                         for iy in range(consts.sampled_points):
 
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
-                                         * abs(x_step) * abs(y_step) * abs(z_step)
-                                total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+                            if y_dist > pixel_size[1]/2:
+                                continue
 
-                signals[itrk,ipix,it] = total_current
+                            charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
+                                        * abs(x_step) * abs(y_step) * abs(z_step)
+                            signals[itrk,ipix,it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
 
 @nb.njit
 def sign(x):
@@ -375,9 +376,9 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
         track_end_t = tracks["t_end"][track_indeces]
         track_ids = tracks["trackID"][track_indeces]
         evid = event_id_map[track_pixel_map[ip][track_pixel_map[ip] >= 0]]
-        
+
         for iadc in range(adc_list[ip].shape[0]):
-            
+
             if adc_list[ip][iadc] > 73:
                 adc_time = adc_times_list[ip][iadc]
                 for itrk in range(track_indeces.shape[0]):
@@ -386,16 +387,16 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
 
                         while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
                             counter += 1
-                            
+
                         if counter < backtracked_id.shape[2]:
                             backtracked_id[ip,iadc,counter] = tracks["trackID"][track_indeces[itrk]]
 
 @nb.njit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
-    
+
     for itrk in range(pixels.shape[0]):
         pixIDs = pixels[itrk]
-        
+
         for pixID in pixIDs:
             if pixID[0] != -1:
                 idx = np.where((unique_pix[:,0] == pixID[0]) & (unique_pix[:,1] == pixID[1]))[0][0]
@@ -404,4 +405,3 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
                     imap+=1
                 if imap < track_pixel_map.shape[1]:
                     track_pixel_map[idx][imap] = itrk
-                    
