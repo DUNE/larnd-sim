@@ -189,7 +189,7 @@ def run_simulation(input_filename,
         d_unique_pix = cupy.array(unique_pix)
         d_pixel_index_map = cupy.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
         compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
-        indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+        indices = cupy.where(cupy.logical_and(compare[..., 0], compare[..., 1]))
         d_pixel_index_map[indices[0], indices[1]] = indices[2]
         RangePop()
 
