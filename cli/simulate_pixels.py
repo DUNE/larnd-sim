@@ -29,7 +29,15 @@ logo = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
-
+def cupy_unique_axis0(array):
+    if len(array.shape) != 2:
+        raise ValueError("Input array must be 2D.")
+    sortarr     = array[cp.lexsort(array.T[::-1])]
+    mask        = cp.empty(array.shape[0], dtype=cp.bool_)
+    mask[0]     = True
+    mask[1:]    = cp.any(sortarr[1:] != sortarr[:-1], axis=1)
+    return sortarr[mask]
+    
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -73,19 +81,19 @@ def run_simulation(input_filename,
     # First of all we load the edep-sim output
     # For this sample we need to invert $z$ and $y$ axes
     with h5py.File(input_filename, 'r') as f:
-        tracks = cp.array(f['segments'])
+        tracks = np.array(f['segments'])
     RangePop()
 
     RangePush("slicing_and_swapping")
     tracks = tracks[:n_tracks]
 
-    y_start = cp.copy(tracks['y_start'] )
-    y_end = cp.copy(tracks['y_end'])
-    y = cp.copy(tracks['y'])
+    y_start = np.copy(tracks['y_start'] )
+    y_end = np.copy(tracks['y_end'])
+    y = np.copy(tracks['y'])
 
-    tracks['y_start'] = cp.copy(tracks['z_start'])
-    tracks['y_end'] = cp.copy(tracks['z_end'])
-    tracks['y'] = cp.copy(tracks['z'])
+    tracks['y_start'] = np.copy(tracks['z_start'])
+    tracks['y_end'] = np.copy(tracks['z_end'])
+    tracks['y'] = np.copy(tracks['z'])
 
     tracks['z_start'] = y_start
     tracks['z_end'] = y_end
@@ -126,11 +134,11 @@ def run_simulation(input_filename,
 
         RangePush("event_id_map")
         # Here we build a map between tracks and event IDs
-        unique_eventIDs = cp.unique(selected_tracks['eventID'])
-        event_id_map = cp.zeros_like(selected_tracks['eventID'])
+        unique_eventIDs = np.unique(selected_tracks['eventID'])
+        event_id_map = np.zeros_like(selected_tracks['eventID'])
         for iev, evID in enumerate(selected_tracks['eventID']):
-            event_id_map[iev] = cp.where(evID == unique_eventIDs)[0]
-        # d_event_id_map = cuda.to_device(event_id_map)
+            event_id_map[iev] = np.where(evID == unique_eventIDs)[0]
+        event_id_map = cuda.to_device(event_id_map)
         RangePop()
 
         # We find the pixels intersected by the projection of the tracks on
@@ -156,7 +164,7 @@ def run_simulation(input_filename,
         RangePush("unique_pix")
         shapes = neighboring_pixels.shape
         joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
-        unique_pix = cp.unique(joined, axis=0)
+        unique_pix = cupy_unique_axis0(joined)
         unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
         RangePop()
 
@@ -174,7 +182,7 @@ def run_simulation(input_filename,
         # Here we calculate the induced current on each pixel
         signals = cp.zeros((selected_tracks.shape[0],
                             neighboring_pixels.shape[1],
-                            max_length[0]), dtype=np.float32)
+                            cp.asnumpy(max_length)[0]), dtype=np.float32)
         threadsperblock = (4,4,4)
         blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
@@ -232,13 +240,13 @@ def run_simulation(input_filename,
         backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], track_pixel_map.shape[1]), -1)
 
         # Here we backtrack the ADC counts to the Geant4 tracks
-        detsim.get_track_pixel_map(track_pixel_map, unique_pix, neighboring_pixels)
-        detsim.backtrack_adcs(selected_tracks, adc_list, adc_ticks_list, track_pixel_map, event_id_map, backtracked_id)
+        # detsim.get_track_pixel_map(track_pixel_map, unique_pix, neighboring_pixels)
+        # detsim.backtrack_adcs(selected_tracks, adc_list, adc_ticks_list, track_pixel_map, event_id_map, backtracked_id)
 
-        adc_tot_list = cp.append(adc_tot_list, adc_list, axis=0)
-        adc_tot_ticks_list = cp.append(adc_tot_ticks_list, adc_ticks_list, axis=0)
-        unique_pix_tot = cp.append(unique_pix_tot, unique_pix, axis=0)
-        backtracked_id_tot = cp.append(backtracked_id_tot, backtracked_id, axis=0)
+        #adc_tot_list = cp.append(adc_tot_list, adc_list, axis=0)
+        #adc_tot_ticks_list = cp.append(adc_tot_ticks_list, adc_ticks_list, axis=0)
+        #unique_pix_tot = cp.append(unique_pix_tot, unique_pix, axis=0)
+        #backtracked_id_tot = cp.append(backtracked_id_tot, backtracked_id, axis=0)
         tot_events += len(unique_eventIDs)
         RangePop()
 
