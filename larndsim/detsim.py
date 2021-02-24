@@ -114,8 +114,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
         return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
-    else:
-        return 0, 0, 0
+
+    return 0, 0, 0
 
 @nb.njit
 def _b(x, y, z, start, sigmas, segment, Deltar):
@@ -286,11 +286,11 @@ def tracks_current(signals, pixels, tracks):
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
-            if z_start != 0 and z_end != 0:
+            if z_poca != 0:
                 z_start_int = z_start - 4*sigmas[2]
                 z_end_int = z_end + 4*sigmas[2]
-                x_start, y_start = track_point(start, direction, z_start)
 
+                x_start, y_start = track_point(start, direction, z_start)
                 x_end, y_end = track_point(start, direction, z_end)
 
                 y_step = (abs(y_end-y_start) + 8*sigmas[1]) / (consts.sampled_points - 1)
@@ -374,7 +374,6 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
         track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
         track_start_t = tracks["t_start"][track_indeces]
         track_end_t = tracks["t_end"][track_indeces]
-        track_ids = tracks["trackID"][track_indeces]
         evid = event_id_map[track_pixel_map[ip][track_pixel_map[ip] >= 0]]
 
         for iadc in range(adc_list[ip].shape[0]):
