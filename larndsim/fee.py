@@ -3,9 +3,9 @@ Module that si mulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
+import cupy as cp
 import h5py
 
-import numba as nb
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
@@ -56,18 +56,18 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     packets = {}
     packets_mc = {}
     packets_mc_ds = {}
-    
+
     for ic in range(consts.tpc_centers.shape[0]):
         packets[ic] = []
         packets_mc[ic] = []
         packets_mc_ds[ic] = []
-        
+
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
         plane_id = pixel_id[0] // consts.n_pixels[0]
         pix_x, pix_y = detsim.get_pixel_coordinates(pixel_id)
-        
+
         try:
             pix_x -= consts.tpc_centers[int(plane_id)][0]
             pix_y -= consts.tpc_centers[int(plane_id)][1]
@@ -91,7 +91,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-            
+
                 if isinstance(chip, int):
                     p.chip_id = chip
                 else:
@@ -101,11 +101,11 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
-                        
+
                 if not packets[plane_id]:
                     packets[plane_id].append(TimestampPacket())
                     packets_mc[plane_id].append([-1]*5)
-                    
+
                 packets_mc[plane_id].append(track_ids[itick][iadc])
                 packets[plane_id].append(p)
             else:
@@ -146,8 +146,8 @@ def digitize(integral_list):
     Returns:
         numpy.ndarray: list of ADC values for each pixel
     """
-
-    adcs = np.minimum(np.floor(np.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
+    xp = cp.get_array_module(integral_list)
+    adcs = xp.minimum(xp.floor(xp.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
                       * ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
 
     return adcs
@@ -192,7 +192,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                     ic += 1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
-                
+
                 if adc < DISCRIMINATION_THRESHOLD:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     continue

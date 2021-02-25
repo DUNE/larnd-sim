@@ -370,7 +370,6 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
 def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
 
     for ip in range(adc_list.shape[0]):
-
         track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
         track_start_t = tracks["t_start"][track_indeces]
         track_end_t = tracks["t_end"][track_indeces]
