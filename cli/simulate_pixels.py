@@ -37,7 +37,7 @@ def cupy_unique_axis0(array):
     mask[0]     = True
     mask[1:]    = cp.any(sortarr[1:] != sortarr[:-1], axis=1)
     return sortarr[mask]
-    
+
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -57,7 +57,6 @@ def run_simulation(input_filename,
         n_tracks (int): number of tracks to be simulated
     """
 
-    import cupy
     from cupy.cuda.nvtx import RangePush, RangePop
 
     RangePush("run_simulation")
@@ -122,10 +121,10 @@ def run_simulation(input_filename,
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
     step = 200
-    adc_tot_list = cp.empty((1,fee.MAX_ADC_VALUES))
-    adc_tot_ticks_list = cp.empty((1,fee.MAX_ADC_VALUES))
-    backtracked_id_tot = cp.empty((1,fee.MAX_ADC_VALUES,5))
-    unique_pix_tot = cp.empty((1,2))
+    adc_tot_list = cp.empty((0,fee.MAX_ADC_VALUES))
+    adc_tot_ticks_list = cp.empty((0,fee.MAX_ADC_VALUES))
+    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,5))
+    unique_pix_tot = cp.empty((0,2))
     tot_events = 0
 
     # We divide the sample in portions that can be processed by the GPU
@@ -134,11 +133,8 @@ def run_simulation(input_filename,
 
         RangePush("event_id_map")
         # Here we build a map between tracks and event IDs
-        unique_eventIDs = np.unique(selected_tracks['eventID'])
-        event_id_map = np.zeros_like(selected_tracks['eventID'])
-        for iev, evID in enumerate(selected_tracks['eventID']):
-            event_id_map[iev] = np.where(evID == unique_eventIDs)[0]
-        event_id_map = cuda.to_device(event_id_map)
+        unique_eventIDs = cp.unique(selected_tracks['eventID'])
+        event_id_map = cp.searchsorted(unique_eventIDs,cp.asarray(selected_tracks['eventID']))
         RangePop()
 
         # We find the pixels intersected by the projection of the tracks on
@@ -198,7 +194,7 @@ def run_simulation(input_filename,
         # Here we create a map between tracks and index in the unique pixel array
         pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
         compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
-        indices = cupy.where(cupy.logical_and(compare[..., 0], compare[..., 1]))
+        indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
         pixel_index_map[indices[0], indices[1]] = indices[2]
         RangePop()
 
@@ -236,30 +232,26 @@ def run_simulation(input_filename,
         RangePop()
 
         RangePush("backtracking")
-        track_pixel_map = cp.full((unique_pix.shape[0], 5),-1)
-        backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], track_pixel_map.shape[1]), -1)
+        track_pixel_map = np.full((unique_pix.shape[0], 5),-1)
+        backtracked_id = np.full((adc_list.shape[0], adc_list.shape[1], track_pixel_map.shape[1]), -1)
 
         # Here we backtrack the ADC counts to the Geant4 tracks
-        # detsim.get_track_pixel_map(track_pixel_map, unique_pix, neighboring_pixels)
-        # detsim.backtrack_adcs(selected_tracks, adc_list, adc_ticks_list, track_pixel_map, event_id_map, backtracked_id)
+        detsim.get_track_pixel_map(track_pixel_map, cp.asnumpy(unique_pix), cp.asnumpy(neighboring_pixels))
+        detsim.backtrack_adcs(selected_tracks, cp.asnumpy(adc_list), cp.asnumpy(adc_ticks_list), track_pixel_map, cp.asnumpy(event_id_map), backtracked_id)
 
-        #adc_tot_list = cp.append(adc_tot_list, adc_list, axis=0)
-        #adc_tot_ticks_list = cp.append(adc_tot_ticks_list, adc_ticks_list, axis=0)
-        #unique_pix_tot = cp.append(unique_pix_tot, unique_pix, axis=0)
-        #backtracked_id_tot = cp.append(backtracked_id_tot, backtracked_id, axis=0)
+        adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)
+        adc_tot_ticks_list = cp.concatenate((adc_tot_ticks_list, adc_ticks_list), axis=0)
+        unique_pix_tot = cp.concatenate((unique_pix_tot, unique_pix), axis=0)
+        backtracked_id_tot = cp.concatenate((backtracked_id_tot, cp.asarray(backtracked_id)), axis=0)
         tot_events += len(unique_eventIDs)
         RangePop()
 
-    unique_pix_tot = unique_pix_tot[1:]
-    adc_tot_list = adc_tot_list[1:]
-    adc_tot_ticks_list = adc_tot_ticks_list[1:]
-    backtracked_id_tot = backtracked_id_tot[1:]
-
     # Here we export the result in a HDF5 file.
-    if output_filename:
-        fee.export_to_hdf5(adc_tot_list, adc_tot_ticks_list, unique_pix_tot, backtracked_id_tot, output_filename)
-    else:
-        fee.export_to_hdf5(adc_tot_list, adc_tot_ticks_list, unique_pix_tot, backtracked_id_tot, input_filename)
+    fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
+                       cp.asnumpy(adc_tot_ticks_list),
+                       cp.asnumpy(unique_pix_tot),
+                       cp.asnumpy(backtracked_id_tot),
+                       output_filename if output_filename else input_filename)
 
     print("Output saved in:", output_filename if output_filename else input_filename)
 
