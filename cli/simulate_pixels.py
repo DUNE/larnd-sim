@@ -29,7 +29,10 @@ logo = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
+
 def cupy_unique_axis0(array):
+    # axis is still not supported for cupy.unique, this
+    # is a workaround
     if len(array.shape) != 2:
         raise ValueError("Input array must be 2D.")
     sortarr     = array[cp.lexsort(array.T[::-1])]
@@ -184,7 +187,6 @@ def run_simulation(input_filename,
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
         blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-        # d_signals = cuda.to_device(signals)
         detsim.tracks_current[blockspergrid,threadsperblock](signals,
                                                              neighboring_pixels,
                                                              selected_tracks)
@@ -206,7 +208,6 @@ def run_simulation(input_filename,
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
         blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
         pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*len(unique_eventIDs)*2))
-        # d_pixels_signals = cuda.to_device(pixels_signals)
         detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
                                                                 signals,
                                                                 track_starts,
@@ -237,7 +238,12 @@ def run_simulation(input_filename,
 
         # Here we backtrack the ADC counts to the Geant4 tracks
         detsim.get_track_pixel_map(track_pixel_map, cp.asnumpy(unique_pix), cp.asnumpy(neighboring_pixels))
-        detsim.backtrack_adcs(selected_tracks, cp.asnumpy(adc_list), cp.asnumpy(adc_ticks_list), track_pixel_map, cp.asnumpy(event_id_map), backtracked_id)
+        detsim.backtrack_adcs(selected_tracks,
+                              cp.asnumpy(adc_list),
+                              cp.asnumpy(adc_ticks_list),
+                              track_pixel_map,
+                              cp.asnumpy(event_id_map),
+                              backtracked_id)
 
         adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)
         adc_tot_ticks_list = cp.concatenate((adc_tot_ticks_list, adc_ticks_list), axis=0)
