@@ -3,7 +3,7 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, log
+from math import pi, ceil, sqrt, erf, exp, log, floor
 
 import numba as nb
 import numpy as np
@@ -369,6 +369,8 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
 @nb.njit
 def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
 
+    pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
+
     for ip in range(adc_list.shape[0]):
         track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
         track_start_t = tracks["t_start"][track_indeces]
@@ -377,7 +379,7 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
 
         for iadc in range(adc_list[ip].shape[0]):
 
-            if adc_list[ip][iadc] > 73:
+            if adc_list[ip][iadc] > pedestal:
                 adc_time = adc_times_list[ip][iadc]
                 for itrk in range(track_indeces.shape[0]):
                     if track_start_t[itrk] < adc_time - evid[itrk]*time_interval[1]*2 < track_end_t[itrk]+consts.time_padding:
