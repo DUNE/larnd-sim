@@ -6,3 +6,4 @@ tqdm
 fire
 larpix-control
 larpix-geometry
+cupy
