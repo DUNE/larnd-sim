@@ -3,7 +3,7 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, log
+from math import pi, ceil, sqrt, erf, exp, log, floor
 
 import numba as nb
 import numpy as np
@@ -40,7 +40,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
         t_end = min(time_interval[1], (track["t_end"] + consts.time_padding) // consts.t_sampling * consts.t_sampling)
-        t_start = max(time_interval[0], (track["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
+        t_start = max(time_interval[0], track["t_start"] // consts.t_sampling * consts.t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
@@ -114,8 +114,8 @@ def z_interval(start_point, end_point, x_p, y_p, tolerance):
         minusDeltaZ = start[2] + dir3D[2] * minusDeltaL # tolerance range
 
         return z_poca, min(minusDeltaZ, plusDeltaZ), max(minusDeltaZ, plusDeltaZ)
-    else:
-        return 0, 0, 0
+
+    return 0, 0, 0
 
 @nb.njit
 def _b(x, y, z, start, sigmas, segment, Deltar):
@@ -286,11 +286,11 @@ def tracks_current(signals, pixels, tracks):
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
-            if z_start != 0 and z_end != 0:
+            if z_poca != 0:
                 z_start_int = z_start - 4*sigmas[2]
                 z_end_int = z_end + 4*sigmas[2]
-                x_start, y_start = track_point(start, direction, z_start)
 
+                x_start, y_start = track_point(start, direction, z_start)
                 x_end, y_end = track_point(start, direction, z_end)
 
                 y_step = (abs(y_end-y_start) + 8*sigmas[1]) / (consts.sampled_points - 1)
@@ -300,9 +300,7 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start =  max(time_interval[0],(t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
-
-                total_current = 0.
+                t_start = max(time_interval[0], t["t_start"] // consts.t_sampling * consts.t_sampling)
 
                 for iz in range(z_steps):
 
@@ -317,17 +315,20 @@ def tracks_current(signals, pixels, tracks):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
+                        if x_dist > pixel_size[0]/2:
+                            continue
+
                         for iy in range(consts.sampled_points):
 
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if x_dist < pixel_size[0]/2. and y_dist < pixel_size[1]/2.:
-                                charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
-                                         * abs(x_step) * abs(y_step) * abs(z_step)
-                                total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+                            if y_dist > pixel_size[1]/2:
+                                continue
 
-                signals[itrk,ipix,it] = total_current
+                            charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
+                                        * abs(x_step) * abs(y_step) * abs(z_step)
+                            signals[itrk,ipix,it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
 
 @nb.njit
 def sign(x):
@@ -368,17 +369,17 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
 @nb.njit
 def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
 
-    for ip in range(adc_list.shape[0]):
+    pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
 
+    for ip in range(adc_list.shape[0]):
         track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
         track_start_t = tracks["t_start"][track_indeces]
         track_end_t = tracks["t_end"][track_indeces]
-        track_ids = tracks["trackID"][track_indeces]
         evid = event_id_map[track_pixel_map[ip][track_pixel_map[ip] >= 0]]
-        
+
         for iadc in range(adc_list[ip].shape[0]):
-            
-            if adc_list[ip][iadc] > 73:
+
+            if adc_list[ip][iadc] > pedestal:
                 adc_time = adc_times_list[ip][iadc]
                 for itrk in range(track_indeces.shape[0]):
                     if track_start_t[itrk] < adc_time - evid[itrk]*time_interval[1]*2 < track_end_t[itrk]+consts.time_padding:
@@ -386,16 +387,16 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
 
                         while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
                             counter += 1
-                            
+
                         if counter < backtracked_id.shape[2]:
                             backtracked_id[ip,iadc,counter] = tracks["trackID"][track_indeces[itrk]]
 
 @nb.njit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
-    
+
     for itrk in range(pixels.shape[0]):
         pixIDs = pixels[itrk]
-        
+
         for pixID in pixIDs:
             if pixID[0] != -1:
                 idx = np.where((unique_pix[:,0] == pixID[0]) & (unique_pix[:,1] == pixID[1]))[0][0]
@@ -404,4 +405,3 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
                     imap+=1
                 if imap < track_pixel_map.shape[1]:
                     track_pixel_map[idx][imap] = itrk
-                    
