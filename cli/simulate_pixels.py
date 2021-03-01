@@ -182,7 +182,7 @@ def run_simulation(input_filename,
         signals = cp.zeros((selected_tracks.shape[0],
                             neighboring_pixels.shape[1],
                             cp.asnumpy(max_length)[0]), dtype=np.float32)
-        threadsperblock = (4,4,4)
+        threadsperblock = (1,1,64)
         blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
