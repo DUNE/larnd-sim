@@ -242,7 +242,7 @@ def run_simulation(input_filename,
         # Here we backtrack the ADC counts to the Geant4 tracks
         TPB = 128
         BPG = ceil(adc_list.shape[0] / TPB)
-        backtracked_id = np.full((adc_list.shape[0], adc_list.shape[1], 5), -1)
+        backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], backtracked_id_tot.shape[2]), -1)
         detsim.backtrack_adcs[BPG,TPB](selected_tracks,
                                        adc_list,
                                        adc_ticks_list,
@@ -253,7 +253,7 @@ def run_simulation(input_filename,
         adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)
         adc_tot_ticks_list = cp.concatenate((adc_tot_ticks_list, adc_ticks_list), axis=0)
         unique_pix_tot = cp.concatenate((unique_pix_tot, unique_pix), axis=0)
-        backtracked_id_tot = cp.concatenate((backtracked_id_tot, cp.asarray(backtracked_id)), axis=0)
+        backtracked_id_tot = cp.concatenate((backtracked_id_tot, backtracked_id), axis=0)
         tot_events += len(unique_eventIDs)
         RangePop()
         end_tracks_batch = time()
