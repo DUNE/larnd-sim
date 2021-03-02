@@ -254,12 +254,14 @@ def run_simulation(input_filename,
         tot_events += len(unique_eventIDs)
         RangePop()
 
+    RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
     fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
                        cp.asnumpy(adc_tot_ticks_list),
                        cp.asnumpy(unique_pix_tot),
                        cp.asnumpy(backtracked_id_tot),
                        output_filename if output_filename else input_filename)
+    RangePop()
 
     print("Output saved in:", output_filename if output_filename else input_filename)
 
