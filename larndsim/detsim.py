@@ -366,30 +366,34 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
             itime = start_tick + itick
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
 
-@nb.njit
+@cuda.jit
 def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
 
     pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
 
-    for ip in range(adc_list.shape[0]):
-        track_indeces = track_pixel_map[ip][track_pixel_map[ip]>=0]
-        track_start_t = tracks["t_start"][track_indeces]
-        track_end_t = tracks["t_end"][track_indeces]
-        evid = event_id_map[track_pixel_map[ip][track_pixel_map[ip] >= 0]]
+    ip = cuda.grid(1)
 
-        for iadc in range(adc_list[ip].shape[0]):
+    if ip < adc_list.shape[0]:
+        for itrk in range(track_pixel_map.shape[1]):
+            track_index = track_pixel_map[ip][itrk]
 
-            if adc_list[ip][iadc] > pedestal:
-                adc_time = adc_times_list[ip][iadc]
-                for itrk in range(track_indeces.shape[0]):
-                    if track_start_t[itrk] < adc_time - evid[itrk]*time_interval[1]*2 < track_end_t[itrk]+consts.time_padding:
-                        counter = 0
+            if track_index >= 0:
+                track_start_t = tracks["t_start"][track_index]
+                track_end_t = tracks["t_end"][track_index]
+                evid = event_id_map[track_index]
 
-                        while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
-                            counter += 1
+                for iadc in range(adc_list[ip].shape[0]):
 
-                        if counter < backtracked_id.shape[2]:
-                            backtracked_id[ip,iadc,counter] = tracks["trackID"][track_indeces[itrk]]
+                    if adc_list[ip][iadc] > pedestal:
+                        adc_time = adc_times_list[ip][iadc]
+                        if track_start_t < adc_time - evid*time_interval[1]*2 < track_end_t+consts.time_padding:
+                            counter = 0
+
+                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
+                                counter += 1
+
+                            if counter < backtracked_id.shape[2]:
+                                backtracked_id[ip,iadc,counter] = tracks["trackID"][track_index]
 
 @nb.njit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
