@@ -59,6 +59,7 @@ def run_simulation(input_filename,
             the detector properties
         n_tracks (int): number of tracks to be simulated
     """
+    start_simulation = time()
 
     from cupy.cuda.nvtx import RangePush, RangePop
 
@@ -131,7 +132,9 @@ def run_simulation(input_filename,
     tot_events = 0
 
     # We divide the sample in portions that can be processed by the GPU
+    tracks_batch_runtimes = []
     for itrk in tqdm(range(0, tracks.shape[0], step), desc='Simulating pixels...'):
+        start_tracks_batch = time()
         selected_tracks = tracks[itrk:itrk+step]
 
         RangePush("event_id_map")
@@ -253,6 +256,12 @@ def run_simulation(input_filename,
         backtracked_id_tot = cp.concatenate((backtracked_id_tot, cp.asarray(backtracked_id)), axis=0)
         tot_events += len(unique_eventIDs)
         RangePop()
+        end_tracks_batch = time()
+        tracks_batch_runtimes.append(end_tracks_batch - start_tracks_batch)
+
+    print(f"- total time: {sum(tracks_batch_runtimes):.2f} s")
+    if len(tracks_batch_runtimes) > 1:
+        print(f"- excluding first iteration: {sum(tracks_batch_runtimes[1:]):.2f} s")
 
     RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
@@ -266,6 +275,8 @@ def run_simulation(input_filename,
     print("Output saved in:", output_filename if output_filename else input_filename)
 
     RangePop()
+    end_simulation = time()
+    print(f"run_simulation elapsed time: {end_simulation-start_simulation:.2f} s")
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
