@@ -201,6 +201,9 @@ def run_simulation(input_filename,
         compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
         indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
         pixel_index_map[indices[0], indices[1]] = indices[2]
+        # Inverse mapping between pixels and track indices
+        track_pixel_map = cp.full((unique_pix.shape[0], neighboring_pixels.shape[1]),-1)
+        track_pixel_map[indices[2], indices[1]] = indices[0]
         RangePop()
 
         RangePush("sum_pixels_signals")
@@ -236,13 +239,10 @@ def run_simulation(input_filename,
         RangePop()
 
         RangePush("backtracking")
-        track_pixel_map = np.full((unique_pix.shape[0], 5),-1)
-        backtracked_id = np.full((adc_list.shape[0], adc_list.shape[1], track_pixel_map.shape[1]), -1)
-
         # Here we backtrack the ADC counts to the Geant4 tracks
-        detsim.get_track_pixel_map(track_pixel_map, cp.asnumpy(unique_pix), cp.asnumpy(neighboring_pixels))
         TPB = 128
         BPG = ceil(adc_list.shape[0] / TPB)
+        backtracked_id = np.full((adc_list.shape[0], adc_list.shape[1], 5), -1)
         detsim.backtrack_adcs[BPG,TPB](selected_tracks,
                                        adc_list,
                                        adc_ticks_list,
