@@ -287,6 +287,7 @@ def tracks_current(signals, pixels, tracks):
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 
             if z_poca != 0:
+
                 z_start_int = z_start - 4*sigmas[2]
                 z_end_int = z_end + 4*sigmas[2]
 
@@ -301,6 +302,8 @@ def tracks_current(signals, pixels, tracks):
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
                 t_start = max(time_interval[0], t["t_start"] // consts.t_sampling * consts.t_sampling)
+
+                total_current = 0
 
                 for iz in range(z_steps):
 
@@ -328,7 +331,9 @@ def tracks_current(signals, pixels, tracks):
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                         * abs(x_step) * abs(y_step) * abs(z_step)
-                            signals[itrk,ipix,it] += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+                            total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
+
+                signals[itrk,ipix,it] = total_current
 
 @nb.njit
 def sign(x):
