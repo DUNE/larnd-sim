@@ -1,6 +1,7 @@
 # larnd-sim 
 ![CI status](https://github.com/DUNE/larnd-sim/workflows/CI/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-online-success)](https://dune.github.io/larnd-sim)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4582721.svg)](https://doi.org/10.5281/zenodo.4582721)
 
 <img alt="larnd-sim" src="docs/logo.png" height="160">
 
