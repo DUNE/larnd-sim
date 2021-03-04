@@ -59,6 +59,7 @@ def run_simulation(input_filename,
             the detector properties
         n_tracks (int): number of tracks to be simulated
     """
+    start_simulation = time()
 
     from cupy.cuda.nvtx import RangePush, RangePop
 
@@ -126,12 +127,15 @@ def run_simulation(input_filename,
     step = 200
     adc_tot_list = cp.empty((0,fee.MAX_ADC_VALUES))
     adc_tot_ticks_list = cp.empty((0,fee.MAX_ADC_VALUES))
-    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,5))
+    MAX_TRACKS_PER_PIXEL = 5
+    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,MAX_TRACKS_PER_PIXEL))
     unique_pix_tot = cp.empty((0,2))
     tot_events = 0
 
     # We divide the sample in portions that can be processed by the GPU
+    tracks_batch_runtimes = []
     for itrk in tqdm(range(0, tracks.shape[0], step), desc='Simulating pixels...'):
+        start_tracks_batch = time()
         selected_tracks = tracks[itrk:itrk+step]
 
         RangePush("event_id_map")
@@ -232,14 +236,19 @@ def run_simulation(input_filename,
         adc_list = fee.digitize(integral_list)
         RangePop()
 
-        RangePush("backtracking")
-        track_pixel_map = np.full((unique_pix.shape[0], 5),-1)
-        backtracked_id = np.full((adc_list.shape[0], adc_list.shape[1], track_pixel_map.shape[1]), -1)
+        RangePush("track_pixel_map")
+        # Mapping between unique pixel array and track array index
+        track_pixel_map = cp.full((unique_pix.shape[0], MAX_TRACKS_PER_PIXEL), -1)
+        TPB = 32
+        BPG = ceil(unique_pix.shape[0] / TPB)
+        detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
+        RangePop()
 
+        RangePush("backtracking")
         # Here we backtrack the ADC counts to the Geant4 tracks
-        detsim.get_track_pixel_map(track_pixel_map, cp.asnumpy(unique_pix), cp.asnumpy(neighboring_pixels))
         TPB = 128
         BPG = ceil(adc_list.shape[0] / TPB)
+        backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], MAX_TRACKS_PER_PIXEL), -1)
         detsim.backtrack_adcs[BPG,TPB](selected_tracks,
                                        adc_list,
                                        adc_ticks_list,
@@ -250,9 +259,15 @@ def run_simulation(input_filename,
         adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)
         adc_tot_ticks_list = cp.concatenate((adc_tot_ticks_list, adc_ticks_list), axis=0)
         unique_pix_tot = cp.concatenate((unique_pix_tot, unique_pix), axis=0)
-        backtracked_id_tot = cp.concatenate((backtracked_id_tot, cp.asarray(backtracked_id)), axis=0)
+        backtracked_id_tot = cp.concatenate((backtracked_id_tot, backtracked_id), axis=0)
         tot_events += len(unique_eventIDs)
         RangePop()
+        end_tracks_batch = time()
+        tracks_batch_runtimes.append(end_tracks_batch - start_tracks_batch)
+
+    print(f"- total time: {sum(tracks_batch_runtimes):.2f} s")
+    if len(tracks_batch_runtimes) > 1:
+        print(f"- excluding first iteration: {sum(tracks_batch_runtimes[1:]):.2f} s")
 
     RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
@@ -266,6 +281,8 @@ def run_simulation(input_filename,
     print("Output saved in:", output_filename if output_filename else input_filename)
 
     RangePop()
+    end_simulation = time()
+    print(f"run_simulation elapsed time: {end_simulation-start_simulation:.2f} s")
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)

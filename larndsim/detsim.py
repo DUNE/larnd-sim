@@ -400,17 +400,17 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
                             if counter < backtracked_id.shape[2]:
                                 backtracked_id[ip,iadc,counter] = tracks["trackID"][track_index]
 
-@nb.njit
+@cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
-
-    for itrk in range(pixels.shape[0]):
-        pixIDs = pixels[itrk]
-
-        for pixID in pixIDs:
-            if pixID[0] != -1:
-                idx = np.where((unique_pix[:,0] == pixID[0]) & (unique_pix[:,1] == pixID[1]))[0][0]
+    # index of unique_pix array
+    index = cuda.grid(1)
+    upix = unique_pix[index]
+    for itr in range(pixels.shape[0]):
+        for ipix in range(pixels.shape[1]):
+            pID = pixels[itr][ipix]
+            if upix[0] == pID[0] and upix[1] == pID[1]:
                 imap = 0
-                while imap < track_pixel_map.shape[1] and track_pixel_map[idx][imap] != -1:
-                    imap+=1
+                while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1:
+                    imap += 1
                 if imap < track_pixel_map.shape[1]:
-                    track_pixel_map[idx][imap] = itrk
+                    track_pixel_map[index][imap] = itr
