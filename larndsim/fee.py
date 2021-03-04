@@ -3,7 +3,6 @@ Module that si mulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
-import cupy as cp
 import h5py
 
 from numba import cuda
@@ -146,6 +145,7 @@ def digitize(integral_list):
     Returns:
         numpy.ndarray: list of ADC values for each pixel
     """
+    import cupy as cp
     xp = cp.get_array_module(integral_list)
     adcs = xp.minimum(xp.floor(xp.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
                       * ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
