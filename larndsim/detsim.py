@@ -6,7 +6,6 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log, floor
 
 import numba as nb
-import numpy as np
 
 from numba import cuda
 from .consts import pixel_size, module_borders, time_interval, n_pixels
@@ -39,8 +38,8 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1], (track["t_end"] + consts.time_padding) // consts.t_sampling * consts.t_sampling)
-        t_start = max(time_interval[0], track["t_start"] // consts.t_sampling * consts.t_sampling)
+        t_end = min(time_interval[1], round((track["t_end"] + consts.time_padding) / consts.t_sampling) * consts.t_sampling)
+        t_start = max(time_interval[0], round(track["t_start"] / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
@@ -233,7 +232,7 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    plane_id = int(pixel_id[0] // n_pixels[0])
+    plane_id = round(pixel_id[0] / n_pixels[0])
     this_border = module_borders[plane_id]
 
     pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
@@ -301,7 +300,7 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(time_interval[0], t["t_start"] // consts.t_sampling * consts.t_sampling)
+                t_start = max(time_interval[0], round(t["t_start"] / consts.t_sampling) * consts.t_sampling)
 
                 total_current = 0
 
@@ -364,7 +363,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
     if it < signals.shape[0] and ipix < signals.shape[1]:
 
         index = index_map[it][ipix]
-        start_tick = int(track_starts[it] // consts.t_sampling)
+        start_tick = round(track_starts[it] / consts.t_sampling)
 
         if itick < signals.shape[2] and index >= 0:
 

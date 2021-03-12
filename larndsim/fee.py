@@ -64,7 +64,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
-        plane_id = pixel_id[0] // consts.n_pixels[0]
+        plane_id = round(pixel_id[0] / consts.n_pixels[0])
         pix_x, pix_y = detsim.get_pixel_coordinates(pixel_id)
 
         try:
