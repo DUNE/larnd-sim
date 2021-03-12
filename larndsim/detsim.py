@@ -170,10 +170,8 @@ def truncexpon(x, loc=0, scale=1):
     To shift and/or scale the distribution use the `loc` and `scale` parameters.
     """
     y = (x-loc)/scale
-    if y > 0:
-        return exp(-y)/scale
-    else:
-        return 0
+
+    return exp(-y)/scale if y > 0 else 0
 
 @nb.njit
 def current_model(t, t0, x, y):
@@ -329,7 +327,7 @@ def tracks_current(signals, pixels, tracks):
                                 continue
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
-                                        * abs(x_step) * abs(y_step) * abs(z_step)
+                                     * abs(x_step) * abs(y_step) * abs(z_step)
                             total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
 
                 signals[itrk,ipix,it] = total_current
