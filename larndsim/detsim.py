@@ -8,7 +8,7 @@ from math import pi, ceil, sqrt, erf, exp, log, floor
 import numba as nb
 
 from numba import cuda
-from .consts import pixel_size, module_borders, time_interval, n_pixels
+from .consts import pixel_size, tpc_borders, time_interval, n_pixels
 from . import consts
 from . import fee
 
@@ -231,7 +231,7 @@ def get_pixel_coordinates(pixel_id):
     Returns the coordinates of the pixel center given the pixel ID
     """
     plane_id = round(pixel_id[0] / n_pixels[0])
-    this_border = module_borders[plane_id]
+    this_border = tpc_borders[plane_id]
 
     pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
     pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
@@ -306,7 +306,7 @@ def tracks_current(signals, pixels, tracks):
 
                     z = z_start_int + iz*z_step
                     time_tick = t_start + it*consts.t_sampling
-                    t0 = (z - module_borders[t["pixel_plane"]][2][0]) / consts.vdrift
+                    t0 = (z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
