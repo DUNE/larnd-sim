@@ -208,3 +208,62 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 iadc += 1
 
             ic += 1
+
+import numba as nb
+import random
+@nb.njit(parallel=True)
+def get_adc_values_cpu(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding):
+    """
+    Implementation of self-trigger logic
+
+    Args:
+        pixels_signals (:obj:`numpy.ndarray`): list of induced currents for
+            each pixel
+        time_ticks (:obj:`numpy.ndarray`): list of time ticks for each pixel
+        adc_list (:obj:`numpy.ndarray`): list of integrated charges for each
+            pixel
+        adc_ticks_list (:obj:`numpy.ndarray`): list of the time ticks that
+            correspond to each integrated charge.
+    """
+
+    for ip in nb.prange(pixels_signals.shape[0]):
+        curre = pixels_signals[ip]
+        ic = 0
+        iadc = 0
+        q_sum = random.gauss(0, RESET_NOISE_CHARGE * consts.e_charge)
+
+        while ic < curre.shape[0]:
+
+            q = curre[ic]*consts.t_sampling
+
+            q_sum += q
+            q_noise = random.gauss(0, UNCORRELATED_NOISE_CHARGE * consts.e_charge)
+
+            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
+
+                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
+                integrate_end = ic+interval
+
+                while ic <= integrate_end and ic < curre.shape[0]:
+                    q = curre[ic] * consts.t_sampling
+                    q_sum += q
+                    ic += 1
+
+                adc = q_sum + random.gauss(0, UNCORRELATED_NOISE_CHARGE * consts.e_charge)
+
+                if adc < DISCRIMINATION_THRESHOLD:
+                    ic += round(CLOCK_CYCLE / consts.t_sampling)
+                    continue
+
+                if iadc >= MAX_ADC_VALUES:
+                    print("More ADC values than possible, ", MAX_ADC_VALUES)
+                    break
+
+                adc_list[ip][iadc] = adc
+                adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
+                ic += round(CLOCK_CYCLE / consts.t_sampling)
+                q_sum = random.gauss(0, RESET_NOISE_CHARGE * consts.e_charge)
+                iadc += 1
+
+            ic += 1
+

@@ -33,7 +33,7 @@ vdrift = 0.153812 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
-t_sampling = 0.1 # us
+t_sampling = 0.2 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
