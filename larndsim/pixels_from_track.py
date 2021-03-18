@@ -5,7 +5,7 @@ pixels.
 """
 
 from numba import cuda
-from .consts import pixel_size, n_pixels, module_borders
+from .consts import pixel_size, n_pixels, tpc_borders
 
 import logging
 logging.basicConfig()
@@ -36,7 +36,7 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
-        this_border = module_borders[int(t["pixel_plane"])]
+        this_border = tpc_borders[int(t["pixel_plane"])]
         start_pixel = (round((t["x_start"] - this_border[0][0]) / pixel_size[0]) + n_pixels[0]*t["pixel_plane"],
                        round((t["y_start"] - this_border[1][0]) / pixel_size[1]))
         end_pixel = (round((t["x_end"] - this_border[0][0]) / pixel_size[0]) + n_pixels[0]*t["pixel_plane"],
@@ -48,7 +48,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
-
 
 @cuda.jit(device=True)
 def get_active_pixels(x0, y0, x1, y1, tot_pixels):
@@ -94,7 +93,6 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
             D -= 2*dx
         D += 2*dy
 
-
 @cuda.jit(device=True)
 def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
     """
@@ -132,7 +130,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                         break
 
                 plane_id = round(new_pixel[0] / n_pixels[0])
-                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1] and plane_id < module_borders.shape[0]:
+                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1] and plane_id < tpc_borders.shape[0]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
 
