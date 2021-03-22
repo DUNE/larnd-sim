@@ -59,9 +59,13 @@ tpc_borders = np.zeros((0, 3, 2))
 tile_borders = np.zeros((2,2))
 tile_size = np.zeros(3)
 n_pixels = 0, 0
+n_pixels_per_tile = 0, 0
 pixel_connection_dict = {}
 pixel_pitch = 0
-tile_positions = 0
+tile_positions = {}
+tile_orientations = {}
+tile_map = ()
+tile_chip_to_io = {}
 
 variable_types = {
     "eventID": "u4",
@@ -111,6 +115,7 @@ def load_detector_properties(detprop_file, pixel_file):
     global pixel_connection_dict
     global module_borders
     global n_pixels
+    global n_pixels_per_tile
     global tpc_centers
     global vdrift
     global lifetime
@@ -118,6 +123,9 @@ def load_detector_properties(detprop_file, pixel_file):
     global long_diff
     global tran_diff
     global tile_positions
+    global tile_orientations
+    global tile_map
+    global tile_chip_to_io
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -138,26 +146,33 @@ def load_detector_properties(detprop_file, pixel_file):
     pixel_pitch = tile_layout['pixel_pitch'] * mm2cm
     chip_channel_to_position = tile_layout['chip_channel_to_position']
     pixel_connection_dict = {tuple(pix): (chip_channel//1000,chip_channel%1000) for chip_channel, pix in chip_channel_to_position.items()}
-
+    tile_chip_to_io = tile_layout['tile_chip_to_io']
+    
     xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch
     ys = np.array(list(chip_channel_to_position.values()))[:,1] * pixel_pitch
-    tile_borders[0] = [min(xs)-pixel_pitch/2, max(xs)+pixel_pitch/2]
-    tile_borders[1] = [min(ys)-pixel_pitch/2, max(ys)+pixel_pitch/2]
+    tile_borders[0] = [-(max(xs)+pixel_pitch)/2, (max(xs)+pixel_pitch)/2]
+    tile_borders[1] = [-(max(ys)+pixel_pitch)/2, (max(ys)+pixel_pitch)/2]
+
     tile_positions = np.array(list(tile_layout['tile_positions'].values())) * mm2cm
-    tpcs = np.unique(tile_positions[:,0,0])
+    tile_orientations = np.array(list(tile_layout['tile_orientations'].values()))
+    tpcs = np.unique(tile_positions[:,0])
     tpc_borders = np.zeros((len(tpcs), 3, 2))
 
     for itpc,tpc_id in enumerate(tpcs):
-        this_tpc_tile = tile_positions[tile_positions[:,0,0] == tpc_id]
-        x_border = min(this_tpc_tile[:,0,2])+tile_borders[0][0], \
-                   max(this_tpc_tile[:,0,2])+tile_borders[0][1]
-        y_border = min(this_tpc_tile[:,0,1])+tile_borders[1][0], \
-                   max(this_tpc_tile[:,0,1])+tile_borders[1][1]
+        this_tpc_tile = tile_positions[tile_positions[:,0] == tpc_id]
+        this_orientation = tile_orientations[tile_positions[:,0] == tpc_id]
 
-        z_border = min(this_tpc_tile[:,0,0]), \
-                   max(this_tpc_tile[:,0,0])+detprop['drift_length']
+        x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_centers[itpc][0], \
+                   max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_centers[itpc][0]
+        y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_centers[itpc][1], \
+                   max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_centers[itpc][1]
+        z_border = min(this_tpc_tile[:,0])+tpc_centers[itpc][2], \
+                   max(this_tpc_tile[:,0])+detprop['drift_length']*this_orientation[:,0][0]+tpc_centers[itpc][2]
 
         tpc_borders[itpc] = (x_border, y_border, z_border)
 
-    # #: Number of pixels per axis
-    n_pixels = len(np.unique(xs)), len(np.unique(ys))
+    #: Number of pixels per axis
+    n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
+    n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
+    
+    tile_map = ((7,5,3,1),(8,6,4,2))

@@ -37,6 +37,21 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
+def rotate_tile(pixel_id, plane_id):
+    axes = consts.tile_orientations[plane_id]
+    x_axis = axes[2]
+    y_axis = axes[1]
+    
+    pix_x = pixel_id[0]
+    if x_axis < 0:
+        pix_x = consts.n_pixels_per_tile[0]-pixel_id[0]-1
+        
+    pix_y = pixel_id[1]
+    if y_axis < 0:
+        pix_y = consts.n_pixels_per_tile[1]-pixel_id[1]-1
+    
+    return pix_x, pix_y
+        
 def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -52,29 +67,18 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
 
     dtype = np.dtype([('track_ids','(5,)i8')])
-    packets = {}
-    packets_mc = {}
-    packets_mc_ds = {}
-
-    for ic in range(consts.tpc_centers.shape[0]):
-        packets[ic] = []
-        packets_mc[ic] = []
-        packets_mc_ds[ic] = []
+    packets = []
+    packets_mc = []
+    packets_mc_ds = []
 
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
-        plane_id = round(pixel_id[0] / consts.n_pixels[0])
-        pix_x, pix_y = detsim.get_pixel_coordinates(pixel_id)
 
-        try:
-            pix_x -= consts.tpc_centers[int(plane_id)][0]
-            pix_y -= consts.tpc_centers[int(plane_id)][1]
-        except IndexError:
-            print("Pixel (%i, %i) outside the TPC borders" % (pixel_id[0], pixel_id[1]))
-
-        pix_x *= consts.cm2mm
-        pix_y *= consts.cm2mm
+        plane_id = pixel_id[0] // consts.n_pixels[0]
+        tile_x = (pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1]
+        tile_y = pixel_id[1] // consts.n_pixels_per_tile[1]
+        tile_id = consts.tile_map[tile_x][tile_y]
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
@@ -83,54 +87,44 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 p = Packet_v2()
 
                 try:
-                    channel, chip = consts.pixel_connection_dict[(round(pix_x/consts.pixel_size[0]),round(pix_y/consts.pixel_size[1]))]
+                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, plane_id)]
                 except KeyError:
-                    print("Pixel coordinates not valid", pix_x, pix_y, pixel_id, adc)
+                    print("Pixel ID not valid", pixel_id)
                     continue
-
+                    
                 p.dataword = int(adc)
                 p.timestamp = int(np.floor(t/CLOCK_CYCLE))
 
-                if isinstance(chip, int):
-                    p.chip_id = chip
-                else:
-                    p.chip_key = chip
-
+                io_group_io_channel = consts.tile_chip_to_io[plane_id*8+tile_id][chip]
+                io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
+                
+                p.chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
 
-                if not packets[plane_id]:
-                    packets[plane_id].append(TimestampPacket())
-                    packets_mc[plane_id].append([-1]*5)
+                if not packets:
+                    packets.append(TimestampPacket())
+                    packets_mc.append([-1]*5)
 
-                packets_mc[plane_id].append(track_ids[itick][iadc])
-                packets[plane_id].append(p)
+                packets_mc.append(track_ids[itick][iadc])
+                packets.append(p)
             else:
                 break
 
-    for ipc in packets:
-        packet_list = PacketCollection(packets[ipc], read_id=0, message='')
+    packet_list = PacketCollection(packets, read_id=0, message='')
 
-        if len(packets.keys()) > 1:
-            if "." in filename:
-                pre_extension, post_extension = filename.rsplit('.', 1)
-                filename_ext = "%s-%i.%s" % (pre_extension, ipc, post_extension)
-            else:
-                filename_ext = "%s-%i" % (filename, ipc)
-        else:
-            filename_ext = filename
+    hdf5format.to_file(filename, packet_list)
 
-        hdf5format.to_file(filename_ext, packet_list)
-        if len(packets[ipc]):
-            packets_mc_ds[ipc] = np.empty(len(packets[ipc]), dtype=dtype)
-            packets_mc_ds[ipc]['track_ids'] = packets_mc[ipc]
+    if packets:
+        packets_mc_ds = np.empty(len(packets), dtype=dtype)
+        packets_mc_ds['track_ids'] = packets_mc
 
-        with h5py.File(filename_ext, 'a') as f:
-            if "mc_packets_assn" in f.keys():
-                del f['mc_packets_assn']
-            f.create_dataset("mc_packets_assn", data=packets_mc_ds[ipc])
+    with h5py.File(filename, 'a') as f:
+        if "mc_packets_assn" in f.keys():
+            del f['mc_packets_assn']
+        f.create_dataset("mc_packets_assn", data=packets_mc_ds)
 
     return packets, packets_mc
 
