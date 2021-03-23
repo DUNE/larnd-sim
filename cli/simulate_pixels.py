@@ -90,17 +90,17 @@ def run_simulation(input_filename,
     RangePush("slicing_and_swapping")
     tracks = tracks[:n_tracks]
 
-    y_start = np.copy(tracks['y_start'] )
-    y_end = np.copy(tracks['y_end'])
-    y = np.copy(tracks['y'])
+    x_start = np.copy(tracks['x_start'] )
+    x_end = np.copy(tracks['x_end'])
+    x = np.copy(tracks['x'])
 
-    tracks['y_start'] = np.copy(tracks['z_start'])
-    tracks['y_end'] = np.copy(tracks['z_end'])
-    tracks['y'] = np.copy(tracks['z'])
+    tracks['x_start'] = np.copy(tracks['z_start'])
+    tracks['x_end'] = np.copy(tracks['z_end'])
+    tracks['x'] = np.copy(tracks['z'])
 
-    tracks['z_start'] = y_start
-    tracks['z_end'] = y_end
-    tracks['z'] = y
+    tracks['z_start'] = x_start
+    tracks['z_end'] = x_end
+    tracks['z'] = x
     RangePop()
 
     TPB = 256
@@ -148,8 +148,8 @@ def run_simulation(input_filename,
         # the anode plane using the Bresenham's algorithm. We also take into
         # account the neighboring pixels, due to the transverse diffusion of the charges.
         RangePush("pixels_from_track")
-        longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_size[0])
-        max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_size[0])
+        longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
+        max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
         MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
         MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
         active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
