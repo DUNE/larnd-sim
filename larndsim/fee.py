@@ -75,9 +75,9 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
-        plane_id = pixel_id[0] // consts.n_pixels[0]
-        tile_x = (pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1]
-        tile_y = pixel_id[1] // consts.n_pixels_per_tile[1]
+        plane_id = int(pixel_id[0] // consts.n_pixels[0])
+        tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1])
+        tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
         tile_id = consts.tile_map[tile_x][tile_y]
 
         for iadc, adc in enumerate(adcs):
