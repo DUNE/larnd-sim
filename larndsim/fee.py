@@ -37,11 +37,11 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
-def rotate_tile(pixel_id, plane_id):
-    axes = consts.tile_orientations[plane_id]
+def rotate_tile(pixel_id, tile_id):
+    axes = consts.tile_orientations[tile_id-1]
     x_axis = axes[2]
     y_axis = axes[1]
-    
+
     pix_x = pixel_id[0]
     if x_axis < 0:
         pix_x = consts.n_pixels_per_tile[0]-pixel_id[0]-1
@@ -74,12 +74,14 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
+#         pixel_id = np.array([0,0])
 
         plane_id = int(pixel_id[0] // consts.n_pixels[0])
+#         plane_id = 0
         tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1])
         tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
-        tile_id = consts.tile_map[tile_x][tile_y]
-
+        tile_id = consts.tile_map[plane_id][tile_x][tile_y]
+#         tile_id = 2
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
@@ -87,17 +89,25 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 p = Packet_v2()
 
                 try:
-                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, plane_id)]
+                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, tile_id)]
+#                     chip, channel = consts.pixel_connection_dict[(0,0)]
                 except KeyError:
                     print("Pixel ID not valid", pixel_id)
                     continue
+#                 
+#                 print(chip,channel)
+#                 chip = 11
+#                 channel = 0
                     
                 p.dataword = int(adc)
-                p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-
-                io_group_io_channel = consts.tile_chip_to_io[plane_id*8+tile_id][chip]
+                p.timestamp = int(np.floor((t-0.5/consts.vdrift)/CLOCK_CYCLE))
+                try:
+                    io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
+                except KeyError:
+                    print("Chip %i on tile %i not found" % (chip, tile_id))
+                    continue
+                    
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
-                
                 p.chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
                 p.channel_id = channel
                 p.packet_type = 0
