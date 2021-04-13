@@ -2,7 +2,7 @@ tpc_centers: # cm
   - [0, -21.8236, 0]
   - [0, -21.8236, 0]
 
-vdrift: 0.153812 # cm / us
+vdrift: 0.1648 # cm / us
 lifetime: 10.e+3 # us
 time_interval: [0, 200.] # us
 long_diff: 4.0e-6 # cm * cm / us

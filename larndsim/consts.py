@@ -29,7 +29,7 @@ e_charge = 1.602e-19
 
 ## TPC params
 #: Drift velocity in :math:`cm/\mu s`
-vdrift = 0.153812 # cm / us,
+vdrift = 0.1648 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 lifetime = 10e3 # us,
 #: Time sampling in :math:`\mu s`
@@ -175,4 +175,4 @@ def load_detector_properties(detprop_file, pixel_file):
     n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
     
-    tile_map = ((7,5,3,1),(8,6,4,2))
+    tile_map = ((7,5,3,1),(8,6,4,2)),((16,14,12,10),(15,13,11,9))
