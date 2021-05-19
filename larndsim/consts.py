@@ -3,7 +3,6 @@ Module containing constants needed by the simulation
 """
 
 import numpy as np
-import larpixgeometry.pixelplane
 import yaml
 
 ## Detector constants
@@ -111,12 +110,9 @@ def load_detector_properties(detprop_file, pixel_file):
     global ys
     global pixel_pitch
     global tpc_borders
-    global tpc_size
     global pixel_connection_dict
-    global module_borders
     global n_pixels
     global n_pixels_per_tile
-    global tpc_centers
     global vdrift
     global lifetime
     global time_interval
@@ -147,7 +143,7 @@ def load_detector_properties(detprop_file, pixel_file):
     chip_channel_to_position = tile_layout['chip_channel_to_position']
     pixel_connection_dict = {tuple(pix): (chip_channel//1000,chip_channel%1000) for chip_channel, pix in chip_channel_to_position.items()}
     tile_chip_to_io = tile_layout['tile_chip_to_io']
-    
+
     xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch
     ys = np.array(list(chip_channel_to_position.values()))[:,1] * pixel_pitch
     tile_borders[0] = [-(max(xs)+pixel_pitch)/2, (max(xs)+pixel_pitch)/2]
@@ -174,5 +170,5 @@ def load_detector_properties(detprop_file, pixel_file):
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
-    
+
     tile_map = ((7,5,3,1),(8,6,4,2)),((16,14,12,10),(15,13,11,9))
