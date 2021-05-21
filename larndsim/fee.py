@@ -8,7 +8,7 @@ import h5py
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
-from larpix.packet import Packet_v2, TimestampPacket
+from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
@@ -17,7 +17,7 @@ from . import consts, detsim
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
 #: Discrimination threshold
-DISCRIMINATION_THRESHOLD = 5e3*consts.e_charge
+DISCRIMINATION_THRESHOLD = 7e3*consts.e_charge
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: Clock cycle time in :math:`\mu s`
@@ -37,6 +37,31 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
+
+nonrouted_channels=[6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
+routed_channels=[i for i in range(64) if i not in nonrouted_channels]
+top_row_channels=[3,2,1,63,62,61,60]
+bottom_row_channels=[28,29,30,31,33,34,35]
+inner_edge_channels=[60,52,53,48,45,41,35]
+top_row_chip_ids=[11,12,13,14,15,16,17,18,19,20]
+bottom_row_chip_ids=[101,102,103,104,105,106,107,108,109,110]
+inner_edge_chip_ids=[20,30,40,50,60,70,80,90,100,110]
+
+def rotate_tile(pixel_id, tile_id):
+    axes = consts.tile_orientations[tile_id-1]
+    x_axis = axes[2]
+    y_axis = axes[1]
+
+    pix_x = pixel_id[0]
+    if x_axis < 0:
+        pix_x = consts.n_pixels_per_tile[0]-pixel_id[0]-1
+        
+    pix_y = pixel_id[1]
+    if y_axis < 0:
+        pix_y = consts.n_pixels_per_tile[1]-pixel_id[1]-1
+    
+    return pix_x, pix_y
+        
 def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -51,88 +76,87 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
         list: list of LArPix packets
     """
 
-    dtype = np.dtype([('track_ids','(5,)i8')])
-    packets = {}
-    packets_mc = {}
-    packets_mc_ds = {}
-
-    for ic in range(consts.tpc_centers.shape[0]):
-        packets[ic] = []
-        packets_mc[ic] = []
-        packets_mc_ds[ic] = []
-
+    dtype = np.dtype([('track_ids','(5,)i8'),('event_ids','(5,)i8')])
+    packets = [TimestampPacket()]
+    packets_mc_trkid = [[-1]*5]
+    packets_mc_evid = [[-1]*5]
+    packets_mc_ds = []
+    last_event = -1
+    
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
-        plane_id = round(pixel_id[0] / consts.n_pixels[0])
-        pix_x, pix_y = detsim.get_pixel_coordinates(pixel_id)
 
-        try:
-            pix_x -= consts.tpc_centers[int(plane_id)][0]
-            pix_y -= consts.tpc_centers[int(plane_id)][1]
-        except IndexError:
-            print("Pixel (%i, %i) outside the TPC borders" % (pixel_id[0], pixel_id[1]))
-
-        pix_x *= consts.cm2mm
-        pix_y *= consts.cm2mm
+        plane_id = int(pixel_id[0] // consts.n_pixels[0])
+        tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1])
+        tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
+        tile_id = consts.tile_map[plane_id][tile_x][tile_y]
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
             if adc > digitize(0):
+                event = t // (consts.time_interval[1]*3)
+                time_tick = int(np.floor((t-0.5/consts.vdrift)/CLOCK_CYCLE))
+
+                if event != last_event:
+                    packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
+                    packets_mc_trkid.append([-1]*5)
+                    packets_mc_evid.append([-1]*5)
+                    packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
+                    packets_mc_trkid.append([-1]*5)
+                    packets_mc_evid.append([-1]*5)
+                    last_event = event
+                
                 p = Packet_v2()
 
                 try:
-                    channel, chip = consts.pixel_connection_dict[(round(pix_x/consts.pixel_size[0]),round(pix_y/consts.pixel_size[1]))]
+                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, tile_id)]
                 except KeyError:
-                    print("Pixel coordinates not valid", pix_x, pix_y, pixel_id, adc)
+                    print("Pixel ID not valid", pixel_id)
                     continue
-
+                
+                # disabled channels near the borders of the tiles
+                if chip in top_row_chip_ids and channel in top_row_channels: continue
+                if chip in bottom_row_chip_ids and channel in bottom_row_channels: continue
+                if chip in inner_edge_chip_ids and channel in inner_edge_channels: continue 
+                    
                 p.dataword = int(adc)
-                p.timestamp = int(np.floor(t/CLOCK_CYCLE))
-
-                if isinstance(chip, int):
-                    p.chip_id = chip
-                else:
-                    p.chip_key = chip
-
+                p.timestamp = time_tick
+                try:
+                    io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
+                except KeyError:
+#                     print("Chip %i on tile %i not found" % (chip, tile_id))
+                    continue
+                    
+                io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
+                p.chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
 
-                if not packets[plane_id]:
-                    packets[plane_id].append(TimestampPacket())
-                    packets_mc[plane_id].append([-1]*5)
-
-                packets_mc[plane_id].append(track_ids[itick][iadc])
-                packets[plane_id].append(p)
+                packets_mc_evid.append(track_ids[itick][iadc][:,0])
+                packets_mc_trkid.append(track_ids[itick][iadc][:,1])
+                packets.append(p)
             else:
                 break
+        
+    packet_list = PacketCollection(packets, read_id=0, message='')
+    
+    hdf5format.to_file(filename, packet_list)
 
-    for ipc in packets:
-        packet_list = PacketCollection(packets[ipc], read_id=0, message='')
+    if packets:
+        packets_mc_ds = np.empty(len(packets), dtype=dtype)
+        packets_mc_ds['track_ids'] = packets_mc_trkid
+        packets_mc_ds['event_ids'] = packets_mc_evid
 
-        if len(packets.keys()) > 1:
-            if "." in filename:
-                pre_extension, post_extension = filename.rsplit('.', 1)
-                filename_ext = "%s-%i.%s" % (pre_extension, ipc, post_extension)
-            else:
-                filename_ext = "%s-%i" % (filename, ipc)
-        else:
-            filename_ext = filename
+    with h5py.File(filename, 'a') as f:
+        if "mc_packets_assn" in f.keys():
+            del f['mc_packets_assn']
+        f.create_dataset("mc_packets_assn", data=packets_mc_ds)
 
-        hdf5format.to_file(filename_ext, packet_list)
-        if len(packets[ipc]):
-            packets_mc_ds[ipc] = np.empty(len(packets[ipc]), dtype=dtype)
-            packets_mc_ds[ipc]['track_ids'] = packets_mc[ipc]
-
-        with h5py.File(filename_ext, 'a') as f:
-            if "mc_packets_assn" in f.keys():
-                del f['mc_packets_assn']
-            f.create_dataset("mc_packets_assn", data=packets_mc_ds[ipc])
-
-    return packets, packets_mc
+    return packets, packets_mc_ds
 
 def digitize(integral_list):
     """
@@ -182,7 +206,6 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
             if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
-
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
 
@@ -203,8 +226,8 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
 
                 adc_list[ip][iadc] = adc
                 adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
+
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
                 iadc += 1
-
             ic += 1

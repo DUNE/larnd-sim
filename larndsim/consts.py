@@ -3,7 +3,6 @@ Module containing constants needed by the simulation
 """
 
 import numpy as np
-import larpixgeometry.pixelplane
 import yaml
 
 ## Detector constants
@@ -29,9 +28,9 @@ e_charge = 1.602e-19
 
 ## TPC params
 #: Drift velocity in :math:`cm/\mu s`
-vdrift = 0.153812 # cm / us,
+vdrift = 0.1648 # cm / us,
 #: Electron lifetime in :math:`\mu s`
-lifetime = 10e3 # us,
+lifetime = 2.2e3 # us,
 #: Time sampling in :math:`\mu s`
 t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
@@ -55,52 +54,46 @@ birks = 2
 mm2cm = 0.1
 cm2mm = 10
 
-tpc_centers = np.array([
-        [-487.949, -218.236, -335.],
-        [-182.051, -218.236, -335.],
-        [182.051, -218.236, -335.],
-        [487.949, -218.236, -335.],
-        [-487.949, -218.236, 335.],
-        [-182.051, -218.236, 335.],
-        [182.051, -218.236, 335.],
-        [487.949, -218.236, 335.],
-])
-
-# Swap z->x
-tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
-tpc_centers *= mm2cm
-
-module_borders = np.zeros((tpc_centers.shape[0], 3, 2))
-tpc_borders = np.zeros((3,2))
-tpc_size = np.zeros(3)
+tpc_borders = np.zeros((0, 3, 2))
+tile_borders = np.zeros((2,2))
+tile_size = np.zeros(3)
 n_pixels = 0, 0
+n_pixels_per_tile = 0, 0
 pixel_connection_dict = {}
-pixel_size = np.zeros(2)
+pixel_pitch = 0
+tile_positions = {}
+tile_orientations = {}
+tile_map = ()
+tile_chip_to_io = {}
 
 variable_types = {
-    "eventID": "u4", 
-    "z_end": "f4", 
-    "trackID": "u4", 
+    "eventID": "u4",
+    "z_end": "f4",
+    "trackID": "u4",
     "tran_diff": "f4",
-    "z_start": "f4", 
-    "x_end": "f4", 
-    "y_end": "f4", 
-    "n_electrons": "u4", 
+    "z_start": "f4",
+    "x_end": "f4",
+    "y_end": "f4",
+    "n_electrons": "u4",
     "pdgId": "i4",
-    "x_start": "f4", 
-    "y_start": "f4", 
-    "t_start": "f4", 
-    "dx": "f4", 
-    "long_diff": "f4", 
-    "pixel_plane": "u4", 
-    "t_end": "f4", 
-    "dEdx": "f4", 
-    "dE": "f4", 
+    "x_start": "f4",
+    "y_start": "f4",
+    "t_start": "f4",
+    "dx": "f4",
+    "long_diff": "f4",
+    "pixel_plane": "u4",
+    "t_end": "f4",
+    "dEdx": "f4",
+    "dE": "f4",
     "t": "f4",
     "y": "f4",
     "x": "f4",
     "z": "f4"
 }
+
+anode_layout = (2,4)
+xs = 0
+ys = 0
 
 def load_detector_properties(detprop_file, pixel_file):
     """
@@ -113,18 +106,22 @@ def load_detector_properties(detprop_file, pixel_file):
             filename
         pixel_file (str): pixel layout YAML filename
     """
-    global pixel_size
+    global xs
+    global ys
+    global pixel_pitch
     global tpc_borders
-    global tpc_size
     global pixel_connection_dict
-    global module_borders
     global n_pixels
-    global tpc_centers
+    global n_pixels_per_tile
     global vdrift
     global lifetime
     global time_interval
     global long_diff
     global tran_diff
+    global tile_positions
+    global tile_orientations
+    global tile_map
+    global tile_chip_to_io
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -133,41 +130,45 @@ def load_detector_properties(detprop_file, pixel_file):
     tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
 
     time_interval = np.array(detprop['time_interval'])
-    
+
     vdrift = detprop['vdrift']
     lifetime = detprop['lifetime']
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
 
     with open(pixel_file, 'r') as pf:
-        board = larpixgeometry.pixelplane.PixelPlane.fromDict(yaml.load(pf, Loader=yaml.FullLoader))
+        tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
 
-    xs = np.array([board.pixels[ip].x/10 for ip in board.pixels])
-    ys = np.array([board.pixels[ip].y/10 for ip in board.pixels])
+    pixel_pitch = tile_layout['pixel_pitch'] * mm2cm
+    chip_channel_to_position = tile_layout['chip_channel_to_position']
+    pixel_connection_dict = {tuple(pix): (chip_channel//1000,chip_channel%1000) for chip_channel, pix in chip_channel_to_position.items()}
+    tile_chip_to_io = tile_layout['tile_chip_to_io']
+
+    xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch
+    ys = np.array(list(chip_channel_to_position.values()))[:,1] * pixel_pitch
+    tile_borders[0] = [-(max(xs)+pixel_pitch)/2, (max(xs)+pixel_pitch)/2]
+    tile_borders[1] = [-(max(ys)+pixel_pitch)/2, (max(ys)+pixel_pitch)/2]
+
+    tile_positions = np.array(list(tile_layout['tile_positions'].values())) * mm2cm
+    tile_orientations = np.array(list(tile_layout['tile_orientations'].values()))
+    tpcs = np.unique(tile_positions[:,0])
+    tpc_borders = np.zeros((len(tpcs), 3, 2))
+
+    for itpc,tpc_id in enumerate(tpcs):
+        this_tpc_tile = tile_positions[tile_positions[:,0] == tpc_id]
+        this_orientation = tile_orientations[tile_positions[:,0] == tpc_id]
+
+        x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_centers[itpc][0], \
+                   max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_centers[itpc][0]
+        y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_centers[itpc][1], \
+                   max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_centers[itpc][1]
+        z_border = min(this_tpc_tile[:,0])+tpc_centers[itpc][2], \
+                   max(this_tpc_tile[:,0])+detprop['drift_length']*this_orientation[:,0][0]+tpc_centers[itpc][2]
+
+        tpc_borders[itpc] = (x_border, y_border, z_border)
 
     #: Number of pixels per axis
-    n_pixels = len(np.unique(xs)), len(np.unique(ys))
+    n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
+    n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
 
-    #: Size of pixels per axis in :math:`cm`
-    pixel_size[0] = (max(xs)-min(xs)) / (n_pixels[0] - 1)
-    pixel_size[1] = (max(ys)-min(ys)) / (n_pixels[1] - 1)
-
-    chipids = list(board.chips.keys())
-
-    for chip in chipids:
-        for channel, pixel in enumerate(board.chips[chip].channel_connections):
-            if pixel.x !=0 and pixel.y != 0:
-                pixel_connection_dict[(round(pixel.x/pixel_size[0]),
-                                       round(pixel.y/pixel_size[1]))] = channel, chip
-
-    #: TPC borders coordinates in :math:`cm`
-    tpc_borders[0] = [min(xs)-pixel_size[0]/2, max(xs)+pixel_size[0]/2]
-    tpc_borders[1] = [min(ys)-pixel_size[1]/2, max(ys)+pixel_size[1]/2]
-    tpc_borders[2] = [-detprop['drift_length']/2., detprop['drift_length']/2.]
-
-    tpc_size = tpc_borders[:,1] - tpc_borders[:,0]
-
-    module_borders = np.zeros((tpc_centers.shape[0], 3, 2))
-    for iplane, tpc_center in enumerate(tpc_centers):
-        module_borders[iplane] = (tpc_borders.T+tpc_center).T
-
+    tile_map = ((7,5,3,1),(8,6,4,2)),((16,14,12,10),(15,13,11,9))
