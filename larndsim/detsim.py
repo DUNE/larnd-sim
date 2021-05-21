@@ -384,20 +384,23 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
             if track_index >= 0:
                 track_start_t = tracks["t_start"][track_index]
                 track_end_t = tracks["t_end"][track_index]
-                evid = event_id_map[track_index]
 
                 for iadc in range(adc_list[ip].shape[0]):
-
+                    
                     if adc_list[ip][iadc] > pedestal:
                         adc_time = adc_times_list[ip][iadc]
-                        if track_start_t < adc_time - evid*time_interval[1]*2 < track_end_t+consts.time_padding:
+                        evid = adc_time // (time_interval[1]*3)
+
+                        if track_start_t < adc_time - evid*time_interval[1]*3 < track_end_t+consts.time_padding:
                             counter = 0
 
-                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
+                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter,0] != -1:
                                 counter += 1
 
                             if counter < backtracked_id.shape[2]:
-                                backtracked_id[ip,iadc,counter] = tracks["trackID"][track_index]
+                                backtracked_id[ip,iadc,counter,0] = evid
+                                backtracked_id[ip,iadc,counter,1] = tracks["trackID"][track_index]
+
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):

@@ -31,7 +31,7 @@ e_charge = 1.602e-19
 #: Drift velocity in :math:`cm/\mu s`
 vdrift = 0.1648 # cm / us,
 #: Electron lifetime in :math:`\mu s`
-lifetime = 10e3 # us,
+lifetime = 2.2e3 # us,
 #: Time sampling in :math:`\mu s`
 t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
