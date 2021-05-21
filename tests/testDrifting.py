@@ -7,8 +7,8 @@ from math import ceil
 
 from larndsim import consts
 
-consts.load_detector_properties("larndsim/detector_properties/singlecube.yaml",
-                                "larndsim/pixel_layouts/layout-singlecube.yaml")
+consts.load_detector_properties("larndsim/detector_properties/module0.yaml",
+                                "larndsim/pixel_layouts/multi_tile_layout-2.1.16.yaml")
 
 from larndsim import drifting
 
@@ -20,16 +20,16 @@ class TestDrifting:
     tracks = np.core.records.fromarrays(tracks.transpose(), 
                                         names="eventID, z_end, trackID, tran_diff, z_start, x_end, y_end, n_electrons, pdgId, x_start, y_start, t_start, dx, long_diff, pixel_plane, t_end, dEdx, dE, t, y, x, z",
                                         formats = "i8, f8, i8, f8, f8, f8, f8, i8, i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8")
-    tracks["z"] = np.random.uniform(consts.module_borders[0][2][0], consts.module_borders[0][2][1], 1)
-    tracks["x"] = np.random.uniform(consts.module_borders[0][0][0], consts.module_borders[0][0][1], 1)
-    tracks["y"] = np.random.uniform(consts.module_borders[0][1][0], consts.module_borders[0][1][1], 1)
+    tracks["z"] = np.random.uniform(consts.tpc_borders[0][2][0], consts.tpc_borders[0][2][1], 1)
+    tracks["x"] = np.random.uniform(consts.tpc_borders[0][0][0], consts.tpc_borders[0][0][1], 1)
+    tracks["y"] = np.random.uniform(consts.tpc_borders[0][1][0], consts.tpc_borders[0][1][1], 1)
     tracks["n_electrons"] = np.random.uniform(1e6, 1e7, 1)
 
     def test_lifetime(self):
         """
         Testing the lifetime correction
         """
-        z_anode = consts.module_borders[0][2][0]
+        z_anode = consts.tpc_borders[0][2][0]
 
         drift_distance = np.abs(self.tracks["z"] - z_anode)
         drift_time = drift_distance / consts.vdrift
