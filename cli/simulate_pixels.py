@@ -90,17 +90,17 @@ def run_simulation(input_filename,
     RangePush("slicing_and_swapping")
     tracks = tracks[:n_tracks]
 
-    y_start = np.copy(tracks['y_start'] )
-    y_end = np.copy(tracks['y_end'])
-    y = np.copy(tracks['y'])
+    x_start = np.copy(tracks['x_start'] )
+    x_end = np.copy(tracks['x_end'])
+    x = np.copy(tracks['x'])
 
-    tracks['y_start'] = np.copy(tracks['z_start'])
-    tracks['y_end'] = np.copy(tracks['z_end'])
-    tracks['y'] = np.copy(tracks['z'])
+    tracks['x_start'] = np.copy(tracks['z_start'])
+    tracks['x_end'] = np.copy(tracks['z_end'])
+    tracks['x'] = np.copy(tracks['z'])
 
-    tracks['z_start'] = y_start
-    tracks['z_end'] = y_end
-    tracks['z'] = y
+    tracks['z_start'] = x_start
+    tracks['z_end'] = x_end
+    tracks['z'] = x
     RangePop()
 
     TPB = 256
@@ -124,32 +124,41 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
-    step = 200
+    step = 1
     adc_tot_list = cp.empty((0,fee.MAX_ADC_VALUES))
     adc_tot_ticks_list = cp.empty((0,fee.MAX_ADC_VALUES))
     MAX_TRACKS_PER_PIXEL = 5
-    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,MAX_TRACKS_PER_PIXEL))
+    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,MAX_TRACKS_PER_PIXEL,2))
     unique_pix_tot = cp.empty((0,2))
     tot_events = 0
-
+    
+    tot_evids = np.unique(tracks['eventID'])
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
-    for itrk in tqdm(range(0, tracks.shape[0], step), desc='Simulating pixels...'):
+    for itrk in tqdm(range(0, 5, step), desc='Simulating pixels...'):
         start_tracks_batch = time()
-        selected_tracks = tracks[itrk:itrk+step]
+        first_event = tot_evids[itrk]
+        last_event = tot_evids[min(itrk+step, tot_evids.shape[0]-1)]
+
+        if first_event == last_event:
+            last_event += 1
+
+        evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
+        selected_tracks = evt_tracks[:700]
 
         RangePush("event_id_map")
         # Here we build a map between tracks and event IDs
-        unique_eventIDs = cp.unique(selected_tracks['eventID'])
-        event_id_map = cp.searchsorted(unique_eventIDs,cp.asarray(selected_tracks['eventID']))
+        event_ids = selected_tracks['eventID']
+        unique_eventIDs = np.unique(event_ids)
+        event_id_map = np.searchsorted(unique_eventIDs,event_ids)
         RangePop()
 
         # We find the pixels intersected by the projection of the tracks on
         # the anode plane using the Bresenham's algorithm. We also take into
         # account the neighboring pixels, due to the transverse diffusion of the charges.
         RangePush("pixels_from_track")
-        longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_size[0])
-        max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_size[0])
+        longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
+        max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
         MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
         MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
         active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
@@ -157,6 +166,9 @@ def run_simulation(input_filename,
         n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
         threadsperblock = 128
         blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
+        
+        if not active_pixels.shape[1]:
+            continue
         pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
                                                                     active_pixels,
                                                                     neighboring_pixels,
@@ -211,7 +223,7 @@ def run_simulation(input_filename,
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
         blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-        pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*len(unique_eventIDs)*2))
+        pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*len(unique_eventIDs)*3))
         detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
                                                                 signals,
                                                                 track_starts,
@@ -220,7 +232,7 @@ def run_simulation(input_filename,
 
         RangePush("get_adc_values")
         # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-        time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1]*2, pixels_signals.shape[1]+1)
+        time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1]*3, pixels_signals.shape[1]+1)
         integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
         adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
         TPB = 128
@@ -231,7 +243,7 @@ def run_simulation(input_filename,
                                     time_ticks,
                                     integral_list,
                                     adc_ticks_list,
-                                    consts.time_interval[1]*2*tot_events,
+                                    consts.time_interval[1]*3*tot_events,
                                     rng_states)
         adc_list = fee.digitize(integral_list)
         RangePop()
@@ -248,7 +260,7 @@ def run_simulation(input_filename,
         # Here we backtrack the ADC counts to the Geant4 tracks
         TPB = 128
         BPG = ceil(adc_list.shape[0] / TPB)
-        backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], MAX_TRACKS_PER_PIXEL), -1)
+        backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], MAX_TRACKS_PER_PIXEL, 2), -1)
         detsim.backtrack_adcs[BPG,TPB](selected_tracks,
                                        adc_list,
                                        adc_ticks_list,

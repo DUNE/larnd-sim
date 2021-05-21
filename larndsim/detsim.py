@@ -8,7 +8,7 @@ from math import pi, ceil, sqrt, erf, exp, log, floor
 import numba as nb
 
 from numba import cuda
-from .consts import pixel_size, module_borders, time_interval, n_pixels
+from .consts import pixel_pitch, tpc_borders, time_interval, n_pixels
 from . import consts
 from . import fee
 
@@ -230,11 +230,10 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    plane_id = round(pixel_id[0] / n_pixels[0])
-    this_border = module_borders[plane_id]
-
-    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_size[0] + this_border[0][0] + pixel_size[0]/2
-    pix_y = pixel_id[1] * pixel_size[0] + this_border[1][0] + pixel_size[1]/2
+    plane_id = pixel_id[0] // n_pixels[0]
+    this_border = tpc_borders[plane_id]
+    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_pitch + this_border[0][0]
+    pix_y = pixel_id[1] * pixel_pitch + this_border[1][0]
 
     return pix_x, pix_y
 
@@ -262,7 +261,9 @@ def tracks_current(signals, pixels, tracks):
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
-
+            x_p += pixel_pitch/2
+            y_p += pixel_pitch/2
+            
             if t["z_start"] < t["z_end"]:
                 start = (t["x_start"], t["y_start"], t["z_start"])
                 end = (t["x_end"], t["y_end"], t["z_end"])
@@ -279,10 +280,10 @@ def tracks_current(signals, pixels, tracks):
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
             impact_factor = max(sqrt((5*sigmas[0])**2 + (5*sigmas[1])**2),
-                                sqrt(pixel_size[0]**2 + pixel_size[1]**2)/2)*2
-
+                                sqrt(pixel_pitch**2 + pixel_pitch**2)/2)*2
+            
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-
+#             print(z_poca,z_start,z_end,start[2])
             if z_poca != 0:
 
                 z_start_int = z_start - 4*sigmas[2]
@@ -298,15 +299,16 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(time_interval[0], round(t["t_start"] / consts.t_sampling) * consts.t_sampling)
+                t_start = max(time_interval[0], t["t_start"] // consts.t_sampling * consts.t_sampling)
 
                 total_current = 0
-
+                total_charge = 0
+                
+                time_tick = t_start + it*consts.t_sampling
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    time_tick = t_start + it*consts.t_sampling
-                    t0 = (z - module_borders[t["pixel_plane"]][2][0]) / consts.vdrift
+                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
@@ -315,7 +317,7 @@ def tracks_current(signals, pixels, tracks):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
-                        if x_dist > pixel_size[0]/2:
+                        if x_dist > pixel_pitch/2:
                             continue
 
                         for iy in range(consts.sampled_points):
@@ -323,14 +325,14 @@ def tracks_current(signals, pixels, tracks):
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if y_dist > pixel_size[1]/2:
+                            if y_dist > pixel_pitch/2:
                                 continue
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
                             total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
 
-                signals[itrk,ipix,it] = total_current
+                    signals[itrk,ipix,it] = total_current
 
 @nb.njit
 def sign(x):
@@ -382,20 +384,23 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
             if track_index >= 0:
                 track_start_t = tracks["t_start"][track_index]
                 track_end_t = tracks["t_end"][track_index]
-                evid = event_id_map[track_index]
 
                 for iadc in range(adc_list[ip].shape[0]):
-
+                    
                     if adc_list[ip][iadc] > pedestal:
                         adc_time = adc_times_list[ip][iadc]
-                        if track_start_t < adc_time - evid*time_interval[1]*2 < track_end_t+consts.time_padding:
+                        evid = adc_time // (time_interval[1]*3)
+
+                        if track_start_t < adc_time - evid*time_interval[1]*3 < track_end_t+consts.time_padding:
                             counter = 0
 
-                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
+                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter,0] != -1:
                                 counter += 1
 
                             if counter < backtracked_id.shape[2]:
-                                backtracked_id[ip,iadc,counter] = tracks["trackID"][track_index]
+                                backtracked_id[ip,iadc,counter,0] = evid
+                                backtracked_id[ip,iadc,counter,1] = tracks["trackID"][track_index]
+
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):

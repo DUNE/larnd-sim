@@ -5,7 +5,8 @@ import pytest
 
 from larndsim import consts
 
-consts.load_pixel_geometry("larndsim/pixel_layouts/layout-2.5.0.yaml")
+consts.load_detector_properties("larndsim/detector_properties/module0.yaml",
+                                "larndsim/pixel_layouts/multi_tile_layout-2.1.16.yaml")
 
 from larndsim import detsim
 from larndsim import drifting, quenching, pixels_from_track
@@ -14,13 +15,13 @@ from math import ceil
 
 class TestTrackCurrent:
     tracks = np.zeros((10, 29))
-    tracks["z_start"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
-    tracks["z_end"] = np.random.uniform(consts.tpc_borders[2][0], consts.tpc_borders[2][0]+2, 10)
+    tracks["z_start"] = np.random.uniform(consts.tpc_borders[0][2][0], consts.tpc_borders[0][2][1], 10)
+    tracks["z_end"] = np.random.uniform(consts.tpc_borders[0][2][0], consts.tpc_borders[0][2][0]+2, 10)
     tracks["z"] = (tracks["z_end"]+tracks["z_start"])/2.
-    tracks["y_start"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
-    tracks["y_end"] = np.random.uniform(consts.tpc_borders[1][0], consts.tpc_borders[1][0]+2, 10)
-    tracks["x_start"] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
-    tracks["x_end"] = np.random.uniform(consts.tpc_borders[0][0], consts.tpc_borders[0][0]+2, 10)
+    tracks["y_start"] = np.random.uniform(consts.tpc_borders[0][1][0], consts.tpc_borders[0][1][0]+2, 10)
+    tracks["y_end"] = np.random.uniform(consts.tpc_borders[0][1][0], consts.tpc_borders[0][1][0]+2, 10)
+    tracks["x_start"] = np.random.uniform(consts.tpc_borders[0][0][0], consts.tpc_borders[0][0][0]+2, 10)
+    tracks["x_end"] = np.random.uniform(consts.tpc_borders[0][0][0], consts.tpc_borders[0][0][0]+2, 10)
     tracks["x"] = (tracks["x_end"]+tracks["x_start"])/2.
     tracks["y"] = (tracks["y_end"]+tracks["y_start"])/2.
     tracks["dx"] = np.sqrt((tracks["x_end"]-tracks["x_start"])**2+(tracks["y_end"]-tracks["y_start"])**2+(tracks["z_end"]-tracks["z_start"])**2)
