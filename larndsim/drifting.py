@@ -53,9 +53,9 @@ def drift(tracks):
             drift_end = abs(max(track["z_start"],track["z_end"]) - z_anode)
 
             drift_time = drift_distance / consts.vdrift
-            track["z"] = z_anode
 
             lifetime_red = exp(-drift_time / consts.lifetime)
+            track["z"] = z_anode
             track["n_electrons"] *= lifetime_red
 
             track["long_diff"] = sqrt(drift_time * 2 * consts.long_diff)
