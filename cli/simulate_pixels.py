@@ -135,86 +135,88 @@ def run_simulation(input_filename,
     tot_evids = np.unique(tracks['eventID'])
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
-    for itrk in tqdm(range(0, 5, step), desc='Simulating pixels...'):
+    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...'):
         start_tracks_batch = time()
-        first_event = tot_evids[itrk]
-        last_event = tot_evids[min(itrk+step, tot_evids.shape[0]-1)]
+        first_event = tot_evids[ievd]
+        last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
 
         if first_event == last_event:
             last_event += 1
 
         evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
-        selected_tracks = evt_tracks[:700]
-
-        RangePush("event_id_map")
-        # Here we build a map between tracks and event IDs
-        event_ids = selected_tracks['eventID']
-        unique_eventIDs = np.unique(event_ids)
-        event_id_map = np.searchsorted(unique_eventIDs,event_ids)
-        RangePop()
-
-        # We find the pixels intersected by the projection of the tracks on
-        # the anode plane using the Bresenham's algorithm. We also take into
-        # account the neighboring pixels, due to the transverse diffusion of the charges.
-        RangePush("pixels_from_track")
-        longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
-        max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
-        MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
-        MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
-        active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
-        neighboring_pixels = cp.full((selected_tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
-        n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
-        threadsperblock = 128
-        blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
         
-        if not active_pixels.shape[1]:
-            continue
-        pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
-                                                                    active_pixels,
-                                                                    neighboring_pixels,
-                                                                    n_pixels_list,
-                                                                    max_radius+1)
-        RangePop()
+        for itrk in range(0, evt_tracks.shape[0], 500):
+            selected_tracks = evt_tracks[itrk:itrk+500]
 
-        RangePush("unique_pix")
-        shapes = neighboring_pixels.shape
-        joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
-        unique_pix = cupy_unique_axis0(joined)
-        unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
-        RangePop()
+            RangePush("event_id_map")
+            # Here we build a map between tracks and event IDs
+            event_ids = selected_tracks['eventID']
+            unique_eventIDs = np.unique(event_ids)
+            event_id_map = np.searchsorted(unique_eventIDs,event_ids)
+            RangePop()
 
-        RangePush("time_intervals")
-        # Here we find the longest signal in time and we store an array with the start in time of each track
-        max_length = cp.array([0])
-        track_starts = cp.empty(selected_tracks.shape[0])
-        # d_track_starts = cuda.to_device(track_starts)
-        threadsperblock = 128
-        blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
-        detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length,  event_id_map, selected_tracks)
-        RangePop()
+            # We find the pixels intersected by the projection of the tracks on
+            # the anode plane using the Bresenham's algorithm. We also take into
+            # account the neighboring pixels, due to the transverse diffusion of the charges.
+            RangePush("pixels_from_track")
+            longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
+            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
+            MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
+            MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
+            active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
+            neighboring_pixels = cp.full((selected_tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
+            n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
+            threadsperblock = 128
+            blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
 
-        RangePush("tracks_current")
-        # Here we calculate the induced current on each pixel
-        signals = cp.zeros((selected_tracks.shape[0],
-                            neighboring_pixels.shape[1],
-                            cp.asnumpy(max_length)[0]), dtype=np.float32)
-        threadsperblock = (1,1,64)
-        blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
-        blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
-        blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
-        blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-        detsim.tracks_current[blockspergrid,threadsperblock](signals,
-                                                             neighboring_pixels,
-                                                             selected_tracks)
-        RangePop()
+            if not active_pixels.shape[1]:
+                continue
+            pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
+                                                                        active_pixels,
+                                                                        neighboring_pixels,
+                                                                        n_pixels_list,
+                                                                        max_radius+1)
+            RangePop()
 
-        RangePush("pixel_index_map")
-        # Here we create a map between tracks and index in the unique pixel array
-        pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-        compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
-        indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
-        pixel_index_map[indices[0], indices[1]] = indices[2]
-        RangePop()
+            RangePush("unique_pix")
+            shapes = neighboring_pixels.shape
+            joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
+            unique_pix = cupy_unique_axis0(joined)
+            unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
+            RangePop()
+
+            RangePush("time_intervals")
+            # Here we find the longest signal in time and we store an array with the start in time of each track
+            max_length = cp.array([0])
+            track_starts = cp.empty(selected_tracks.shape[0])
+            # d_track_starts = cuda.to_device(track_starts)
+            threadsperblock = 128
+            blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
+            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length,  event_id_map, selected_tracks)
+            RangePop()
+
+            RangePush("tracks_current")
+            # Here we calculate the induced current on each pixel
+            signals = cp.zeros((selected_tracks.shape[0],
+                                neighboring_pixels.shape[1],
+                                cp.asnumpy(max_length)[0]), dtype=np.float32)
+            threadsperblock = (1,1,64)
+            blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
+            blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
+            blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
+            blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
+            detsim.tracks_current[blockspergrid,threadsperblock](signals,
+                                                                 neighboring_pixels,
+                                                                 selected_tracks)
+            RangePop()
+
+            RangePush("pixel_index_map")
+            # Here we create a map between tracks and index in the unique pixel array
+            pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
+            compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
+            indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+            pixel_index_map[indices[0], indices[1]] = indices[2]
+            RangePop()
 
         RangePush("sum_pixels_signals")
         # Here we combine the induced current on the same pixels by different tracks
@@ -238,7 +240,7 @@ def run_simulation(input_filename,
         TPB = 128
         BPG = ceil(pixels_signals.shape[0] / TPB)
 
-        rng_states = create_xoroshiro128p_states(TPB * BPG, seed=itrk)
+        rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
         fee.get_adc_values[BPG,TPB](pixels_signals,
                                     time_ticks,
                                     integral_list,
@@ -266,6 +268,7 @@ def run_simulation(input_filename,
                                        adc_ticks_list,
                                        track_pixel_map,
                                        event_id_map,
+                                       unique_eventIDs,
                                        backtracked_id)
 
         adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)

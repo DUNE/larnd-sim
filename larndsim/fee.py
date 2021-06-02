@@ -37,7 +37,6 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
-
 nonrouted_channels=[6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
 routed_channels=[i for i in range(64) if i not in nonrouted_channels]
 top_row_channels=[3,2,1,63,62,61,60]
@@ -123,6 +122,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                     
                 p.dataword = int(adc)
                 p.timestamp = time_tick
+
                 try:
                     io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
                 except KeyError:

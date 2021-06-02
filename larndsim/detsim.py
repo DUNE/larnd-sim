@@ -371,7 +371,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
 
 @cuda.jit
-def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, backtracked_id):
+def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, unique_evids, backtracked_id):
 
     pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
 
@@ -384,14 +384,14 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
             if track_index >= 0:
                 track_start_t = tracks["t_start"][track_index]
                 track_end_t = tracks["t_end"][track_index]
-
+                evid = unique_evids[event_id_map[track_index]]
                 for iadc in range(adc_list[ip].shape[0]):
                     
                     if adc_list[ip][iadc] > pedestal:
                         adc_time = adc_times_list[ip][iadc]
-                        evid = adc_time // (time_interval[1]*3)
+                        evid_time = adc_time // (time_interval[1]*3)
 
-                        if track_start_t < adc_time - evid*time_interval[1]*3 < track_end_t+consts.time_padding:
+                        if track_start_t < adc_time - evid_time*time_interval[1]*3 < track_end_t+consts.time_padding:
                             counter = 0
 
                             while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter,0] != -1:
@@ -406,7 +406,9 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
     # index of unique_pix array
     index = cuda.grid(1)
+
     upix = unique_pix[index]
+
     for itr in range(pixels.shape[0]):
         for ipix in range(pixels.shape[1]):
             pID = pixels[itr][ipix]
