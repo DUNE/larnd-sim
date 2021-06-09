@@ -48,18 +48,19 @@ def drift(tracks):
 
         if pixel_plane >= 0:
             z_anode = tpc_borders[pixel_plane][2][0]
-            drift_distance = abs(track["z"] - z_anode)
-            drift_start = abs(min(track["z_start"],track["z_end"]) - z_anode)
-            drift_end = abs(max(track["z_start"],track["z_end"]) - z_anode)
-
+            drift_distance = abs(track["z"] - z_anode) - 0.5
+            drift_start = abs(min(track["z_start"],track["z_end"]) - z_anode) - 0.5
+            drift_end = abs(max(track["z_start"],track["z_end"]) - z_anode) - 0.5
             drift_time = drift_distance / consts.vdrift
 
             lifetime_red = exp(-drift_time / consts.lifetime)
             track["z"] = z_anode
             track["n_electrons"] *= lifetime_red
 
-            track["long_diff"] = sqrt(drift_time * 2 * consts.long_diff)
-            track["tran_diff"] = sqrt(drift_time * 2 * consts.tran_diff)
+            track["long_diff"] = sqrt((drift_time + 0.5 / consts.vdrift) * 2 * consts.long_diff)
+            track["tran_diff"] = sqrt((drift_time + 0.5 / consts.vdrift) * 2 * consts.tran_diff)
             track["t"] += drift_time
             track["t_start"] += min(drift_start, drift_end) / consts.vdrift
             track["t_end"] += max(drift_start, drift_end) / consts.vdrift
+        else:
+            print(track['z'])

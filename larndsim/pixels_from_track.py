@@ -37,7 +37,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
         this_border = tpc_borders[int(t["pixel_plane"])]
-
         start_pixel = ((t["x_start"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
                        (t["y_start"] - this_border[1][0]) // pixel_pitch)
         end_pixel = ((t["x_end"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],

@@ -38,10 +38,10 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1], round((track["t_end"] + consts.time_padding) / consts.t_sampling) * consts.t_sampling)
-        t_start = max(time_interval[0], round(track["t_start"] / consts.t_sampling) * consts.t_sampling)
+        t_end = min(time_interval[1], round((track["t_end"] + consts.time_padding + 0.5 / consts.vdrift) / consts.t_sampling) * consts.t_sampling)
+        t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
-        track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 2
+        track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
 @nb.njit
@@ -231,11 +231,12 @@ def get_pixel_coordinates(pixel_id):
     Returns the coordinates of the pixel center given the pixel ID
     """
     plane_id = pixel_id[0] // n_pixels[0]
-    this_border = tpc_borders[plane_id]
+
+    this_border = tpc_borders[int(plane_id)]
     pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_pitch + this_border[0][0]
     pix_y = pixel_id[1] * pixel_pitch + this_border[1][0]
 
-    return pix_x, pix_y
+    return pix_x,pix_y
 
 @cuda.jit
 def tracks_current(signals, pixels, tracks):
@@ -256,7 +257,6 @@ def tracks_current(signals, pixels, tracks):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
-
         if pID[0] >= 0 and pID[1] >= 0:
 
             # Pixel coordinates
@@ -299,7 +299,7 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(time_interval[0], t["t_start"] // consts.t_sampling * consts.t_sampling)
+                t_start = max(time_interval[0], (t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
 
                 total_current = 0
                 total_charge = 0
@@ -308,7 +308,7 @@ def tracks_current(signals, pixels, tracks):
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift
+                    t0 = (abs(z - tpc_borders[t["pixel_plane"]][2][0]) - 0.5) / consts.vdrift
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
@@ -327,11 +327,12 @@ def tracks_current(signals, pixels, tracks):
 
                             if y_dist > pixel_pitch/2:
                                 continue
-
+                            
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
+                                
                             total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
-
+                            
                     signals[itrk,ipix,it] = total_current
 
 @nb.njit
@@ -371,7 +372,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
             cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
 
 @cuda.jit
-def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, unique_evids, backtracked_id):
+def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, unique_evids, backtracked_id, shift):
 
     pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
 
@@ -380,7 +381,6 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
     if ip < adc_list.shape[0]:
         for itrk in range(track_pixel_map.shape[1]):
             track_index = track_pixel_map[ip][itrk]
-
             if track_index >= 0:
                 track_start_t = tracks["t_start"][track_index]
                 track_end_t = tracks["t_end"][track_index]
@@ -391,16 +391,14 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
                         adc_time = adc_times_list[ip][iadc]
                         evid_time = adc_time // (time_interval[1]*3)
 
-                        if track_start_t < adc_time - evid_time*time_interval[1]*3 < track_end_t+consts.time_padding:
+                        if track_start_t - consts.time_padding < adc_time - evid_time*time_interval[1]*3 < track_end_t + consts.time_padding + 0.5 / consts.vdrift:
                             counter = 0
 
-                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter,0] != -1:
+                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
                                 counter += 1
 
                             if counter < backtracked_id.shape[2]:
-                                backtracked_id[ip,iadc,counter,0] = evid
-                                backtracked_id[ip,iadc,counter,1] = tracks["trackID"][track_index]
-
+                                backtracked_id[ip,iadc,counter] = track_index+shift
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
