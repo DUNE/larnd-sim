@@ -37,7 +37,6 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
-
 nonrouted_channels=[6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
 routed_channels=[i for i in range(64) if i not in nonrouted_channels]
 top_row_channels=[3,2,1,63,62,61,60]
@@ -76,10 +75,9 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
         list: list of LArPix packets
     """
 
-    dtype = np.dtype([('track_ids','(5,)i8'),('event_ids','(5,)i8')])
+    dtype = np.dtype([('track_ids','(5,)i8')])
     packets = [TimestampPacket()]
-    packets_mc_trkid = [[-1]*5]
-    packets_mc_evid = [[-1]*5]
+    packets_mc = [[-1]*5]
     packets_mc_ds = []
     last_event = -1
     
@@ -97,15 +95,13 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
             if adc > digitize(0):
                 event = t // (consts.time_interval[1]*3)
-                time_tick = int(np.floor((t-0.5/consts.vdrift)/CLOCK_CYCLE))
+                time_tick = int(np.floor(t/CLOCK_CYCLE))
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc_trkid.append([-1]*5)
-                    packets_mc_evid.append([-1]*5)
+                    packets_mc.append([-1]*5)
                     packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc_trkid.append([-1]*5)
-                    packets_mc_evid.append([-1]*5)
+                    packets_mc.append([-1]*5)
                     last_event = event
                 
                 p = Packet_v2()
@@ -123,6 +119,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                     
                 p.dataword = int(adc)
                 p.timestamp = time_tick
+
                 try:
                     io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
                 except KeyError:
@@ -136,8 +133,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 p.first_packet = 1
                 p.assign_parity()
 
-                packets_mc_evid.append(track_ids[itick][iadc][:,0])
-                packets_mc_trkid.append(track_ids[itick][iadc][:,1])
+                packets_mc.append(track_ids[itick][iadc])
                 packets.append(p)
             else:
                 break
@@ -148,8 +144,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
     if packets:
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
-        packets_mc_ds['track_ids'] = packets_mc_trkid
-        packets_mc_ds['event_ids'] = packets_mc_evid
+        packets_mc_ds['track_ids'] = packets_mc
 
     with h5py.File(filename, 'a') as f:
         if "mc_packets_assn" in f.keys():
