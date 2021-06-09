@@ -157,7 +157,6 @@ def load_detector_properties(detprop_file, pixel_file):
     for itpc,tpc_id in enumerate(tpcs):
         this_tpc_tile = tile_positions[tile_positions[:,0] == tpc_id]
         this_orientation = tile_orientations[tile_positions[:,0] == tpc_id]
-
         x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_centers[itpc][0], \
                    max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_centers[itpc][0]
         y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_centers[itpc][1], \
