@@ -38,7 +38,7 @@ time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
 time_padding = 5
 #: Number of sampled points for each segment slice
-sampled_points = 20
+sampled_points = 30
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
 long_diff = 4.0e-6 # cm * cm / us
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
