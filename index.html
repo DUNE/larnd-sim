@@ -555,21 +555,21 @@ ADC counts.</p>
 <dl class="function">
 <dt id="larndsim.fee.export_to_hdf5">
 <code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">unique_pix</em>, <em class="sig-param">track_ids</em>, <em class="sig-param">filename</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
-<dd><p>Saves the ADC counts in the LArPix HDF5 format.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p></li>
+<dd><p>Saves the ADC counts in the LArPix HDF5 format.
+:Parameters: * <strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p>
+<blockquote>
+<div><ul class="simple">
 <li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
 <li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.20)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of pixel IDs</p></li>
 <li><p><strong>filename</strong> (<em>str</em>) – filename of HDF5 output file</p></li>
 </ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>list of LArPix packets</p>
 </dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>list of LArPix packets</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>list</p>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>list</p>
 </dd>
 </dl>
 </dd></dl>
@@ -670,7 +670,7 @@ filename</p></li>
 
 <dl class="data">
 <dt id="larndsim.consts.sampled_points">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">sampled_points</code><em class="property"> = 20</em><a class="headerlink" href="#larndsim.consts.sampled_points" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">sampled_points</code><em class="property"> = 30</em><a class="headerlink" href="#larndsim.consts.sampled_points" title="Permalink to this definition">¶</a></dt>
 <dd><p>Number of sampled points for each segment slice</p>
 </dd></dl>
 
