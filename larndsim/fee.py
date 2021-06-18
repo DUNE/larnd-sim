@@ -64,7 +64,6 @@ def rotate_tile(pixel_id, tile_id):
 def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     """
     Saves the ADC counts in the LArPix HDF5 format.
-
     Args:
         adc_list (:obj:`numpy.ndarray`): list of ADC values for each pixel
         adc_ticks_list (:obj:`numpy.ndarray`): list of time ticks for each pixel
@@ -166,7 +165,7 @@ def digitize(integral_list):
     """
     import cupy as cp
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.floor(xp.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
                       * ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
 
     return adcs
@@ -198,9 +197,11 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
             q = curre[ic]*consts.t_sampling
 
             q_sum += q
+
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
             if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
+                crossing_time_tick = ic
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
 
@@ -213,6 +214,7 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
 
                 if adc < DISCRIMINATION_THRESHOLD:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
+                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
                     continue
 
                 if iadc >= MAX_ADC_VALUES:
@@ -220,9 +222,10 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                     break
 
                 adc_list[ip][iadc] = adc
-                adc_ticks_list[ip][iadc] = time_ticks[ic]+time_padding
+                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
+
                 iadc += 1
             ic += 1
