@@ -36,7 +36,7 @@ t_sampling = 0.1 # us
 #: Drift time window in :math:`\mu s`
 time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
-time_padding = 5
+time_padding = 10
 #: Number of sampled points for each segment slice
 sampled_points = 30
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
@@ -65,6 +65,7 @@ tile_positions = {}
 tile_orientations = {}
 tile_map = ()
 tile_chip_to_io = {}
+drift_length = 0
 
 variable_types = {
     "eventID": "u4",
@@ -122,10 +123,13 @@ def load_detector_properties(detprop_file, pixel_file):
     global tile_orientations
     global tile_map
     global tile_chip_to_io
+    global drift_length
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
+    drift_length = detprop['drift_length']
+        
     tpc_centers = np.array(detprop['tpc_centers'])
     tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
 
@@ -162,7 +166,7 @@ def load_detector_properties(detprop_file, pixel_file):
         y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_centers[itpc][1], \
                    max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_centers[itpc][1]
         z_border = min(this_tpc_tile[:,0])+tpc_centers[itpc][2], \
-                   max(this_tpc_tile[:,0])+detprop['drift_length']*this_orientation[:,0][0]+tpc_centers[itpc][2]
+                   max(this_tpc_tile[:,0])+drift_length*this_orientation[:,0][0]+tpc_centers[itpc][2]
 
         tpc_borders[itpc] = (x_border, y_border, z_border)
 
@@ -170,4 +174,4 @@ def load_detector_properties(detprop_file, pixel_file):
     n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
 
-    tile_map = ((7,5,3,1),(8,6,4,2)),((16,14,12,10),(15,13,11,9))
+    tile_map = detprop['tile_map']
