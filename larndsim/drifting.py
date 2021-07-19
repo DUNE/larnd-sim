@@ -56,8 +56,8 @@ def drift(tracks):
 
             track["n_electrons"] *= lifetime_red
 
-            track["long_diff"] = sqrt((drift_time * 2 * consts.long_diff)
-            track["tran_diff"] = sqrt((drift_time * 2 * consts.tran_diff)
+            track["long_diff"] = sqrt(drift_time * 2 * consts.long_diff)
+            track["tran_diff"] = sqrt(drift_time * 2 * consts.tran_diff)
             track["t"] += drift_time
             track["t_start"] += min(drift_start, drift_end) / consts.vdrift
             track["t_end"] += max(drift_start, drift_end) / consts.vdrift
