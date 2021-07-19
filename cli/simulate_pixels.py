@@ -45,6 +45,7 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename='',
+                   response_filename='response.npy',
                    n_tracks=100000):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
@@ -102,6 +103,9 @@ def run_simulation(input_filename,
     tracks['z_end'] = x_end
     tracks['z'] = x
     RangePop()
+    
+    response = cp.load(response_filename)
+    print(response.shape)
 
     TPB = 256
     BPG = ceil(tracks.shape[0] / TPB)
@@ -127,8 +131,8 @@ def run_simulation(input_filename,
     step = 1
     adc_tot_list = cp.empty((0,fee.MAX_ADC_VALUES))
     adc_tot_ticks_list = cp.empty((0,fee.MAX_ADC_VALUES))
-    MAX_TRACKS_PER_PIXEL = 5
-    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,MAX_TRACKS_PER_PIXEL))
+    MAX_TRACKS_PER_PIXEL = 10
+    backtracked_id_tot = cp.empty((0,fee.MAX_ADC_VALUES,fee.MAX_TRACKS_PER_PIXEL))
     unique_pix_tot = cp.empty((0,2))
     tot_events = 0
     
@@ -212,7 +216,8 @@ def run_simulation(input_filename,
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
             detsim.tracks_current[blockspergrid,threadsperblock](signals,
                                                                  neighboring_pixels,
-                                                                 selected_tracks)
+                                                                 selected_tracks,
+                                                                 response)
             RangePop()
 
             RangePush("pixel_index_map")
@@ -258,7 +263,7 @@ def run_simulation(input_filename,
 
             RangePush("track_pixel_map")
             # Mapping between unique pixel array and track array index
-            track_pixel_map = cp.full((unique_pix.shape[0], MAX_TRACKS_PER_PIXEL), -1)
+            track_pixel_map = cp.full((unique_pix.shape[0], fee.MAX_TRACKS_PER_PIXEL), -1)
             TPB = 32
             BPG = ceil(unique_pix.shape[0] / TPB)
             detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
@@ -268,7 +273,7 @@ def run_simulation(input_filename,
             # Here we backtrack the ADC counts to the Geant4 tracks
             TPB = 128
             BPG = ceil(adc_list.shape[0] / TPB)
-            backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], MAX_TRACKS_PER_PIXEL), -1)
+            backtracked_id = cp.full((adc_list.shape[0], adc_list.shape[1], fee.MAX_TRACKS_PER_PIXEL), -1)
             detsim.backtrack_adcs[BPG,TPB](selected_tracks,
                                            adc_list,
                                            adc_ticks_list,
@@ -303,7 +308,8 @@ def run_simulation(input_filename,
 
     with h5py.File(output_filename, 'a') as f:
         f.create_dataset("tracks", data=tracks)
-    
+        f['configs'].attrs['pixel_layout'] = pixel_layout
+
     print("Output saved in:", output_filename)
 
     RangePop()

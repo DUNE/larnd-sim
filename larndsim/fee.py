@@ -1,5 +1,5 @@
 """
-Module that si mulates the front-end electronics (triggering, ADC)
+Module that simulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
@@ -14,6 +14,7 @@ from larpix.format import hdf5format
 from tqdm import tqdm
 from . import consts, detsim
 
+MAX_TRACKS_PER_PIXEL = 10
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
 #: Discrimination threshold
@@ -74,9 +75,9 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
         list: list of LArPix packets
     """
 
-    dtype = np.dtype([('track_ids','(5,)i8')])
+    dtype = np.dtype([('track_ids','(%i,)i8' % MAX_TRACKS_PER_PIXEL)])
     packets = [TimestampPacket()]
-    packets_mc = [[-1]*5]
+    packets_mc = [[-1]*MAX_TRACKS_PER_PIXEL]
     packets_mc_ds = []
     last_event = -1
     
@@ -98,9 +99,9 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc.append([-1]*5)
+                    packets_mc.append([-1]*MAX_TRACKS_PER_PIXEL)
                     packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc.append([-1]*5)
+                    packets_mc.append([-1]*MAX_TRACKS_PER_PIXEL)
                     last_event = event
                 
                 p = Packet_v2()
@@ -115,7 +116,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 if chip in top_row_chip_ids and channel in top_row_channels: continue
                 if chip in bottom_row_chip_ids and channel in bottom_row_channels: continue
                 if chip in inner_edge_chip_ids and channel in inner_edge_channels: continue 
-                    
+
                 p.dataword = int(adc)
                 p.timestamp = time_tick
 
@@ -150,6 +151,12 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
             del f['mc_packets_assn']
         f.create_dataset("mc_packets_assn", data=packets_mc_ds)
 
+        f['configs'].attrs['vdrift'] = consts.vdrift
+        f['configs'].attrs['long_diff'] = consts.long_diff
+        f['configs'].attrs['tran_diff'] = consts.tran_diff
+        f['configs'].attrs['lifetime'] = consts.lifetime
+        f['configs'].attrs['drift_length'] = consts.drift_length
+        
     return packets, packets_mc_ds
 
 def digitize(integral_list):
@@ -171,7 +178,7 @@ def digitize(integral_list):
     return adcs
 
 @cuda.jit
-def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states):
+def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states):#, integrate):
     """
     Implementation of self-trigger logic
 
@@ -191,30 +198,37 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
         ic = 0
         iadc = 0
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
-
+#         integrate[ip][ic] = q_sum
+        
         while ic < curre.shape[0]:
 
             q = curre[ic]*consts.t_sampling
 
             q_sum += q
+#             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
             if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
                 crossing_time_tick = ic
+
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
+        
+                ic+=1
 
                 while ic <= integrate_end and ic < curre.shape[0]:
                     q = curre[ic] * consts.t_sampling
                     q_sum += q
-                    ic += 1
+#                     integrate[ip][ic] = q_sum
+                    ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
                 if adc < DISCRIMINATION_THRESHOLD:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+#                     integrate[ip][ic] = q_sum
                     continue
 
                 if iadc >= MAX_ADC_VALUES:
@@ -222,10 +236,14 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                     break
 
                 adc_list[ip][iadc] = adc
-                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding
+                
+                #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
+                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2 
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
-
+#                 integrate[ip][ic] = q_sum
                 iadc += 1
+                continue
+                
             ic += 1
