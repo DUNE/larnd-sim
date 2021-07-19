@@ -6,6 +6,8 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log, floor
 
 import numba as nb
+import cupy as cp
+import numpy as np
 
 from numba import cuda
 from .consts import pixel_pitch, tpc_borders, time_interval, n_pixels
@@ -17,7 +19,7 @@ logging.basicConfig()
 logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
-
+    
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
     """
@@ -38,12 +40,12 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1], round((track["t_end"] + consts.time_padding + 0.5 / consts.vdrift) / consts.t_sampling) * consts.t_sampling)
+        t_end = min(time_interval[1], round((track["t_end"] + 1) / consts.t_sampling) * consts.t_sampling)
         t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
-
+        
 @nb.njit
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """
@@ -238,8 +240,22 @@ def get_pixel_coordinates(pixel_id):
 
     return pix_x,pix_y
 
+@nb.njit
+def get_closest_waveform(x, y, t, response):    
+    dt = 1.e-1
+    bin_width = 0.04434
+    
+    i = round((x/bin_width) - 0.5)
+    j = round((y/bin_width) - 0.5)
+    k = round(t/dt)
+    
+    if 0 <= i < response.shape[0] and 0 <= j < response.shape[1] and 0 <= k < response.shape[2]:
+        return response[i][j][k]
+
+    return 0
+
 @cuda.jit
-def tracks_current(signals, pixels, tracks):
+def tracks_current(signals, pixels, tracks, response):
     """
     This CUDA kernel calculates the charge induced on the pixels by the input tracks.
 
@@ -252,6 +268,7 @@ def tracks_current(signals, pixels, tracks):
             contains the two pixel ID numbers.
         tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
     """
+
     itrk, ipix, it = cuda.grid(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
@@ -299,16 +316,20 @@ def tracks_current(signals, pixels, tracks):
                 z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(time_interval[0], (t["t_start"] - consts.time_padding) // consts.t_sampling * consts.t_sampling)
+                t_start = max(time_interval[0], round((t["t_start"]-consts.time_padding) / consts.t_sampling) * consts.t_sampling)
 
                 total_current = 0
                 total_charge = 0
                 
                 time_tick = t_start + it*consts.t_sampling
+                
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    t0 = (abs(z - tpc_borders[t["pixel_plane"]][2][0]) - 0.5) / consts.vdrift
+                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift - 8.5
+                    
+                    if not t0 < time_tick < t0+8.5:
+                        continue
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
@@ -316,24 +337,24 @@ def tracks_current(signals, pixels, tracks):
 
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
-
-                        if x_dist > pixel_pitch/2:
+                        
+                        if x_dist > 0.6651:
                             continue
 
                         for iy in range(consts.sampled_points):
 
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
-
-                            if y_dist > pixel_pitch/2:
+                            
+                            if y_dist > 0.6651:
                                 continue
                             
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
-                                
-                            total_current += current_model(time_tick, t0, x_dist, y_dist) * charge * consts.e_charge
-                            
-                    signals[itrk,ipix,it] = total_current
+
+                            total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * charge * consts.e_charge
+
+                        signals[itrk,ipix,it] = total_current
 
 @nb.njit
 def sign(x):
@@ -391,7 +412,7 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
                         adc_time = adc_times_list[ip][iadc]
                         evid_time = adc_time // (time_interval[1]*3)
 
-                        if track_start_t - consts.time_padding < adc_time - evid_time*time_interval[1]*3 < track_end_t + consts.time_padding + 0.5 / consts.vdrift:
+                        if track_start_t - 8.5 < adc_time - evid_time*time_interval[1]*3 < track_end_t:
                             counter = 0
 
                             while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
