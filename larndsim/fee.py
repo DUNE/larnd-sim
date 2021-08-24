@@ -4,6 +4,7 @@ Module that simulates the front-end electronics (triggering, ADC)
 
 import numpy as np
 import h5py
+import yaml
 
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
@@ -38,14 +39,11 @@ RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
 
-nonrouted_channels=[6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
-routed_channels=[i for i in range(64) if i not in nonrouted_channels]
-top_row_channels=[3,2,1,63,62,61,60]
-bottom_row_channels=[28,29,30,31,33,34,35]
-inner_edge_channels=[60,52,53,48,45,41,35]
-top_row_chip_ids=[11,12,13,14,15,16,17,18,19,20]
-bottom_row_chip_ids=[101,102,103,104,105,106,107,108,109,110]
-inner_edge_chip_ids=[20,30,40,50,60,70,80,90,100,110]
+import logging
+logging.basicConfig()
+logger = logging.getLogger('fee')
+logger.setLevel(logging.WARNING)
+logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
     axes = consts.tile_orientations[tile_id-1]
@@ -62,7 +60,7 @@ def rotate_tile(pixel_id, tile_id):
     
     return pix_x, pix_y
         
-def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
+def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -80,6 +78,10 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
     packets_mc = [[-1]*MAX_TRACKS_PER_PIXEL]
     packets_mc_ds = []
     last_event = -1
+    
+    if bad_channels:
+        with open(bad_channels, 'r') as f:
+            bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
     
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
@@ -109,25 +111,28 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename):
                 try:
                     chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, tile_id)]
                 except KeyError:
-                    print("Pixel ID not valid", pixel_id)
+                    logger.warning("Pixel ID not valid", pixel_id)
                     continue
                 
-                # disabled channels near the borders of the tiles
-                if chip in top_row_chip_ids and channel in top_row_channels: continue
-                if chip in bottom_row_chip_ids and channel in bottom_row_channels: continue
-                if chip in inner_edge_chip_ids and channel in inner_edge_channels: continue 
-
                 p.dataword = int(adc)
                 p.timestamp = time_tick
 
                 try:
                     io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
                 except KeyError:
-#                     print("Chip %i on tile %i not found" % (chip, tile_id))
+                    logger.info("Chip %i on tile %i not found" % (chip, tile_id))
                     continue
                     
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
-                p.chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
+                chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
+                
+                if bad_channels:
+                    if chip_key in bad_channels_list:
+                        if channel in bad_channels_list[chip_key]:
+                            logger.info("Channel %i on chip %s disabled" % (channel, chip_key))
+                            continue
+                            
+                p.chip_key = chip_key
                 p.channel_id = channel
                 p.packet_type = 0
                 p.first_packet = 1
@@ -178,7 +183,7 @@ def digitize(integral_list):
     return adcs
 
 @cuda.jit
-def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states):#, integrate):
+def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states):
     """
     Implementation of self-trigger logic
 
