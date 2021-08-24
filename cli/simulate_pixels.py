@@ -45,7 +45,8 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename='',
-                   response_filename='response.npy',
+                   response_filename='../larndsim/response.npy',
+                   bad_channels=None,
                    n_tracks=100000):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
@@ -71,6 +72,8 @@ def run_simulation(input_filename,
     print("Pixel layout file:", pixel_layout)
     print("Detector propeties file:", detector_properties)
     print("edep-sim input file:", input_filename)
+    if bad_channels:
+        print("Disabled channel list: ", bad_channels)
     RangePush("load_detector_properties")
     consts.load_detector_properties(detector_properties, pixel_layout)
     RangePop()
@@ -87,6 +90,10 @@ def run_simulation(input_filename,
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
     RangePop()
+    
+    if tracks.size == 0:
+        print("Empty input dataset, exiting")
+        return
 
     RangePush("slicing_and_swapping")
     tracks = tracks[:n_tracks]
@@ -105,12 +112,11 @@ def run_simulation(input_filename,
     RangePop()
     
     response = cp.load(response_filename)
-    print(response.shape)
 
     TPB = 256
     BPG = ceil(tracks.shape[0] / TPB)
 
-    print("*******************\nSTARTING SIMULATION\n*******************")
+    print("******************\nRUNNING SIMULATION\n******************")
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons...",end='')
@@ -293,17 +299,15 @@ def run_simulation(input_filename,
         end_tracks_batch = time()
         tracks_batch_runtimes.append(end_tracks_batch - start_tracks_batch)
 
-    print(f"- total time: {sum(tracks_batch_runtimes):.2f} s")
-    if len(tracks_batch_runtimes) > 1:
-        print(f"- excluding first iteration: {sum(tracks_batch_runtimes[1:]):.2f} s")
-
+    print("*************\nSAVING RESULT\n*************")
     RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
     fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
                        cp.asnumpy(adc_tot_ticks_list),
                        cp.asnumpy(unique_pix_tot),
                        cp.asnumpy(backtracked_id_tot),
-                       output_filename)
+                       output_filename,
+                       bad_channels=bad_channels)
     RangePop()
 
     with h5py.File(output_filename, 'a') as f:
@@ -314,7 +318,7 @@ def run_simulation(input_filename,
 
     RangePop()
     end_simulation = time()
-    print(f"run_simulation elapsed time: {end_simulation-start_simulation:.2f} s")
+    print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
