@@ -38,7 +38,7 @@ time_interval = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
 time_padding = 10
 #: Number of sampled points for each segment slice
-sampled_points = 30
+sampled_points = 40
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
 long_diff = 4.0e-6 # cm * cm / us
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
@@ -47,6 +47,8 @@ tran_diff = 8.8e-6 # cm * cm / us
 time_ticks = np.linspace(time_interval[0],
                          time_interval[1],
                          int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
+#: Current time window
+time_window = 8.9 # us
 ## Quenching parameters
 box = 1
 birks = 2

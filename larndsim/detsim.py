@@ -326,9 +326,9 @@ def tracks_current(signals, pixels, tracks, response):
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift - 8.5
-                    
-                    if not t0 < time_tick < t0+8.5:
+                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift - consts.time_window
+
+                    if not t0 < time_tick < t0+consts.time_window:
                         continue
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
@@ -412,7 +412,7 @@ def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_m
                         adc_time = adc_times_list[ip][iadc]
                         evid_time = adc_time // (time_interval[1]*3)
 
-                        if track_start_t - 8.5 < adc_time - evid_time*time_interval[1]*3 < track_end_t:
+                        if track_start_t - consts.time_window < adc_time - evid_time*time_interval[1]*3 < track_end_t:
                             counter = 0
 
                             while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
