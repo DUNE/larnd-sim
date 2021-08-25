@@ -123,7 +123,7 @@ def dump(input_file, output_file):
                       ('t_end','f4'),('dEdx','f4'),('dE','f4'),('t','f4'),
                       ('y','f4'),('x','f4'),('z','f4')])
 
-    segments = np.array([], dtype=dtype)
+    segments = []
 
     for jentry in range(entries):
         print(jentry)
@@ -179,7 +179,8 @@ def dump(input_file, output_file):
                 segment['long_diff'] = 0
                 segment['tran_diff'] = 0
                 segment['pixel_plane'] = 0
-                segments = np.hstack((segments, segment))
+                segments.append(segment)
+    segments = np.concatenate(segments, axis=0)
 
     with h5py.File(output_file, 'w') as f:
         f.create_dataset("segments", data=segments)
