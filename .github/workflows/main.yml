@@ -26,11 +26,10 @@ jobs:
       with:
         # Semantic version range syntax or exact version of a Python version
         python-version: '3.8'
-    - name: Install GCC
-      uses: egor-tensin/setup-gcc@v1
     - uses: ammaraskar/sphinx-action@master
       with:
         docs-folder: "docs/"
+        pre-build-command: "apt-get update -y && apt-get install -y gcc"
     - uses: actions/upload-artifact@v1
       with:
         name: DocumentationHTML
