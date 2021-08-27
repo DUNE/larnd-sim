@@ -132,8 +132,8 @@ def load_detector_properties(detprop_file, pixel_file):
 
     drift_length = detprop['drift_length']
         
-    tpc_centers = np.array(detprop['tpc_centers'])
-    tpc_centers[:, [2, 0]] = tpc_centers[:, [0, 2]]
+    tpc_offsets = np.array(detprop['tpc_offsets'])
+    tpc_offsets[:, [2, 0]] = tpc_offsets[:, [0, 2]]
 
     time_interval = np.array(detprop['time_interval'])
 
@@ -163,12 +163,12 @@ def load_detector_properties(detprop_file, pixel_file):
     for itpc,tpc_id in enumerate(tpcs):
         this_tpc_tile = tile_positions[tile_positions[:,0] == tpc_id]
         this_orientation = tile_orientations[tile_positions[:,0] == tpc_id]
-        x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_centers[itpc][0], \
-                   max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_centers[itpc][0]
-        y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_centers[itpc][1], \
-                   max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_centers[itpc][1]
-        z_border = min(this_tpc_tile[:,0])+tpc_centers[itpc][2], \
-                   max(this_tpc_tile[:,0])+drift_length*this_orientation[:,0][0]+tpc_centers[itpc][2]
+        x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_offsets[itpc][0], \
+                   max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_offsets[itpc][0]
+        y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_offsets[itpc][1], \
+                   max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_offsets[itpc][1]
+        z_border = min(this_tpc_tile[:,0])+tpc_offsets[itpc][2], \
+                   max(this_tpc_tile[:,0])+drift_length*this_orientation[:,0][0]+tpc_offsets[itpc][2]
 
         tpc_borders[itpc] = (x_border, y_border, z_border)
 

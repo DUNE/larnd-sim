@@ -1,4 +1,4 @@
-tpc_centers: # cm
+tpc_offsets: # cm
   - [0, -21.8236, 0]
   - [0, -21.8236, 0]
 
