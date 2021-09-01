@@ -60,7 +60,7 @@ def rotate_tile(pixel_id, tile_id):
     
     return pix_x, pix_y
         
-def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, bad_channels=None):
+def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, track_ids, filename, bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -73,9 +73,10 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, ba
         list: list of LArPix packets
     """
 
-    dtype = np.dtype([('track_ids','(%i,)i8' % MAX_TRACKS_PER_PIXEL)])
+    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[2]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
     packets = [TimestampPacket()]
-    packets_mc = [[-1]*MAX_TRACKS_PER_PIXEL]
+    packets_mc = [[-1]*track_ids.shape[2]]
+    packets_frac = [[0]*current_fractions.shape[2]]
     packets_mc_ds = []
     last_event = -1
     
@@ -101,9 +102,11 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, ba
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc.append([-1]*MAX_TRACKS_PER_PIXEL)
+                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_frac.append([0]*current_fractions.shape[2])
                     packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
-                    packets_mc.append([-1]*MAX_TRACKS_PER_PIXEL)
+                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_frac.append([0]*current_fractions.shape[2])
                     last_event = event
                 
                 p = Packet_v2()
@@ -139,6 +142,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, ba
                 p.assign_parity()
 
                 packets_mc.append(track_ids[itick][iadc])
+                packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
             else:
                 break
@@ -150,6 +154,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, track_ids, filename, ba
     if packets:
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
         packets_mc_ds['track_ids'] = packets_mc
+        packets_mc_ds['fraction'] = packets_frac
 
     with h5py.File(filename, 'a') as f:
         if "mc_packets_assn" in f.keys():
@@ -183,7 +188,7 @@ def digitize(integral_list):
     return adcs
 
 @cuda.jit
-def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states):
+def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states, current_fractions):
     """
     Implementation of self-trigger logic
 
@@ -206,10 +211,17 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
 #         integrate[ip][ic] = q_sum
         
         while ic < curre.shape[0]:
+            
+            if iadc >= MAX_ADC_VALUES:
+                print("More ADC values than possible, ", MAX_ADC_VALUES)
+                break
 
             q = curre[ic]*consts.t_sampling
 
             q_sum += q
+            
+            for itrk in range(current_fractions.shape[2]):
+                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
 #             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
@@ -225,6 +237,8 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                 while ic <= integrate_end and ic < curre.shape[0]:
                     q = curre[ic] * consts.t_sampling
                     q_sum += q
+                    for itrk in range(current_fractions.shape[2]):
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
 #                     integrate[ip][ic] = q_sum
                     ic+=1
 
@@ -234,12 +248,17 @@ def get_adc_values(pixels_signals, time_ticks, adc_list, adc_ticks_list, time_pa
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 #                     integrate[ip][ic] = q_sum
+                    for itrk in range(current_fractions.shape[2]):
+                        current_fractions[ip][iadc][itrk] = 0
                     continue
 
-                if iadc >= MAX_ADC_VALUES:
-                    print("More ADC values than possible, ", MAX_ADC_VALUES)
-                    break
+                tot_backtracked = 0
+                for itrk in range(current_fractions.shape[2]):
+                    tot_backtracked += current_fractions[ip][iadc][itrk]
 
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip][iadc][itrk] /= tot_backtracked
+                    
                 adc_list[ip][iadc] = adc
                 
                 #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
