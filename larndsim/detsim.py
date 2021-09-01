@@ -19,6 +19,8 @@ logging.basicConfig()
 logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
+
+MAX_TRACKS_PER_PIXEL = 10
     
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
@@ -274,6 +276,7 @@ def tracks_current(signals, pixels, tracks, response):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+
         if pID[0] >= 0 and pID[1] >= 0:
 
             # Pixel coordinates
@@ -338,7 +341,7 @@ def tracks_current(signals, pixels, tracks, response):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
                         
-                        if x_dist > 0.6651:
+                        if x_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
                             continue
 
                         for iy in range(consts.sampled_points):
@@ -346,7 +349,7 @@ def tracks_current(signals, pixels, tracks, response):
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
                             
-                            if y_dist > 0.6651:
+                            if y_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
                                 continue
                             
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
@@ -364,7 +367,7 @@ def sign(x):
     return 1 if x >= 0 else -1
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
+def sum_pixel_signals(pixels_signals, signals, track_starts, index_map, track_id_pixels, pixels_tracks_signals):
     """
     This function sums the induced current signals on the same pixel.
 
@@ -380,46 +383,26 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map):
         index_map (:obj:`numpy.ndarray`): 2D array containing the correspondence between
             the track index and the pixel ID index.
     """
-    it, ipix, itick = cuda.grid(3)
+    itrk, ipix, itick = cuda.grid(3)
 
-    if it < signals.shape[0] and ipix < signals.shape[1]:
+    if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
-        index = index_map[it][ipix]
-        start_tick = round(track_starts[it] / consts.t_sampling)
+        index = index_map[itrk][ipix]
+        start_tick = round(track_starts[itrk] / consts.t_sampling)
 
-        if itick < signals.shape[2] and index >= 0:
-
-            itime = start_tick + itick
-            cuda.atomic.add(pixels_signals, (index, itime), signals[it][ipix][itick])
-
-@cuda.jit
-def backtrack_adcs(tracks, adc_list, adc_times_list, track_pixel_map, event_id_map, unique_evids, backtracked_id, shift):
-
-    pedestal = floor((fee.V_PEDESTAL - fee.V_CM) * fee.ADC_COUNTS / (fee.V_REF - fee.V_CM))
-
-    ip = cuda.grid(1)
-
-    if ip < adc_list.shape[0]:
-        for itrk in range(track_pixel_map.shape[1]):
-            track_index = track_pixel_map[ip][itrk]
-            if track_index >= 0:
-                track_start_t = tracks["t_start"][track_index]
-                track_end_t = tracks["t_end"][track_index]
-                evid = unique_evids[event_id_map[track_index]]
-                for iadc in range(adc_list[ip].shape[0]):
-                    
-                    if adc_list[ip][iadc] > pedestal:
-                        adc_time = adc_times_list[ip][iadc]
-                        evid_time = adc_time // (time_interval[1]*3)
-
-                        if track_start_t - consts.time_window < adc_time - evid_time*time_interval[1]*3 < track_end_t:
-                            counter = 0
-
-                            while counter < backtracked_id.shape[2] and backtracked_id[ip,iadc,counter] != -1:
-                                counter += 1
-
-                            if counter < backtracked_id.shape[2]:
-                                backtracked_id[ip,iadc,counter] = track_index+shift
+        if index >= 0:
+            counter = 0
+            for track_idx in range(track_id_pixels[index].shape[0]):
+                if itrk == -1:
+                    continue
+                if itrk == int(track_id_pixels[index][track_idx]):
+                    counter = track_idx
+                    break
+                                
+            if itick < signals.shape[2]:
+                itime = start_tick + itick
+                cuda.atomic.add(pixels_signals, (index, itime), signals[itrk][ipix][itick])
+                cuda.atomic.add(pixels_tracks_signals, (index, itime, counter), signals[itrk][ipix][itick])
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
@@ -428,12 +411,16 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
 
     upix = unique_pix[index]
 
-    for itr in range(pixels.shape[0]):
+    for itrk in range(pixels.shape[0]):
+                
         for ipix in range(pixels.shape[1]):
-            pID = pixels[itr][ipix]
+            pID = pixels[itrk][ipix]
+            
             if upix[0] == pID[0] and upix[1] == pID[1]:
+                
                 imap = 0
-                while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1:
+                while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
                     imap += 1
+                    
                 if imap < track_pixel_map.shape[1]:
-                    track_pixel_map[index][imap] = itr
+                    track_pixel_map[index][imap] = itrk
