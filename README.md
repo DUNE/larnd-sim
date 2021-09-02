@@ -1,9 +1,10 @@
-# larnd-sim 
+# larnd-sim
+
 ![CI status](https://github.com/DUNE/larnd-sim/workflows/CI/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-online-success)](https://dune.github.io/larnd-sim)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4582721.svg)](https://doi.org/10.5281/zenodo.4582721)
 
-<img alt="larnd-sim" src="docs/logo.png" height="160">
+<img alt="larnd-sim" src="docs/logo.png" height="160" />
 
 This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.
 
@@ -20,6 +21,7 @@ The input array can be created by converting [edep-sim](https://github.com/Clark
 This script produces a bi-dimensional structured array saved in the HDF5 format, which is used as input for the simulation of the pixel response.
 
 ### Command line interface
+
 We provide a command-line interface available at `cli/simulate_pixels.py`, which can run as:
 
 ```bash
@@ -28,8 +30,11 @@ python cli/simulate_pixels.py \
 --detector_properties=larndsim/detector_properties/module0.yaml \
 --pixel_layout=larndsim/pixel_layouts/multi_tile_layout-2.2.16.yaml \
 --output_filename=output_file.h5 \
---n_tracks=100 
+--n_tracks=100 \
+--response=response.npy
 ```
+
+The `response.npy` is a file containing an array of induced currents for several $(x,y)$ positions on the pixel. It is calculated externally to `larnd-sim` and the version used for LArPix v2 is available at `larndsim/response.npy`.
 
 The output file will contain the datasets described in the [LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html), plus a dataset `tracks` containing the _true_ energy depositions in the detector, and a dataset `mc_packets_assn`, which has a list of indeces corresponding to the true energy deposition associated to each packet.
 
@@ -100,10 +105,12 @@ Then, we join them using `sum_pixel_signals`:
 ```python
 from larndsim import detsim
 ...
-detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals, 
-                                                        signals, 
-                                                        track_starts, 
-                                                        pixel_index_map)
+detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
+                                                        signals,
+                                                        track_starts,
+                                                        pixel_index_map,
+                                                        track_pixel_map,
+                                                        pixels_tracks_signals)
 ```
 
 ### Electronics simulation
@@ -114,35 +121,25 @@ Once we have the induced current for each active pixel in the detector we can ap
 from larndsim import fee
 from numba.cuda.random import create_xoroshiro128p_states
 ...
-
-rng_states = create_xoroshiro128p_states(TPB * BPG, seed=0)
-fee.get_adc_values[BPG,TPB](pixels_signals, 
-                            time_ticks, 
-                            adc_list, 
+fee.get_adc_values[BPG,TPB](pixels_signals,
+                            pixels_tracks_signals,
+                            time_ticks,
+                            integral_list,
                             adc_ticks_list,
-                            0,
-                            rng_states)
+                            consts.time_interval[1]*3*tot_events,
+                            rng_states,
+                            current_fractions)
 ```
 
 where the random states `rng_states` are needed for the noise simulation.
 
-### Backtracking
-
-Here we associate the ADC counts to the track that deposited energy in that specific pixel and it's in time with the signal:
-
-```python
-detsim.backtrack_adcs[BPG,TPB](input_tracks,
-                               adc_list,
-                               adc_ticks_list,
-                               track_pixel_map,
-                               event_id_map,
-                               unique_eventIDs,
-                               backtracked_id,
-                               0)
-```
-
 ### Export
 The final output is then exported to the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html):
 ```python
-fee.export_to_hdf5(adc_list, adc_ticks_list, unique_pix, "example.h5")
+fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
+                    cp.asnumpy(adc_tot_ticks_list),
+                    cp.asnumpy(unique_pix_tot),
+                    cp.asnumpy(current_fractions_tot),
+                    cp.asnumpy(track_pixel_map_tot),
+                    "example.h5")
 ```
