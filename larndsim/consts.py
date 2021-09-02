@@ -131,7 +131,7 @@ def load_detector_properties(detprop_file, pixel_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     drift_length = detprop['drift_length']
-        
+
     tpc_offsets = np.array(detprop['tpc_offsets'])
     tpc_offsets[:, [2, 0]] = tpc_offsets[:, [0, 2]]
 

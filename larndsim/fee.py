@@ -13,9 +13,8 @@ from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
-from . import consts, detsim
+from . import consts
 
-MAX_TRACKS_PER_PIXEL = 10
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
 #: Discrimination threshold
@@ -53,13 +52,13 @@ def rotate_tile(pixel_id, tile_id):
     pix_x = pixel_id[0]
     if x_axis < 0:
         pix_x = consts.n_pixels_per_tile[0]-pixel_id[0]-1
-        
+
     pix_y = pixel_id[1]
     if y_axis < 0:
         pix_y = consts.n_pixels_per_tile[1]-pixel_id[1]-1
-    
+
     return pix_x, pix_y
-        
+
 def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, track_ids, filename, bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -67,10 +66,16 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
         adc_list (:obj:`numpy.ndarray`): list of ADC values for each pixel
         adc_ticks_list (:obj:`numpy.ndarray`): list of time ticks for each pixel
         unique_pix (:obj:`numpy.ndarray`): list of pixel IDs
+        current_fractions (:obj:`numpy.ndarray`): array containing the fractional current
+            induced by each track on each pixel
+        track_ids (:obj:`numpy.ndarray`): 2D array containing the track IDs associated
+            to each pixel
         filename (str): filename of HDF5 output file
-
+        bad_channels (dict): dictionary containing as value a list of bad channels and as
+            the chip key
     Returns:
-        list: list of LArPix packets
+        tuple: a tuple containing the list of LArPix packets and the list of entries
+            for the `mc_packets_assn` dataset
     """
 
     dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[2]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
@@ -79,11 +84,11 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
     packets_frac = [[0]*current_fractions.shape[2]]
     packets_mc_ds = []
     last_event = -1
-    
+
     if bad_channels:
         with open(bad_channels, 'r') as f:
             bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
-    
+
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
@@ -108,7 +113,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     packets_mc.append([-1]*track_ids.shape[2])
                     packets_frac.append([0]*current_fractions.shape[2])
                     last_event = event
-                
+
                 p = Packet_v2()
 
                 try:
@@ -116,7 +121,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
                     continue
-                
+
                 p.dataword = int(adc)
                 p.timestamp = time_tick
 
@@ -125,16 +130,16 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                 except KeyError:
                     logger.info("Chip %i on tile %i not found" % (chip, tile_id))
                     continue
-                    
+
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
                 chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
-                
+
                 if bad_channels:
                     if chip_key in bad_channels_list:
                         if channel in bad_channels_list[chip_key]:
                             logger.info("Channel %i on chip %s disabled" % (channel, chip_key))
                             continue
-                            
+
                 p.chip_key = chip_key
                 p.channel_id = channel
                 p.packet_type = 0
@@ -146,9 +151,9 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                 packets.append(p)
             else:
                 break
-        
+
     packet_list = PacketCollection(packets, read_id=0, message='')
-    
+
     hdf5format.to_file(filename, packet_list)
 
     if packets:
@@ -166,7 +171,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
         f['configs'].attrs['tran_diff'] = consts.tran_diff
         f['configs'].attrs['lifetime'] = consts.lifetime
         f['configs'].attrs['drift_length'] = consts.drift_length
-        
+
     return packets, packets_mc_ds
 
 def digitize(integral_list):
@@ -178,7 +183,7 @@ def digitize(integral_list):
         integral_list (:obj:`numpy.ndarray`): list of charge collected by each pixel
 
     Returns:
-        numpy.ndarray: list of ADC values for each pixel
+        :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     import cupy as cp
     xp = cp.get_array_module(integral_list)
@@ -188,18 +193,32 @@ def digitize(integral_list):
     return adcs
 
 @cuda.jit
-def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, adc_ticks_list, time_padding, rng_states, current_fractions):
+def get_adc_values(pixels_signals,
+                   pixels_signals_tracks,
+                   time_ticks,
+                   adc_list,
+                   adc_ticks_list,
+                   time_padding,
+                   rng_states,
+                   current_fractions):
     """
     Implementation of self-trigger logic
 
     Args:
         pixels_signals (:obj:`numpy.ndarray`): list of induced currents for
             each pixel
+        pixels_signals_tracks (:obj:`numpy.ndarray`): list of induced currents
+            for each track that induces current on each pixel
         time_ticks (:obj:`numpy.ndarray`): list of time ticks for each pixel
         adc_list (:obj:`numpy.ndarray`): list of integrated charges for each
             pixel
         adc_ticks_list (:obj:`numpy.ndarray`): list of the time ticks that
-            correspond to each integrated charge.
+            correspond to each integrated charge
+        time_padding (float): time interval to add to each time tick.
+        rng_states (:obj:`numpy.ndarray`): array of random states for noise
+            generation
+        current_fractions (:obj:`numpy.ndarray`): 2D array that will contain
+            the fraction of current induced on the pixel by each track
     """
     ip = cuda.grid(1)
 
@@ -209,9 +228,9 @@ def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, 
         iadc = 0
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
 #         integrate[ip][ic] = q_sum
-        
+
         while ic < curre.shape[0]:
-            
+
             if iadc >= MAX_ADC_VALUES:
                 print("More ADC values than possible, ", MAX_ADC_VALUES)
                 break
@@ -219,7 +238,7 @@ def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, 
             q = curre[ic]*consts.t_sampling
 
             q_sum += q
-            
+
             for itrk in range(current_fractions.shape[2]):
                 current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
 #             integrate[ip][ic] = q_sum
@@ -231,7 +250,7 @@ def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, 
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
                 integrate_end = ic+interval
-        
+
                 ic+=1
 
                 while ic <= integrate_end and ic < curre.shape[0]:
@@ -258,16 +277,16 @@ def get_adc_values(pixels_signals, pixels_signals_tracks, time_ticks, adc_list, 
 
                 for itrk in range(current_fractions.shape[2]):
                     current_fractions[ip][iadc][itrk] /= tot_backtracked
-                    
+
                 adc_list[ip][iadc] = adc
-                
+
                 #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
-                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2 
+                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2
 
                 ic += round(CLOCK_CYCLE / consts.t_sampling)
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
 #                 integrate[ip][ic] = q_sum
                 iadc += 1
                 continue
-                
+
             ic += 1

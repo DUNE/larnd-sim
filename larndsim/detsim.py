@@ -3,16 +3,13 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, log, floor
+from math import pi, ceil, sqrt, erf, exp, log
 
 import numba as nb
-import cupy as cp
-import numpy as np
 
 from numba import cuda
-from .consts import pixel_pitch, tpc_borders, time_interval, n_pixels
+from .consts import tpc_borders, time_interval, n_pixels
 from . import consts
-from . import fee
 
 import logging
 logging.basicConfig()
@@ -21,7 +18,7 @@ logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
 
 MAX_TRACKS_PER_PIXEL = 10
-    
+
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
     """
@@ -47,7 +44,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
         t_length = t_end - t_start
         track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
-        
+
 @nb.njit
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
     """
@@ -237,20 +234,33 @@ def get_pixel_coordinates(pixel_id):
     plane_id = pixel_id[0] // n_pixels[0]
 
     this_border = tpc_borders[int(plane_id)]
-    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * pixel_pitch + this_border[0][0]
-    pix_y = pixel_id[1] * pixel_pitch + this_border[1][0]
+    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * consts.pixel_pitch + this_border[0][0]
+    pix_y = pixel_id[1] * consts.pixel_pitch + this_border[1][0]
 
     return pix_x,pix_y
 
 @nb.njit
-def get_closest_waveform(x, y, t, response):    
+def get_closest_waveform(x, y, t, response):
+    """
+    This function, given a point on the pixel pad and a time, returns the
+    closest tabulated waveformm from the response array.
+
+    Args:
+        x (float): x coordinate of the point
+        y (float): y coordinate of the point
+        t (float): time of the waveform
+        response (:obj:`numpy.ndarray`): array containing the tabulated waveforms
+
+    Returns:
+        float: the value of the induced current at time `t` for a charge at `(x,y)`
+    """
     dt = 1.e-1
     bin_width = 0.04434
-    
+
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
     k = round(t/dt)
-    
+
     if 0 <= i < response.shape[0] and 0 <= j < response.shape[1] and 0 <= k < response.shape[2]:
         return response[i][j][k]
 
@@ -269,6 +279,7 @@ def tracks_current(signals, pixels, tracks, response):
             the number of track segments, P is the number of pixels and the third dimension
             contains the two pixel ID numbers.
         tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
+        response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
     """
 
     itrk, ipix, it = cuda.grid(3)
@@ -281,9 +292,9 @@ def tracks_current(signals, pixels, tracks, response):
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
-            x_p += pixel_pitch/2
-            y_p += pixel_pitch/2
-            
+            x_p += consts.pixel_pitch/2
+            y_p += consts.pixel_pitch/2
+
             if t["z_start"] < t["z_end"]:
                 start = (t["x_start"], t["y_start"], t["z_start"])
                 end = (t["x_end"], t["y_end"], t["z_end"])
@@ -300,8 +311,8 @@ def tracks_current(signals, pixels, tracks, response):
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
             impact_factor = max(sqrt((5*sigmas[0])**2 + (5*sigmas[1])**2),
-                                sqrt(pixel_pitch**2 + pixel_pitch**2)/2)*2
-            
+                                sqrt(consts.pixel_pitch**2 + consts.pixel_pitch**2)/2)*2
+
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 #             print(z_poca,z_start,z_end,start[2])
             if z_poca != 0:
@@ -322,10 +333,9 @@ def tracks_current(signals, pixels, tracks, response):
                 t_start = max(time_interval[0], round((t["t_start"]-consts.time_padding) / consts.t_sampling) * consts.t_sampling)
 
                 total_current = 0
-                total_charge = 0
-                
+
                 time_tick = t_start + it*consts.t_sampling
-                
+
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
@@ -340,7 +350,7 @@ def tracks_current(signals, pixels, tracks, response):
 
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
-                        
+
                         if x_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
                             continue
 
@@ -348,10 +358,10 @@ def tracks_current(signals, pixels, tracks, response):
 
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
-                            
+
                             if y_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
                                 continue
-                            
+
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
 
@@ -367,7 +377,7 @@ def sign(x):
     return 1 if x >= 0 else -1
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, track_starts, index_map, track_id_pixels, pixels_tracks_signals):
+def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals):
     """
     This function sums the induced current signals on the same pixel.
 
@@ -380,47 +390,62 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, index_map, track_id
             the number of time ticks.
         track_starts (:obj:`numpy.ndarray`): 1D array containing the starting time of
             each track
-        index_map (:obj:`numpy.ndarray`): 2D array containing the correspondence between
+        pixel_index_map (:obj:`numpy.ndarray`): 2D array containing the correspondence between
             the track index and the pixel ID index.
+        track_pixel_map (:obj:`numpy.ndarray`): 2D array containing the association between
+            the unique pixels array and the array containing the pixels for each track.
+        pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
+            for each pixel and each track that induced current on the pixel.
     """
     itrk, ipix, itick = cuda.grid(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
-        index = index_map[itrk][ipix]
+        pixel_index = pixel_index_map[itrk][ipix]
         start_tick = round(track_starts[itrk] / consts.t_sampling)
 
-        if index >= 0:
+        if pixel_index >= 0:
             counter = 0
-            for track_idx in range(track_id_pixels[index].shape[0]):
+            for track_idx in range(track_pixel_map[pixel_index].shape[0]):
                 if itrk == -1:
                     continue
-                if itrk == int(track_id_pixels[index][track_idx]):
+                if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
                     break
-                                
+
             if itick < signals.shape[2]:
                 itime = start_tick + itick
-                cuda.atomic.add(pixels_signals, (index, itime), signals[itrk][ipix][itick])
-                cuda.atomic.add(pixels_tracks_signals, (index, itime, counter), signals[itrk][ipix][itick])
+                cuda.atomic.add(pixels_signals, (pixel_index, itime), signals[itrk][ipix][itick])
+                cuda.atomic.add(pixels_tracks_signals, (pixel_index, itime, counter), signals[itrk][ipix][itick])
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
+    """
+    This kernel fills a 2D array which contains, for each unique pixel,
+    an array with the track indeces associated to that pixel.
+
+    Args:
+        track_pixel_map (:obj:`numpy.ndarray`): 2D array that will contain the
+            association between the unique pixels array and the track indeces
+        unique_pix (:obj:`numpy.ndarray`): 1D array containing the unique pixels
+        pixels (:obj:`numpy.ndarray`): 2D array containing the pixels for each
+            track.
+    """
     # index of unique_pix array
     index = cuda.grid(1)
 
     upix = unique_pix[index]
 
     for itrk in range(pixels.shape[0]):
-                
+
         for ipix in range(pixels.shape[1]):
             pID = pixels[itrk][ipix]
-            
+
             if upix[0] == pID[0] and upix[1] == pID[1]:
-                
+
                 imap = 0
                 while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
                     imap += 1
-                    
+
                 if imap < track_pixel_map.shape[1]:
                     track_pixel_map[index][imap] = itrk
