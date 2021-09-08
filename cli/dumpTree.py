@@ -152,9 +152,7 @@ def dump(input_file, output_file):
         #    printPrimaryVertex("PP", primaryVertex)
 
         # Dump the trajectories
-        trajectories = {'pdgId': [], 'trackId': []}
         print("Number of trajectories ", len(event.Trajectories))
-
         trajectories = np.empty(len(event.Trajectories), dtype=trajectories_dtype)
         for iTraj, trajectory in enumerate(event.Trajectories):
             start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
@@ -180,7 +178,7 @@ def dump(input_file, output_file):
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
                 segment[iHit]['eventID'] = jentry
-                segment[iHit]['trackID'] = trajectories[hitSegment.Contrib[0]]['trackId']
+                segment[iHit]['trackID'] = trajectories[hitSegment.Contrib[0]]['trackID']
                 segment[iHit]['x_start'] = hitSegment.GetStart().X() / 10
                 segment[iHit]['y_start'] = hitSegment.GetStart().Y() / 10
                 segment[iHit]['z_start'] = hitSegment.GetStart().Z() / 10
