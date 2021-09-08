@@ -135,11 +135,11 @@ def run_simulation(input_filename,
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
     step = 1
-    adc_tot_list = cp.empty((0,fee.MAX_ADC_VALUES))
-    adc_tot_ticks_list = cp.empty((0,fee.MAX_ADC_VALUES))
-    track_pixel_map_tot = cp.empty((0,fee.MAX_ADC_VALUES,detsim.MAX_TRACKS_PER_PIXEL))
-    unique_pix_tot = cp.empty((0,2))
-    current_fractions_tot = cp.zeros((0,fee.MAX_ADC_VALUES,detsim.MAX_TRACKS_PER_PIXEL))
+    adc_tot_list = []
+    adc_tot_ticks_list = []
+    track_pixel_map_tot = []
+    unique_pix_tot = []
+    current_fractions_tot = []
     tot_events = 0
     
     tot_evids = np.unique(tracks['eventID'])
@@ -281,14 +281,14 @@ def run_simulation(input_filename,
             adc_list = fee.digitize(integral_list)
             RangePop()
 
-            adc_tot_list = cp.concatenate((adc_tot_list, adc_list), axis=0)
-            adc_tot_ticks_list = cp.concatenate((adc_tot_ticks_list, adc_ticks_list), axis=0)
-            unique_pix_tot = cp.concatenate((unique_pix_tot, unique_pix), axis=0)
-            current_fractions_tot = cp.concatenate((current_fractions_tot, current_fractions), axis=0)
-            track_pixel_map[track_pixel_map!=-1] += first_trk_id+itrk
+            adc_tot_list.append(cp.asnumpy(adc_list))
+            adc_tot_ticks_list.append(cp.asnumpy(adc_ticks_list))
+            unique_pix_tot.append(cp.asnumpy(unique_pix))
+            current_fractions_tot.append(cp.asnumpy(current_fractions))
+            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
             track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], detsim.MAX_TRACKS_PER_PIXEL, axis=1)
-            track_pixel_map_tot = cp.concatenate((track_pixel_map_tot, track_pixel_map), axis=0)
-            
+            track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
+
         tot_events += step
 
         end_tracks_batch = time()
@@ -297,11 +297,16 @@ def run_simulation(input_filename,
     print("*************\nSAVING RESULT\n*************")
     RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
-    fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
-                       cp.asnumpy(adc_tot_ticks_list),
-                       cp.asnumpy(unique_pix_tot),
-                       cp.asnumpy(current_fractions_tot),
-                       cp.asnumpy(track_pixel_map_tot),
+    adc_tot_list = np.concatenate(adc_tot_list, axis=0)
+    adc_tot_ticks_list = np.concatenate(adc_tot_ticks_list, axis=0)
+    unique_pix_tot = np.concatenate(unique_pix_tot, axis=0)
+    current_fractions_tot = np.concatenate(current_fractions_tot, axis=0)
+    track_pixel_map_tot = np.concatenate(track_pixel_map_tot, axis=0)
+    fee.export_to_hdf5(adc_tot_list,
+                       adc_tot_ticks_list,
+                       unique_pix_tot,
+                       current_fractions_tot,
+                       track_pixel_map_tot,
                        output_filename,
                        bad_channels=bad_channels)
     RangePop()
