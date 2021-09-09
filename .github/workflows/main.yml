@@ -84,4 +84,3 @@ jobs:
           pytest tests/testDrifting.py
           pytest tests/testQuenching.py
           pytest tests/testTrackCharge.py
-          pytest tests/testCLISimulatePixels.py
