@@ -132,8 +132,10 @@ def dump(input_file, output_file):
                                    ('xyz_start', 'f4', (3,)), ('t_start', 'f4'),
                                    ('pxyz_end', 'f4', (3,)),
                                    ('xyz_end', 'f4', (3,)), ('t_end', 'f4'),
-                                   ('pdgId', 'i4'), ('process', 'u4'),
-                                   ('subprocess', 'u4')])
+                                   ('pdgId', 'i4'), ('start_process', 'u4'),
+                                   ('start_subprocess', 'u4'),
+                                   ('end_process', 'u4'),
+                                   ('end_subprocess', 'u4')])
 
     segments_list = []
     trajectories_list = []
@@ -165,8 +167,10 @@ def dump(input_file, output_file):
             trajectories[iTraj]['xyz_end'] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
             trajectories[iTraj]['t_start'] = start_pt.GetPosition().T()
             trajectories[iTraj]['t_end'] = end_pt.GetPosition().T()
-            trajectories[iTraj]['process'] = start_pt.GetProcess()
-            trajectories[iTraj]['subprocess'] = start_pt.GetSubprocess()
+            trajectories[iTraj]['start_process'] = start_pt.GetProcess()
+            trajectories[iTraj]['start_subprocess'] = start_pt.GetSubprocess()
+            trajectories[iTraj]['end_process'] = end_pt.GetProcess()
+            trajectories[iTraj]['end_subprocess'] = end_pt.GetSubprocess()
             trajectories[iTraj]['pdgId'] = trajectory.GetPDGCode()
         trajectories_list.append(trajectories)
 
