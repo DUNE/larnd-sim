@@ -89,6 +89,7 @@ def run_simulation(input_filename,
     # For this sample we need to invert $z$ and $y$ axes
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
+        trajectories = np.array(f['trajectories'])
     RangePop()
     
     if tracks.size == 0:
@@ -313,6 +314,7 @@ def run_simulation(input_filename,
 
     with h5py.File(output_filename, 'a') as f:
         f.create_dataset("tracks", data=tracks)
+        f.create_dataset("trajectories", data=trajectories)
         f['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
