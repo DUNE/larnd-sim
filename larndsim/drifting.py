@@ -41,8 +41,8 @@ def drift(tracks):
             if plane[0][0]-2e-2 <= track["x"] <= plane[0][1]+2e-2 and \
                plane[1][0]-2e-2 <= track["y"] <= plane[1][1]+2e-2 and \
                min(plane[2][1]-2e-2,plane[2][0]-2e-2) <= track["z"] <= max(plane[2][1]+2e-2,plane[2][0]+2e-2):
-                pixel_plane = ip
-                break 
+               pixel_plane = ip
+               break 
 
         track["pixel_plane"] = pixel_plane
 

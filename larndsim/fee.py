@@ -94,7 +94,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
         pixel_id = unique_pix[itick]
 
         plane_id = int(pixel_id[0] // consts.n_pixels[0])
-        tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[1])
+        tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[0])
         tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
         tile_id = consts.tile_map[plane_id][tile_x][tile_y]
 
@@ -117,7 +117,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                 p = Packet_v2()
 
                 try:
-                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%70, tile_id)]
+                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%[consts.n_pixels_per_tile[0],consts.n_pixels_per_tile[1]], tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
                     continue

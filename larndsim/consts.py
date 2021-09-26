@@ -94,7 +94,6 @@ variable_types = {
     "z": "f4"
 }
 
-anode_layout = (2,4)
 xs = 0
 ys = 0
 
@@ -172,8 +171,14 @@ def load_detector_properties(detprop_file, pixel_file):
 
         tpc_borders[itpc] = (x_border, y_border, z_border)
 
+    tile_map = detprop['tile_map']
+
+    ntiles_x = len(tile_map[0])
+    ntiles_y = len(tile_map[0][0])
+
+    anode_layout = (ntiles_x,ntiles_y)
+
     #: Number of pixels per axis
-    n_pixels = len(np.unique(xs))*2, len(np.unique(ys))*4
+    n_pixels = len(np.unique(xs))*ntiles_x, len(np.unique(ys))*ntiles_y
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
 
-    tile_map = detprop['tile_map']
