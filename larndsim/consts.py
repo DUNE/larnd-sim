@@ -135,6 +135,9 @@ def load_detector_properties(detprop_file, pixel_file):
     tpc_offsets[:, [2, 0]] = tpc_offsets[:, [0, 2]]
 
     time_interval = np.array(detprop['time_interval'])
+    time_ticks = np.linspace(time_interval[0],
+                             time_interval[1],
+                             int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
 
     vdrift = detprop['vdrift']
     lifetime = detprop['lifetime']
