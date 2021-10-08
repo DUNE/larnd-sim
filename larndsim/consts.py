@@ -118,6 +118,7 @@ def load_detector_properties(detprop_file, pixel_file):
     global vdrift
     global lifetime
     global time_interval
+    global time_ticks
     global long_diff
     global tran_diff
     global tile_positions
