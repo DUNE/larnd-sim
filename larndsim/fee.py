@@ -45,7 +45,7 @@ logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
-    axes = consts.tile_orientations[tile_id-1]
+    axes = consts.tile_orientations[tile_id]
     x_axis = axes[2]
     y_axis = axes[1]
 
@@ -122,7 +122,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%[consts.n_pixels_per_tile[0],consts.n_pixels_per_tile[1]], tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
-                    cosntinue
+                    continue
 
                 p.dataword = int(adc)
                 p.timestamp = time_tick
