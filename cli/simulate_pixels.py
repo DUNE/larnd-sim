@@ -161,8 +161,8 @@ def run_simulation(input_filename,
         evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
         first_trk_id = np.where(tracks['eventID']==evt_tracks['eventID'][0])[0][0]
         
-        for itrk in range(0, evt_tracks.shape[0], 600):
-            selected_tracks = evt_tracks[itrk:itrk+600]
+        for itrk in range(0, evt_tracks.shape[0], 200):
+            selected_tracks = evt_tracks[itrk:itrk+200]
 
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
@@ -185,9 +185,9 @@ def run_simulation(input_filename,
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
 
-            if not active_pixels.shape[1]:
+            if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                 continue
-                
+     
             pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
                                                                         active_pixels,
                                                                         neighboring_pixels,
