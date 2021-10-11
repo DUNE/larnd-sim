@@ -94,10 +94,12 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
         pixel_id = unique_pix[itick]
 
         plane_id = int(pixel_id[0] // consts.n_pixels[0])
+        module_id = plane_id//2+1
         tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[0])
         tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
-        tile_id = consts.tile_map[plane_id][tile_x][tile_y]
-
+        anode_id = 0 if plane_id % 2 == 0 else 1
+        tile_id = consts.tile_map[anode_id][tile_x][tile_y]
+        
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
@@ -120,7 +122,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%[consts.n_pixels_per_tile[0],consts.n_pixels_per_tile[1]], tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
-                    continue
+                    cosntinue
 
                 p.dataword = int(adc)
                 p.timestamp = time_tick
@@ -132,6 +134,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
+                io_group = consts.module_to_io_groups[module_id][io_group-1]
                 chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
 
                 if bad_channels:
