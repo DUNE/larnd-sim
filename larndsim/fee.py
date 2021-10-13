@@ -37,6 +37,8 @@ ADC_COUNTS = 2**8
 RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
+#: Discriminator noise in e-
+DISCRIMINATOR_NOISE = 650
 
 import logging
 logging.basicConfig()
@@ -244,8 +246,9 @@ def get_adc_values(pixels_signals,
 #             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
 
-            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
+            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD + disc_noise:
                 crossing_time_tick = ic
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
