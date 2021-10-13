@@ -99,6 +99,7 @@ variable_types = {
 xs = 0
 ys = 0
 module_to_io_groups = {}
+response_sampling = 0.1
 
 def load_detector_properties(detprop_file, pixel_file):
     """
@@ -130,6 +131,7 @@ def load_detector_properties(detprop_file, pixel_file):
     global tile_chip_to_io
     global drift_length
     global module_to_io_groups
+    global response_sampling
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -148,6 +150,7 @@ def load_detector_properties(detprop_file, pixel_file):
     lifetime = detprop['lifetime']
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
+    response_sampling = detprop['response_sampling']
 
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
