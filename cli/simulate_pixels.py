@@ -45,7 +45,7 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename='',
-                   response_filename='../larndsim/response.npy',
+                   response_filename='../larndsim/response_44.npy',
                    bad_channels=None,
                    n_tracks=100000):
     """
