@@ -45,7 +45,7 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename='',
-                   response_filename='../larndsim/response_44.npy',
+                   response_file='../larndsim/response_44.npy',
                    bad_channels=None,
                    n_tracks=100000):
     """
@@ -116,7 +116,7 @@ def run_simulation(input_filename,
     tracks['z'] = x
     RangePop()
     
-    response = cp.load(response_filename)
+    response = cp.load(response_file)
 
     TPB = 256
     BPG = ceil(tracks.shape[0] / TPB)
@@ -161,9 +161,8 @@ def run_simulation(input_filename,
         evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
         first_trk_id = np.where(tracks['eventID']==evt_tracks['eventID'][0])[0][0]
         
-        for itrk in range(0, evt_tracks.shape[0], 200):
-            selected_tracks = evt_tracks[itrk:itrk+200]
-
+        for itrk in range(0, evt_tracks.shape[0], 500):
+            selected_tracks = evt_tracks[itrk:itrk+500]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -229,7 +228,6 @@ def run_simulation(input_filename,
                                                                  selected_tracks,
                                                                  response)
             RangePop()
-
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
