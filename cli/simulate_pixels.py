@@ -116,6 +116,18 @@ def run_simulation(input_filename,
     tracks['z'] = x
     RangePop()
     
+    is_inside = np.zeros((tracks.shape[0]))
+    for itrk in range(tracks.shape[0]):
+        track = tracks[itrk]
+        for plane in consts.tpc_borders:
+            if plane[0][0] <= track['x_start'] <= plane[0][1] and plane[0][0] <= track['x_end'] <= plane[0][1] and \
+               plane[1][0] <= track['y_start'] <= plane[1][1] and plane[1][0] <= track['y_end'] <= plane[1][1] and \
+               min(plane[2][0],plane[2][1]) <= track['z_start'] <= max(plane[2][0],plane[2][1]) and min(plane[2][0],plane[2][1]) <= track['z_end'] <= max(plane[2][0],plane[2][1]):
+                is_inside[itrk] = 1
+                break
+    
+    tracks = tracks[is_inside==1]
+    
     response = cp.load(response_file)
 
     TPB = 256
@@ -161,8 +173,8 @@ def run_simulation(input_filename,
         evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
         first_trk_id = np.where(tracks['eventID']==evt_tracks['eventID'][0])[0][0]
         
-        for itrk in range(0, evt_tracks.shape[0], 500):
-            selected_tracks = evt_tracks[itrk:itrk+500]
+        for itrk in range(0, evt_tracks.shape[0], 50):
+            selected_tracks = evt_tracks[itrk:itrk+50]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -252,6 +264,7 @@ def run_simulation(input_filename,
             blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
             pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*3))
+            print(track_pixel_map.shape)
             pixels_tracks_signals = cp.zeros((len(unique_pix),len(consts.time_ticks)*3,track_pixel_map.shape[1]))
             detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
                                                                     signals,
