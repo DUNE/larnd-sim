@@ -47,7 +47,7 @@ logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
-    axes = consts.tile_orientations[tile_id-1]
+    axes = consts.tile_orientations[tile_id]
     x_axis = axes[2]
     y_axis = axes[1]
 
@@ -96,10 +96,12 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
         pixel_id = unique_pix[itick]
 
         plane_id = int(pixel_id[0] // consts.n_pixels[0])
+        module_id = plane_id//2+1
         tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[0])
         tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
-        tile_id = consts.tile_map[plane_id][tile_x][tile_y]
-
+        anode_id = 0 if plane_id % 2 == 0 else 1
+        tile_id = consts.tile_map[anode_id][tile_x][tile_y]
+        
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
@@ -134,6 +136,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
+                io_group = consts.module_to_io_groups[module_id][io_group-1]
                 chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
 
                 if bad_channels:
