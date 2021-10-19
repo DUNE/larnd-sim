@@ -268,8 +268,9 @@ def get_adc_values(pixels_signals,
                     ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
 
-                if adc < DISCRIMINATION_THRESHOLD:
+                if adc < DISCRIMINATION_THRESHOLD + disc_noise:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 #                     integrate[ip][ic] = q_sum
