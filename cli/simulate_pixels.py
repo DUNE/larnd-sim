@@ -222,7 +222,7 @@ def run_simulation(input_filename,
             track_starts = cp.empty(selected_tracks.shape[0])
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
-            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length,  event_id_map, selected_tracks)
+            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length, event_id_map, selected_tracks)
             RangePop()
 
             RangePush("tracks_current")
@@ -264,7 +264,6 @@ def run_simulation(input_filename,
             blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
             pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*3))
-            print(track_pixel_map.shape)
             pixels_tracks_signals = cp.zeros((len(unique_pix),len(consts.time_ticks)*3,track_pixel_map.shape[1]))
             detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
                                                                     signals,
@@ -302,7 +301,8 @@ def run_simulation(input_filename,
             unique_pix_tot.append(cp.asnumpy(unique_pix))
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], detsim.MAX_TRACKS_PER_PIXEL, axis=1)
+            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], fee.MAX_ADC_VALUES, axis=1)
+            print(track_pixel_map.shape)
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
 
         tot_events += step
