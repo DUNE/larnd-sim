@@ -1,0 +1,14 @@
+tpc_offsets: # cm
+  - [0, -21.8236, 0]
+vdrift: 0.159636 # cm / us
+lifetime: 2.2e+3 # us
+time_interval: [0, 200.] # us
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+drift_length: 30.27225 # cm
+response_sampling: 0.1 # us
+tile_map: 
+  - [[7,5,3,1],[8,6,4,2]]
+  - [[16,14,12,10],[15,13,11,9]]
+time_padding: 190 # us
+time_window: 189.1 # us
