@@ -241,7 +241,6 @@ def run_simulation(input_filename,
                                                                  selected_tracks,
                                                                  response)
             
-            ## start loop over tracks
             RangePop()
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
@@ -324,10 +323,6 @@ def run_simulation(input_filename,
     unique_pix_tot = np.concatenate(unique_pix_tot, axis=0)
     current_fractions_tot = np.concatenate(current_fractions_tot, axis=0)
     track_pixel_map_tot = np.concatenate(track_pixel_map_tot, axis=0)
-    print('adc_tot_list',adc_tot_list.shape)
-    print('unique_pix_tot',unique_pix_tot.shape)
-    print('current_fractions_tot',current_fractions_tot.shape)
-    print('track_pixel_map',track_pixel_map_tot.shape)
     fee.export_to_hdf5(event_id_list,
                        adc_tot_list,
                        adc_tot_ticks_list,
