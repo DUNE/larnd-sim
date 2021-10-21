@@ -47,7 +47,8 @@ def run_simulation(input_filename,
                    output_filename='',
                    response_filename='../larndsim/response.npy',
                    bad_channels=None,
-                   n_tracks=100000):
+                   n_tracks=100000,
+                   pixel_thresholds_file=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -59,6 +60,9 @@ def run_simulation(input_filename,
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
+            detector_properties (str): path of the YAML file containing
+            the detector properties
+        pixel_thresholds_file (str): path to npz file containing pixel thresholds
         n_tracks (int): number of tracks to be simulated
     """
     start_simulation = time()
@@ -82,6 +86,13 @@ def run_simulation(input_filename,
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
     from larndsim import quenching, drifting, detsim, pixels_from_track, fee
+    RangePop()
+
+    RangePush("load_pixel_thresholds")
+    if pixel_thresholds_file is not None:
+        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 1, 1)
+    else:
+        pixel_thresholds_lut = CudaDict(fee.DISCRIMINATOR_THRESHOLD, 1, 1)
     RangePop()
 
     RangePush("load_hd5_file")
@@ -273,15 +284,20 @@ def run_simulation(input_filename,
             
             current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
             rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
-           
-            fee.get_adc_values[BPG,TPB](pixels_signals,
-                                        pixels_tracks_signals,
-                                        time_ticks,
-                                        integral_list,
-                                        adc_ticks_list,
-                                        consts.time_interval[1]*3*tot_events,
-                                        rng_states,
-                                        current_fractions)
+            pixel_thresholds_lut.tpb = TPB
+            pixel_thresholds_lut.bpg = BPG
+            orig_shape = unique_pix.shape
+            pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(orig_shape)
+
+            fee.get_adc_values[BPG, TPB](pixels_signals,
+                                         pixels_tracks_signals,
+                                         time_ticks,
+                                         integral_list,
+                                         adc_ticks_list,
+                                         consts.time_interval[1] * 3 * tot_events,
+                                         rng_states,
+                                         current_fractions,
+                                         pixel_thresholds)
 
             adc_list = fee.digitize(integral_list)
             RangePop()
