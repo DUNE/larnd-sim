@@ -12,8 +12,11 @@ from numba.cuda.random import xoroshiro128p_normal_float32
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
+from glob import glob
+import os
 from tqdm import tqdm
 from . import consts
+from .cuda_dict import CudaDict
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -174,21 +177,22 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
 
     return packets, packets_mc_ds
 
+
 def digitize(integral_list):
     """
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
 
     Args:
-        integral_list (:obj:`numpy.ndarray`): list of charge collected by each pixel
+        integral_list(: obj: `numpy.ndarray`): list of charge collected by each pixel
 
     Returns:
-        :obj:`numpy.ndarray`: list of ADC values for each pixel
+        : obj: `numpy.ndarray`: list of ADC values for each pixel
     """
     import cupy as cp
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.around(xp.maximum((integral_list*GAIN/consts.e_charge+V_PEDESTAL - V_CM), 0) \
-                      * ADC_COUNTS/(V_REF-V_CM)), ADC_COUNTS)
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / consts.e_charge + V_PEDESTAL - V_CM), 0)
+                                * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
 
     return adcs
 
@@ -200,7 +204,8 @@ def get_adc_values(pixels_signals,
                    adc_ticks_list,
                    time_padding,
                    rng_states,
-                   current_fractions):
+                   current_fractions,
+                   pixel_thresholds):
     """
     Implementation of self-trigger logic
 
@@ -219,6 +224,8 @@ def get_adc_values(pixels_signals,
             generation
         current_fractions (:obj:`numpy.ndarray`): 2D array that will contain
             the fraction of current induced on the pixel by each track
+        pixel_thresholds(: obj: `numpy.ndarray`): list of discriminator
+            thresholds for each pixel
     """
     ip = cuda.grid(1)
 
@@ -245,7 +252,7 @@ def get_adc_values(pixels_signals,
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
-            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD:
+            if q_sum + q_noise >= pixel_thresholds[ip]:
                 crossing_time_tick = ic
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
@@ -263,7 +270,7 @@ def get_adc_values(pixels_signals,
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 
-                if adc < DISCRIMINATION_THRESHOLD:
+                if adc < pixel_thresholds[ip]:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 #                     integrate[ip][ic] = q_sum
