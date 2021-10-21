@@ -116,6 +116,18 @@ def run_simulation(input_filename,
     tracks['z'] = x
     RangePop()
     
+    is_inside = np.zeros((tracks.shape[0]))
+    for itrk in range(tracks.shape[0]):
+        track = tracks[itrk]
+        for plane in consts.tpc_borders:
+            if plane[0][0] <= track['x_start'] <= plane[0][1] and plane[0][0] <= track['x_end'] <= plane[0][1] and \
+               plane[1][0] <= track['y_start'] <= plane[1][1] and plane[1][0] <= track['y_end'] <= plane[1][1] and \
+               min(plane[2][0],plane[2][1]) <= track['z_start'] <= max(plane[2][0],plane[2][1]) and min(plane[2][0],plane[2][1]) <= track['z_end'] <= max(plane[2][0],plane[2][1]):
+                is_inside[itrk] = 1
+                break
+    
+    tracks = tracks[is_inside==1]
+    
     response = cp.load(response_file)
 
     TPB = 256
@@ -171,10 +183,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
         
-        # chunk the tracks within each event, in case there are some events with lots of tracks
-        chunk_ntracks = 1024
-        for itrk in range(0, evt_tracks.shape[0], chunk_ntracks):
-            selected_tracks = evt_tracks[itrk:itrk+chunk_ntracks]
+        for itrk in range(0, evt_tracks.shape[0], 50):
+            selected_tracks = evt_tracks[itrk:itrk+50]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -223,7 +233,7 @@ def run_simulation(input_filename,
             track_starts = cp.empty(selected_tracks.shape[0])
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
-            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length,  event_id_map, selected_tracks)
+            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length, event_id_map, selected_tracks)
             RangePop()
 
             RangePush("tracks_current")
@@ -306,7 +316,7 @@ def run_simulation(input_filename,
             unique_pix_tot.append(cp.asnumpy(unique_pix))
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], detsim.MAX_TRACKS_PER_PIXEL, axis=1)
+            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], fee.MAX_ADC_VALUES, axis=1)
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
 
         tot_events += step

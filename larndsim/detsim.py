@@ -17,7 +17,7 @@ logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
 
-MAX_TRACKS_PER_PIXEL = 10
+MAX_TRACKS_PER_PIXEL = 5
 
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
