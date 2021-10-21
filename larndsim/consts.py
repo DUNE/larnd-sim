@@ -209,4 +209,4 @@ def load_detector_properties(detprop_file, pixel_file):
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs))*ntiles_x, len(np.unique(ys))*ntiles_y
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
-    module_to_io_groups = tile_layout['module_to_io_groups']
+    module_to_io_groups = detprop['module_to_io_groups']
