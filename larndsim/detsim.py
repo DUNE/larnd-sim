@@ -287,8 +287,9 @@ def tracks_current(signals, pixels, tracks, response):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+        pID_x, pID_y, pID_plane = id2pixel(pID)
 
-        if pID[0] >= 0 and pID[1] >= 0:
+        if pID_x >= 0 and pID_y >= 0:
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)

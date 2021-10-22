@@ -27,10 +27,14 @@ def pixel2id(pixel_x, pixel_y, pixel_plane):
     Returns:
         unique integer id
     """
+    if pixel_x < 0 or pixel_y < 0 or pixel_x > n_pixels[0] or pixel_y > n_pixels[1]:
+        return -1
     return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
 
 
 def pixel2id_nojit(pixel_x, pixel_y, pixel_plane):
+    if pixel_x < 0 or pixel_y < 0 or pixel_x > n_pixels[0] or pixel_y > n_pixels[1]:
+        return -1
     return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
 
 
@@ -46,12 +50,17 @@ def id2pixel(id):
         pixel_y (int): number of pixel pitches in y-dimension
         pixel_plane (int): pixel plane number
     """
+    if id < 0:
+        return -1, -1, -1
     return (id % n_pixels[0], (id // n_pixels[0]) % n_pixels[1],
             (id // (n_pixels[0] * n_pixels[1])))
 
 
-def id2pixel_nojit(pixel_x, pixel_y, pixel_plane):
-    return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
+def id2pixel_nojit(id):
+    if id < 0:
+        return -1, -1, -1
+    return (id % n_pixels[0], (id // n_pixels[0]) % n_pixels[1],
+            (id // (n_pixels[0] * n_pixels[1])))
 
 
 @cuda.jit
@@ -87,29 +96,27 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
             (t["y_end"] - this_border[1][0]) // pixel_pitch,
             t["pixel_plane"])
 
-        get_active_pixels(*start_pixel, *end_pixel, active_pixels[itrk])
+        get_active_pixels(start_pixel, end_pixel, active_pixels[itrk])
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
 
 @cuda.jit(device=True)
-def get_active_pixels(x0, y0, plane_id0, x1, y1, plane_id1, tot_pixels):
+def get_active_pixels(start_id, end_id, tot_pixels):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
 
     Args:
-        x0 (int): start `x` coordinate
-        y0 (int): start `y` coordinate
-        plane_id0 (int): start pixel plane
-        x1 (int): end `x` coordinate
-        y1 (int): end `y` coordinate
-        plane_id01(int): end pixel plane
+        start_id (int): end pixel id
+        end_id (int): end pixel id
         tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
     """
-
+    x0, y0, plane_id0 = id2pixel(start_id)
+    x1, y1, _ = id2pixel(end_id)
+    
     dx = x1 - x0
     dy = y1 - y0
     xsign = 1 if dx > 0 else -1
