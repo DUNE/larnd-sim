@@ -190,8 +190,8 @@ def run_simulation(input_filename,
             max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
             MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
             MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
-            active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
-            neighboring_pixels = cp.full((selected_tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
+            active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS), -1, dtype=np.int32)
+            neighboring_pixels = cp.full((selected_tracks.shape[0], MAX_PIXELS), -1, dtype=np.int32)
             n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
@@ -208,9 +208,9 @@ def run_simulation(input_filename,
 
             RangePush("unique_pix")
             shapes = neighboring_pixels.shape
-            joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
+            joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
             unique_pix = cupy_unique_axis0(joined)
-            unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
+            unique_pix = unique_pix[(unique_pix != -1)]
             RangePop()
             
             if not unique_pix.shape[0]:
@@ -244,7 +244,7 @@ def run_simulation(input_filename,
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-            compare = neighboring_pixels[..., np.newaxis, :] == unique_pix
+            compare = neighboring_pixels[..., np.newaxis] == unique_pix
             indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
             pixel_index_map[indices[0], indices[1]] = indices[2]
             RangePop()

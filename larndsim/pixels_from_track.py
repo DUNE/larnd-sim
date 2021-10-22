@@ -13,6 +13,47 @@ logger = logging.getLogger('pixels_from_track')
 logger.setLevel(logging.WARNING)
 logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
 
+
+@cuda.jit(device=True)
+def pixel2id(pixel_x, pixel_y, pixel_plane):
+    """
+    Convert the x,y,plane tuple to a unique identifier
+
+    Args:
+        pixel_x (int): number of pixel pitches in x-dimension
+        pixel_y (int): number of pixel pitches in y-dimension
+        pixel_plane (int): pixel plane number
+
+    Returns:
+        unique integer id
+    """
+    return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
+
+
+def pixel2id_nojit(pixel_x, pixel_y, pixel_plane):
+    return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
+
+
+@cuda.jit(device=True)
+def id2pixel(id):
+    """
+    Convert the unique pixel identifer to an x,y,plane tuple
+
+    Args:
+        id (int): unique pixel identifier
+    Returns:
+        pixel_x (int): number of pixel pitches in x-dimension
+        pixel_y (int): number of pixel pitches in y-dimension
+        pixel_plane (int): pixel plane number
+    """
+    return (id % n_pixels[0], (id // n_pixels[0]) % n_pixels[1],
+            (id // (n_pixels[0] * n_pixels[1])))
+
+
+def id2pixel_nojit(pixel_x, pixel_y, pixel_plane):
+    return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
+
+
 @cuda.jit
 def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
     """
@@ -37,29 +78,33 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
         this_border = tpc_borders[int(t["pixel_plane"])]
-        start_pixel = ((t["x_start"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
-                       (t["y_start"] - this_border[1][0]) // pixel_pitch)
-        end_pixel = ((t["x_end"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
-                     (t["y_end"]- this_border[1][0]) // pixel_pitch)
+        start_pixel = pixel2id(
+            (t["x_start"] - this_border[0][0]) // pixel_pitch,
+            (t["y_start"] - this_border[1][0]) // pixel_pitch,
+            t["pixel_plane"])
+        end_pixel = pixel2id(
+            (t["x_end"] - this_border[0][0]) // pixel_pitch,
+            (t["y_end"] - this_border[1][0]) // pixel_pitch,
+            t["pixel_plane"])
 
-        get_active_pixels(start_pixel[0], start_pixel[1],
-                          end_pixel[0], end_pixel[1],
-                          active_pixels[itrk])
+        get_active_pixels(*start_pixel, *end_pixel, active_pixels[itrk])
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
 
 @cuda.jit(device=True)
-def get_active_pixels(x0, y0, x1, y1, tot_pixels):
+def get_active_pixels(x0, y0, plane_id0, x1, y1, plane_id1, tot_pixels):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
 
     Args:
-        x0 (float): start `x` coordinate
-        y0 (float): start `y` coordinate
-        x1 (float): end `x` coordinate
-        y1 (float): end `y` coordinate
+        x0 (int): start `x` coordinate
+        y0 (int): start `y` coordinate
+        plane_id0 (int): start pixel plane
+        x1 (int): end `x` coordinate
+        y1 (int): end `y` coordinate
+        plane_id01(int): end pixel plane
         tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
@@ -87,9 +132,9 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
         y_id = y0 + x*xy + y*yy
         plane_id = x_id // n_pixels[0]
         
-        if 0 <= x_id <= n_pixels[0]*(plane_id+1) and 0 <= y_id <= n_pixels[1]:
-            tot_pixels[x] = x_id, y_id
             
+        if 0 <= x_id <= n_pixels[0] and 0 <= y_id <= n_pixels[1]:
+            tot_pixels[x] = pixel2id(x_id, y_id, plane_id0)
         if D >= 0:
             y += 1
             D -= 2*dx
@@ -119,22 +164,22 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
 
     for pix in range(active_pixels.shape[0]):
 
-        if (active_pixels[pix][0] == -1) and (active_pixels[pix][1] == -1):
+        if (active_pixels[pix] == -1):
             continue
 
         for x_r in range(-radius, radius+1):
             for y_r in range(-radius, radius+1):
-                new_pixel = (active_pixels[pix][0]+x_r, active_pixels[pix][1]+y_r)
+                active_x, active_y, plane_id = id2pixel(active_pixels[pix])
+                new_x, new_y = active_x + x_r, active_y + y_r
+                new_pixel = pixel2id(new_x, new_y, plane_id)
                 is_unique = True
 
                 for ipix in range(neighboring_pixels.shape[0]):
-                    if new_pixel[0] == neighboring_pixels[ipix][0] and new_pixel[1] == neighboring_pixels[ipix][1]:
+                    if new_pixel == neighboring_pixels[ipix]:
                         is_unique = False
                         break
 
-                plane_id = new_pixel[0] // n_pixels[0]
-
-                if is_unique and 0 <= new_pixel[0] < (plane_id+1)*n_pixels[0] and 0 <= new_pixel[1] < n_pixels[1] and plane_id < tpc_borders.shape[0]:
+                if is_unique and 0 <= new_x < n_pixels[0] and 0 <= new_y < n_pixels[1] and plane_id < tpc_borders.shape[0]:
                     neighboring_pixels[count] = new_pixel
                     count += 1
 
