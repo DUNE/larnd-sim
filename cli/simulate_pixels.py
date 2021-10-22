@@ -19,6 +19,7 @@ from numba.cuda.random import create_xoroshiro128p_states
 from tqdm import tqdm
 
 from larndsim import consts
+from larndsim.cuda_dict import CudaDict
 
 logo = """
   _                      _            _
@@ -92,7 +93,7 @@ def run_simulation(input_filename,
     if pixel_thresholds_file is not None:
         pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 1, 1)
     else:
-        pixel_thresholds_lut = CudaDict(fee.DISCRIMINATOR_THRESHOLD, 1, 1)
+        pixel_thresholds_lut = CudaDict(np.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
 
     RangePush("load_hd5_file")
@@ -209,7 +210,8 @@ def run_simulation(input_filename,
             RangePush("unique_pix")
             shapes = neighboring_pixels.shape
             joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
-            unique_pix = cupy_unique_axis0(joined)
+            #unique_pix = cupy_unique_axis0(joined)
+            unique_pix = cp.unique(joined)
             unique_pix = unique_pix[(unique_pix != -1)]
             RangePop()
             
@@ -245,7 +247,7 @@ def run_simulation(input_filename,
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
             compare = neighboring_pixels[..., np.newaxis] == unique_pix
-            indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+            indices = cp.where(compare)
             pixel_index_map[indices[0], indices[1]] = indices[2]
             RangePop()
 
