@@ -42,7 +42,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
         t_end = min(time_interval[1], round((track["t_end"] + 1) / consts.t_sampling) * consts.t_sampling)
         t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
-        track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
+        track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
 @nb.njit
