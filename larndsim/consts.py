@@ -123,6 +123,8 @@ def load_detector_properties(detprop_file, pixel_file):
     global lifetime
     global time_interval
     global time_ticks
+    global time_padding
+    global time_window
     global long_diff
     global tran_diff
     global tile_positions
@@ -145,6 +147,8 @@ def load_detector_properties(detprop_file, pixel_file):
     time_ticks = np.linspace(time_interval[0],
                              time_interval[1],
                              int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
+    time_padding = detprop.get('time_padding', time_padding)
+    time_window = detprop.get('time_window', time_window)
 
     vdrift = detprop['vdrift']
     lifetime = detprop['lifetime']
