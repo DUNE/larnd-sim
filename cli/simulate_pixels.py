@@ -46,6 +46,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename='',
                    response_filename='../larndsim/response.npy',
+                   light_lut_filename='../larndsim/lightLUT.npy',
                    bad_channels=None,
                    n_tracks=100000):
     """
@@ -81,7 +82,7 @@ def run_simulation(input_filename,
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
-    from larndsim import quenching, drifting, detsim, pixels_from_track, fee
+    from larndsim import quenching, drifting, detsim, pixels_from_track, fee, lightLUT
     RangePop()
 
     RangePush("load_hd5_file")
@@ -94,6 +95,9 @@ def run_simulation(input_filename,
             input_has_trajectories = True
         except KeyError:
             input_has_trajectories = False
+
+    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_edep','f4'),('n_photons_det','f4'),('t0_det','f4')])
+
     RangePop()
     
     if tracks.size == 0:
@@ -102,6 +106,7 @@ def run_simulation(input_filename,
 
     RangePush("slicing_and_swapping")
     tracks = tracks[:n_tracks]
+    light_sim_dat = light_sim_dat[:n_tracks]
 
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -127,10 +132,16 @@ def run_simulation(input_filename,
     print("Quenching electrons...",end='')
     start_quenching = time()
     RangePush("quench")
-    quenching.quench[BPG,TPB](tracks, consts.birks)
+    quenching.quench[BPG,TPB](tracks, light_sim_dat, consts.birks)
     RangePop()
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
+
+    print("Calculating optical responses...",end='')
+    start_lightLUT = time()
+    lightLUT.calculate(tracks, light_lut_filename, light_sim_dat)
+    end_lightLUT = time()
+    print(f" {end_lightLUT-start_lightLUT:.2f} s")
 
     print("Drifting electrons...",end='')
     start_drifting = time()
@@ -318,6 +329,7 @@ def run_simulation(input_filename,
 
     with h5py.File(output_filename, 'a') as f:
         f.create_dataset("tracks", data=tracks)
+        f.create_dataset('light_dat', data = light_sim_dat)
         if input_has_trajectories:
             f.create_dataset("trajectories", data=trajectories)
         f['configs'].attrs['pixel_layout'] = pixel_layout
