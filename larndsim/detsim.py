@@ -18,7 +18,7 @@ logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
 
-MAX_TRACKS_PER_PIXEL = 10
+MAX_TRACKS_PER_PIXEL = 5
 
 @cuda.jit
 def time_intervals(track_starts, time_max, event_id_map, tracks):
@@ -43,7 +43,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
         t_end = min(time_interval[1], round((track["t_end"] + 1) / consts.t_sampling) * consts.t_sampling)
         t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
-        track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
+        track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
 @nb.njit
@@ -255,8 +255,8 @@ def get_closest_waveform(x, y, t, response):
     Returns:
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
-    dt = 0.5e-1
-    bin_width = 0.038
+    dt = consts.response_sampling
+    bin_width = consts.pixel_pitch / 10 
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)

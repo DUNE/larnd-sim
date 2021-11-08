@@ -46,7 +46,7 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename='',
-                   response_filename='../larndsim/response.npy',
+                   response_file='../larndsim/response_44.npy',
                    bad_channels=None,
                    n_tracks=100000,
                    pixel_thresholds_file=None):
@@ -129,7 +129,19 @@ def run_simulation(input_filename,
     tracks['z'] = x
     RangePop()
     
-    response = cp.load(response_filename)
+    is_inside = np.zeros((tracks.shape[0]))
+    for itrk in range(tracks.shape[0]):
+        track = tracks[itrk]
+        for plane in consts.tpc_borders:
+            if plane[0][0] <= track['x_start'] <= plane[0][1] and plane[0][0] <= track['x_end'] <= plane[0][1] and \
+               plane[1][0] <= track['y_start'] <= plane[1][1] and plane[1][0] <= track['y_end'] <= plane[1][1] and \
+               min(plane[2][0],plane[2][1]) <= track['z_start'] <= max(plane[2][0],plane[2][1]) and min(plane[2][0],plane[2][1]) <= track['z_end'] <= max(plane[2][0],plane[2][1]):
+                is_inside[itrk] = 1
+                break
+    
+    tracks = tracks[is_inside==1]
+    
+    response = cp.load(response_file)
 
     TPB = 256
     BPG = ceil(tracks.shape[0] / TPB)
@@ -152,17 +164,25 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
-    step = 1
+    
+    # initialize lists to collect results from GPU
+    event_id_list = []
     adc_tot_list = []
     adc_tot_ticks_list = []
     track_pixel_map_tot = []
     unique_pix_tot = []
     current_fractions_tot = []
-    tot_events = 0
     
+    # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
+    _, _, start_idx = np.intersect1d(tot_evids, tracks['eventID'], return_indices=True)
+    _, _, rev_idx = np.intersect1d(tot_evids, tracks['eventID'][::-1], return_indices=True)
+    end_idx = len(tracks['eventID']) - 1 - rev_idx
+    
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
+    step = 1
+    tot_events = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...'):
         start_tracks_batch = time()
         first_event = tot_evids[ievd]
@@ -171,12 +191,13 @@ def run_simulation(input_filename,
         if first_event == last_event:
             last_event += 1
 
-        evt_tracks = tracks[(tracks['eventID']>=first_event) & (tracks['eventID']<last_event)]
-        first_trk_id = np.where(tracks['eventID']==evt_tracks['eventID'][0])[0][0]
+        # load a subset of segments from the file and process those that are from the current event
+        track_subset = tracks[min(start_idx[ievd:ievd + step]):max(end_idx[ievd:ievd + step])+1]
+        evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
+        first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
         
-        for itrk in range(0, evt_tracks.shape[0], 600):
-            selected_tracks = evt_tracks[itrk:itrk+600]
-
+        for itrk in range(0, evt_tracks.shape[0], 50):
+            selected_tracks = evt_tracks[itrk:itrk+50]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -189,7 +210,8 @@ def run_simulation(input_filename,
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("pixels_from_track")
             longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
-            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
+#             max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
+            max_radius = 3.5
             MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
             MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
             active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS), -1, dtype=np.int32)
@@ -198,9 +220,9 @@ def run_simulation(input_filename,
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
 
-            if not active_pixels.shape[1]:
+            if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                 continue
-                
+     
             pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
                                                                         active_pixels,
                                                                         neighboring_pixels,
@@ -225,7 +247,7 @@ def run_simulation(input_filename,
             track_starts = cp.empty(selected_tracks.shape[0])
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
-            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length,  event_id_map, selected_tracks)
+            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length, event_id_map, selected_tracks)
             RangePop()
 
             RangePush("tracks_current")
@@ -242,14 +264,15 @@ def run_simulation(input_filename,
                                                                  neighboring_pixels,
                                                                  selected_tracks,
                                                                  response)
+            
             RangePop()
-
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-            compare = neighboring_pixels[..., np.newaxis] == unique_pix
-            indices = cp.where(compare)
-            pixel_index_map[indices[0], indices[1]] = indices[2]
+            for i_ in range(selected_tracks.shape[0]):
+                compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
+                indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+                pixel_index_map[i_, indices[0]] = indices[1]
             RangePop()
 
             RangePush("track_pixel_map")
@@ -259,7 +282,7 @@ def run_simulation(input_filename,
             BPG = ceil(unique_pix.shape[0] / TPB)
             detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
             RangePop()
-            
+
             RangePush("sum_pixels_signals")
             # Here we combine the induced current on the same pixels by different tracks
             threadsperblock = (8,8,8)
@@ -267,8 +290,8 @@ def run_simulation(input_filename,
             blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
             blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)*3))
-            pixels_tracks_signals = cp.zeros((len(unique_pix),len(consts.time_ticks)*3,track_pixel_map.shape[1]))
+            pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)))
+            pixels_tracks_signals = cp.zeros((len(unique_pix),len(consts.time_ticks),track_pixel_map.shape[1]))
             detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
                                                                     signals,
                                                                     track_starts,
@@ -276,10 +299,10 @@ def run_simulation(input_filename,
                                                                     track_pixel_map,
                                                                     pixels_tracks_signals)
             RangePop()
-
+            
             RangePush("get_adc_values")
             # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-            time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1]*3, pixels_signals.shape[1]+1)
+            time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1], pixels_signals.shape[1]+1)
             integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
             adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
             TPB = 128
@@ -297,20 +320,23 @@ def run_simulation(input_filename,
                                          time_ticks,
                                          integral_list,
                                          adc_ticks_list,
-                                         consts.time_interval[1] * 3 * tot_events,
+                                         0,
                                          rng_states,
                                          current_fractions,
                                          pixel_thresholds)
 
+
             adc_list = fee.digitize(integral_list)
+            adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
 
+            event_id_list.append(adc_event_ids)
             adc_tot_list.append(cp.asnumpy(adc_list))
             adc_tot_ticks_list.append(cp.asnumpy(adc_ticks_list))
             unique_pix_tot.append(cp.asnumpy(unique_pix))
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], detsim.MAX_TRACKS_PER_PIXEL, axis=1)
+            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], fee.MAX_ADC_VALUES, axis=1)
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
 
         tot_events += step
@@ -321,12 +347,14 @@ def run_simulation(input_filename,
     print("*************\nSAVING RESULT\n*************")
     RangePush("Exporting to HDF5")
     # Here we export the result in a HDF5 file.
+    event_id_list = np.concatenate(event_id_list, axis=0)
     adc_tot_list = np.concatenate(adc_tot_list, axis=0)
     adc_tot_ticks_list = np.concatenate(adc_tot_ticks_list, axis=0)
     unique_pix_tot = np.concatenate(unique_pix_tot, axis=0)
     current_fractions_tot = np.concatenate(current_fractions_tot, axis=0)
     track_pixel_map_tot = np.concatenate(track_pixel_map_tot, axis=0)
-    fee.export_to_hdf5(adc_tot_list,
+    fee.export_to_hdf5(event_id_list,
+                       adc_tot_list,
                        adc_tot_ticks_list,
                        unique_pix_tot,
                        current_fractions_tot,
@@ -341,7 +369,7 @@ def run_simulation(input_filename,
             f.create_dataset("trajectories", data=trajectories)
         f['configs'].attrs['pixel_layout'] = pixel_layout
 
-    print("Output saved in:", output_filename)
+    print("Output saved in:", output_filen dame)
 
     RangePop()
     end_simulation = time()
