@@ -271,7 +271,7 @@ def run_simulation(input_filename,
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
             for i_ in range(selected_tracks.shape[0]):
                 compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
-                indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+                indices = cp.where(compare)
                 pixel_index_map[i_, indices[0]] = indices[1]
             RangePop()
 
@@ -369,7 +369,7 @@ def run_simulation(input_filename,
             f.create_dataset("trajectories", data=trajectories)
         f['configs'].attrs['pixel_layout'] = pixel_layout
 
-    print("Output saved in:", output_filen dame)
+    print("Output saved in:", output_filename)
 
     RangePop()
     end_simulation = time()
