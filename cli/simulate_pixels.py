@@ -91,6 +91,7 @@ def run_simulation(input_filename,
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
+        print("Pixel thresholds file:", pixel_thresholds_file)
         pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 1, 1)
     else:
         pixel_thresholds_lut = CudaDict(np.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
