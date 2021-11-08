@@ -41,6 +41,10 @@ ADC_COUNTS = 2**8
 RESET_NOISE_CHARGE = 900
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500
+#: Discriminator noise in e-
+DISCRIMINATOR_NOISE = 650
+#: Average time between events in clock cycles
+EVENT_RATE = 1000000 # ~10Hz
 
 import logging
 logging.basicConfig()
@@ -49,7 +53,7 @@ logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
-    axes = consts.tile_orientations[tile_id-1]
+    axes = consts.tile_orientations[tile_id]
     x_axis = axes[2]
     y_axis = axes[1]
 
@@ -63,10 +67,11 @@ def rotate_tile(pixel_id, tile_id):
 
     return pix_x, pix_y
 
-def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, track_ids, filename, bad_channels=None):
+def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_fractions, track_ids, filename, bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
+        event_id_list (:obj:`numpy.ndarray`): list of event ids for each ADC value for each pixel
         adc_list (:obj:`numpy.ndarray`): list of ADC values for each pixel
         adc_ticks_list (:obj:`numpy.ndarray`): list of time ticks for each pixel
         unique_pix (:obj:`numpy.ndarray`): list of pixel IDs
@@ -92,28 +97,36 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
     if bad_channels:
         with open(bad_channels, 'r') as f:
             bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
+            
+    unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
+    event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
+    event_start_time = np.cumsum(event_start_time)
+    event_start_time_list = event_start_time[unique_events_inv]
 
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
         tile_x, tile_y, plane_id = id2pixel_nojit(pixel_id)
+        module_id = plane_id//2+1
         tile_x = int(tile_x//consts.n_pixels_per_tile[0])
         tile_y = int(tile_y//consts.n_pixels_per_tile[1])
-        tile_id = consts.tile_map[plane_id][tile_x][tile_y]
-
+        anode_id = 0 if plane_id % 2 == 0 else 1
+        tile_id = consts.tile_map[anode_id][tile_x][tile_y]
+        
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
             if adc > digitize(0):
-                event = t // (consts.time_interval[1]*3)
-                time_tick = int(np.floor(t/CLOCK_CYCLE))
+                event = event_id_list[itick,iadc]
+                event_t0 = event_start_time_list[itick]
+                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0))
 
                 if event != last_event:
-                    packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
+                    packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
                     packets_mc.append([-1]*track_ids.shape[2])
                     packets_frac.append([0]*current_fractions.shape[2])
-                    packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=int(event*consts.time_interval[1]/consts.t_sampling*3)))
+                    packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=event_t0))
                     packets_mc.append([-1]*track_ids.shape[2])
                     packets_frac.append([0]*current_fractions.shape[2])
                     last_event = event
@@ -136,6 +149,7 @@ def export_to_hdf5(adc_list, adc_ticks_list, unique_pix, current_fractions, trac
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
+                io_group = consts.module_to_io_groups[module_id][io_group-1]
                 chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
 
                 if bad_channels:
@@ -252,8 +266,9 @@ def get_adc_values(pixels_signals,
 #             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
 
-            if q_sum + q_noise >= pixel_thresholds[ip]:
+            if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise:
                 crossing_time_tick = ic
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
@@ -270,8 +285,9 @@ def get_adc_values(pixels_signals,
                     ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
 
-                if adc < pixel_thresholds[ip]:
+                if adc < pixel_thresholds[ip] + disc_noise:
                     ic += round(CLOCK_CYCLE / consts.t_sampling)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
 #                     integrate[ip][ic] = q_sum

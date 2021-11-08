@@ -5,6 +5,8 @@ Module containing constants needed by the simulation
 import numpy as np
 import yaml
 
+from collections import defaultdict
+
 ## Detector constants
 #: Liquid argon density in :math:`g/cm^3`
 lArDensity = 1.38 # g/cm^3
@@ -96,6 +98,8 @@ variable_types = {
 
 xs = 0
 ys = 0
+module_to_io_groups = {}
+response_sampling = 0.1
 
 def load_detector_properties(detprop_file, pixel_file):
     """
@@ -119,6 +123,8 @@ def load_detector_properties(detprop_file, pixel_file):
     global lifetime
     global time_interval
     global time_ticks
+    global time_padding
+    global time_window
     global long_diff
     global tran_diff
     global tile_positions
@@ -126,6 +132,8 @@ def load_detector_properties(detprop_file, pixel_file):
     global tile_map
     global tile_chip_to_io
     global drift_length
+    global module_to_io_groups
+    global response_sampling
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -139,11 +147,14 @@ def load_detector_properties(detprop_file, pixel_file):
     time_ticks = np.linspace(time_interval[0],
                              time_interval[1],
                              int(round(time_interval[1]-time_interval[0])/t_sampling)+1)
+    time_padding = detprop.get('time_padding', time_padding)
+    time_window = detprop.get('time_window', time_window)
 
     vdrift = detprop['vdrift']
     lifetime = detprop['lifetime']
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
+    response_sampling = detprop['response_sampling']
 
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
@@ -158,23 +169,36 @@ def load_detector_properties(detprop_file, pixel_file):
     tile_borders[0] = [-(max(xs)+pixel_pitch)/2, (max(xs)+pixel_pitch)/2]
     tile_borders[1] = [-(max(ys)+pixel_pitch)/2, (max(ys)+pixel_pitch)/2]
 
-    tile_positions = np.array(list(tile_layout['tile_positions'].values())) * mm2cm
-    tile_orientations = np.array(list(tile_layout['tile_orientations'].values()))
-    tpcs = np.unique(tile_positions[:,0])
-    tpc_borders = np.zeros((len(tpcs), 3, 2))
+    tile_indeces = tile_layout['tile_indeces']
+    tile_orientations = tile_layout['tile_orientations']
+    tile_positions = tile_layout['tile_positions']
+    tpc_ids = np.unique(np.array(list(tile_indeces.values()))[:,0],axis=0)
+    
+    anodes = defaultdict(list)
+    for tpc_id in tpc_ids:
+        for tile in tile_indeces:
+            if tile_indeces[tile][0] == tpc_id:
+                anodes[tpc_id].append(tile_positions[tile])
 
-    for itpc,tpc_id in enumerate(tpcs):
-        this_tpc_tile = tile_positions[tile_positions[:,0] == tpc_id]
-        this_orientation = tile_orientations[tile_positions[:,0] == tpc_id]
-        x_border = min(this_tpc_tile[:,2])+tile_borders[0][0]+tpc_offsets[itpc][0], \
-                   max(this_tpc_tile[:,2])+tile_borders[0][1]+tpc_offsets[itpc][0]
-        y_border = min(this_tpc_tile[:,1])+tile_borders[1][0]+tpc_offsets[itpc][1], \
-                   max(this_tpc_tile[:,1])+tile_borders[1][1]+tpc_offsets[itpc][1]
-        z_border = min(this_tpc_tile[:,0])+tpc_offsets[itpc][2], \
-                   max(this_tpc_tile[:,0])+drift_length*this_orientation[:,0][0]+tpc_offsets[itpc][2]
+    drift_length = detprop['drift_length']
 
-        tpc_borders[itpc] = (x_border, y_border, z_border)
-
+    tpc_offsets = np.array(detprop['tpc_offsets'])
+    tpc_offsets[:, [2, 0]] = tpc_offsets[:, [0, 2]]
+    
+    tpc_borders = np.empty((tpc_offsets.shape[0] * tpc_ids.shape[0], 3, 2))
+    
+    for it,tpc_offset in enumerate(tpc_offsets):
+        for ia, anode in enumerate(anodes):
+            tiles = np.vstack(anodes[anode])
+            drift_direction = 1 if anode == 1 else -1 
+            x_border = min(tiles[:,2]*mm2cm)+tile_borders[0][0]+tpc_offset[0], \
+                       max(tiles[:,2]*mm2cm)+tile_borders[0][1]+tpc_offset[0]
+            y_border = min(tiles[:,1]*mm2cm)+tile_borders[1][0]+tpc_offset[1], \
+                       max(tiles[:,1]*mm2cm)+tile_borders[1][1]+tpc_offset[1]
+            z_border = min(tiles[:,0]*mm2cm)+tpc_offset[2], \
+                       max(tiles[:,0]*mm2cm)+drift_length*drift_direction+tpc_offset[2]
+            tpc_borders[it*2+ia] = (x_border,y_border,z_border)
+                
     tile_map = detprop['tile_map']
 
     ntiles_x = len(tile_map[0])
@@ -185,4 +209,4 @@ def load_detector_properties(detprop_file, pixel_file):
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs))*ntiles_x, len(np.unique(ys))*ntiles_y
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
-
+    module_to_io_groups = detprop['module_to_io_groups']
