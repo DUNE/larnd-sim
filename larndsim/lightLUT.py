@@ -1,5 +1,6 @@
 """
-Module that simulates the scattering of photons throughout the detector from the location of the edep to the location of each photodetector
+Module that simulates the scattering of photons throughout the detector from the
+location of the edep to the location of each photodetector
 """
 
 import sys, time, math
@@ -10,11 +11,13 @@ from . import consts
 
 def get_lut_geometry(lut_path):
     """
-    Finds the maximum and minimum values along the x,y and z axis as well as how many divisions (voxels) are along each axis.
+    Finds the maximum and minimum values along the x,y and z axis as well as how
+    many divisions (voxels) are along each axis.
     Args:
         lut_path (str): filename of numpy array (.npy) containing light calculation
     Returns:
-        :obj:`numpy.ndarray`: 3x3 array of voxelization information (minimum, maximum, number of divisions) in each dimension
+        :obj:`numpy.ndarray`: 3x3 array of voxelization information (minimum, maximum, 
+            number of divisions) in each dimension
     """
     
     f = np.load(lut_path)
@@ -78,7 +81,9 @@ def larnd_to_lut_coord(pos,lut_geometry):
 
 def calculate_light_incidence(t_data,lut_path,light_dat):
     """
-    Simulates the number of photons read by each optical channel depending on where the edep occurs as well as the time it takes for a photon to reach the nearest photomultiplier tube (the "fastest" photon)
+    Simulates the number of photons read by each optical channel depending on 
+        where the edep occurs as well as the time it takes for a photon to reach the 
+        nearest photomultiplier tube (the "fastest" photon)
     Args:
         t_data (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup
         lut_path (str): filename of numpy array (.npy) containing light calculation
