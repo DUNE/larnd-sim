@@ -8,8 +8,15 @@ import numpy as np
 from math import log, isnan
 from . import consts    
 
-def GetLutGeometry(lut_path): # Finds the max and minimum values of the x,y and z axis and the number of voxels in each direction
-
+def get_lut_geometry(lut_path):
+    """
+    Finds the max and minimum values of the x,y and z axis and the number of voxels in each direction.
+    Args:
+        lut_path (str): filename of numpy array (.npy) containing light calculation
+    Returns:
+        :obj:`numpy.ndarray`: 3x3 array of voxelization information (minimum, maximum, number of divisions) in each dimension
+    """
+    
     f = np.load(lut_path)
     lut_min = np.array([f['Min'][0],f['Min'][1],f['Min'][2]])
     lut_max = np.array([f['Max'][0],f['Max'][1],f['Max'][2]])
@@ -17,8 +24,17 @@ def GetLutGeometry(lut_path): # Finds the max and minimum values of the x,y and 
 
     return np.array([lut_min,lut_max,lut_ndiv])
 
-def GetVoxel(pos,lut_geometry): # Determines which voxel is being called based on the position of the edep. Voxels are indexed 0-2911
-
+def get_voxel(pos,lut_geometry):
+    """
+    Determines which voxel is being called based on the position of the edep. Voxels are indexed 0-2911
+    Args:
+        pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC volume
+        lut_geometry (obj:`numpy.ndarray`): 3x3 array of voxelization information 
+            (minimum, maximum, number of divisions) in each dimension
+    Returns:
+        :obj:`numpy.float64`: index of the voxel containing the input position
+    """
+    
     (lut_min,lut_max,lut_ndiv) = lut_geometry
     vox_xyz = np.floor(pos/(lut_max-lut_min)*lut_ndiv).astype(int)+lut_ndiv/2
     voxel = vox_xyz[2]*lut_ndiv[0]*lut_ndiv[1]+vox_xyz[1]*lut_ndiv[0]+vox_xyz[0]
@@ -26,13 +42,31 @@ def GetVoxel(pos,lut_geometry): # Determines which voxel is being called based o
     return voxel
 
 
-def GetHalfDetCopy(pos): # Determines which TPC the edep takes place in
+def get_half_det_copy(pos):
+    """
+    Determines in which TPC the edep takes place.
+    Currently this is done based only on the x-position.
+    This should actually call the detector properties yaml.
+    Args:
+        pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a detector geometry
+    Returns:
+        int: index of the TPC containing the input posision
+    """
+    
     tpc_x = math.floor(pos[0]/(consts.ModuleDimension[0]/2.))+consts.n_mod[0]/2*consts.n_tpc[0]
 
     return int(tpc_x)%2
 
-def LarndToLUTCoord(pos,lut_geometry): # Converts the LArND-sim coord. system to that of the LUT
-
+def larnd_to_lut_coord(pos,lut_geometry):
+    """
+    Converts the LArND-sim coord. system to that of the LUT.
+    LUT should be updated to LArND-sim system and this function removed.
+    Args:
+        pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC
+    Returns:
+        :obj:`numpy.ndarray`: list of x, y, z coordinates translated to the LUT system
+    """
+    
     # access LUT geometry
     lut_min,lut_max,lut_ndiv = lut_geometry
     
@@ -41,15 +75,26 @@ def LarndToLUTCoord(pos,lut_geometry): # Converts the LArND-sim coord. system to
 
     return (lut_pos)
 
-########################################################################################################
-
-def calculate(t_data,lut_path,light_dat): # Simulates the number of photons read by each optical channel depending on ewhere the edep occurs. Also indicates the time it takes for a photon to reach the nearest photomultiplier tube (the "fastest" photon)
+def calculate_light_incidence(t_data,lut_path,light_dat):
+    """
+    Simulates the number of photons read by each optical channel depending on where the edep occurs. 
+    Also indicates the time it takes for a photon to reach the nearest photomultiplier tube (the "fastest" photon)
+    Args:
+        t_data (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup
+        lut_path (str): filename of numpy array (.npy) containing light calculation
+        light_dat (:obj:`numpy.ndarray`): to contain the result of light incidence calculation.
+            this array has dimension (n_tracks, n_optical_channels) and each entry
+            is a structure of type (n_photons_edep (float32), n_photons_det (float32), t0_det (float32))
+            these correspond the number of photons produced by a given edep (stored only in the 0th channel),
+            the number detected in each channel (n_photons_edep*visibility), and the time of earliest
+            arrival at that channel.
+    """
     
     # Loads in LUT root file
     np_lut = np.load(lut_path)
     
     # Obtains lut geometry
-    lut_geometry = GetLutGeometry(lut_path)  
+    lut_geometry = get_lut_geometry(lut_path)  
     
     # Data containers
     time = np.full((t_data['dE'].size,consts.n_op_channel*2),20.)
@@ -73,13 +118,13 @@ def calculate(t_data,lut_path,light_dat): # Simulates the number of photons read
         sys.stdout.flush()
         
         # tpc
-        tpc = GetHalfDetCopy(pos)
+        tpc = get_half_det_copy(pos)
         
         # LUT position
-        lut_pos = LarndToLUTCoord(pos,lut_geometry) 
+        lut_pos = larnd_to_lut_coord(pos,lut_geometry) 
 
         # voxel containing LUT position
-        voxel = GetVoxel(lut_pos,lut_geometry)
+        voxel = get_voxel(lut_pos,lut_geometry)
         
         # Calls voxel data
         lut_vox = np_lut[np_lut['Voxel'] == voxel]

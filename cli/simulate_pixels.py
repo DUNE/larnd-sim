@@ -139,7 +139,7 @@ def run_simulation(input_filename,
 
     print("Calculating optical responses...",end='')
     start_lightLUT = time()
-    lightLUT.calculate(tracks, light_lut_filename, light_sim_dat)
+    lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
     end_lightLUT = time()
     print(f" {end_lightLUT-start_lightLUT:.2f} s")
 
