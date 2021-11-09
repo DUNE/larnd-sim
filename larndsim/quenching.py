@@ -24,6 +24,7 @@ def quench(tracks, light_dat, mode):
 
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
+        light_dat (:obj:`numpy.ndarray`): array containing the light production information
         mode (int): recombination model.
     """
     itrk = cuda.grid(1)
