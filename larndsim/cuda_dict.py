@@ -1,5 +1,6 @@
 from numba import cuda
 import cupy as cp
+from math import ceil
 
 
 _EMPTY_KEY = 2**31-1
@@ -80,11 +81,12 @@ class CudaDict(object):
         return exists
 
     @staticmethod
-    def load(filename, tpb, bpg):
+    def load(filename, tpb):
         data = cp.load(filename)
         keys = data['keys']
         values = data['values']
         default = data['default']
+        bpg = ceil(len(keys)/tpb)
         cd = CudaDict(default=default, tpb=tpb, bpg=bpg)
         cd[keys] = values
         return cd
