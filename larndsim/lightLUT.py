@@ -61,22 +61,16 @@ def get_half_det_copy(pos):
 
     return int(tpc_x)%2
 
-def larnd_to_lut_coord(pos, lut_geometry, itpc):
+def larnd_to_lut_coord(pos, itpc):
     """
     Converts the LArND-sim coord to its respective location in the LUT coordinate system.
     LUT should be updated to LArND-sim system and this function removed.
     Args:
         pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC
-        lut_geometry (obj:`numpy.ndarray`): 3x3 array of voxelization information 
-            (minimum, maximum, number of divisions) in each dimension
         itpc (int): index of the tpc corresponding to the input position
     Returns:
         :obj:`numpy.ndarray`: list of x, y, z coordinates translated to the LUT system
     """
-    
-    # access LUT geometry
-    lut_min,lut_max,lut_ndiv = lut_geometry
-    
     # shifts the larnd coord to the LUT coord system
     lut_pos = pos - consts.tpc_offsets[itpc]*consts.cm2mm
     
@@ -152,7 +146,7 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
             if (itpc==1):
                 op_channel = (op_channel+consts.n_op_channel/2)%consts.n_op_channel
             
-            # Determines the travel time of the "fastest" photon
+            # Determines the travel time of the "fastest " photon
             if (T1_dat[entry] < time[edepInd,int(op_channel)]):  
                 time[edepInd, int(op_channel)] = T1_dat[entry]
             
