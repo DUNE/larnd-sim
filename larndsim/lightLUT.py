@@ -39,7 +39,7 @@ def get_voxel(pos,lut_geometry):
     """
     
     (lut_min,lut_max,lut_ndiv) = lut_geometry
-    # 
+
     vox_xyz = np.floor(pos/(lut_max-lut_min)*lut_ndiv).astype(int)+lut_ndiv/2
 
     voxel = vox_xyz[2]*lut_ndiv[0]*lut_ndiv[1]+vox_xyz[1]*lut_ndiv[0]+vox_xyz[0]
@@ -61,12 +61,15 @@ def get_half_det_copy(pos):
 
     return int(tpc_x)%2
 
-def larnd_to_lut_coord(pos,lut_geometry):
+def larnd_to_lut_coord(pos, lut_geometry, itpc):
     """
     Converts the LArND-sim coord to its respective location in the LUT coordinate system.
     LUT should be updated to LArND-sim system and this function removed.
     Args:
         pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC
+        lut_geometry (obj:`numpy.ndarray`): 3x3 array of voxelization information 
+            (minimum, maximum, number of divisions) in each dimension
+        itpc (int): index of the tpc corresponding to the input position
     Returns:
         :obj:`numpy.ndarray`: list of x, y, z coordinates translated to the LUT system
     """
@@ -75,8 +78,8 @@ def larnd_to_lut_coord(pos,lut_geometry):
     lut_min,lut_max,lut_ndiv = lut_geometry
     
     # shifts the larnd coord to the LUT coord system
-    lut_pos = pos + np.array([lut_min[0],220,0])
-
+    lut_pos = pos - consts.tpc_offsets[itpc]*consts.cm2mm
+    
     return (lut_pos)
 
 def calculate_light_incidence(t_data,lut_path,light_dat):
@@ -113,20 +116,19 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
     # Defining number of produced photons from quencing.py
     n_photons = light_dat['n_photons_edep'][:,0]
 
+    nEdepSegments = t_data.shape[0]
+    
     # Loop edep positions
-    for dE in range(len(t_data['dE'])):
+    for edepInd in range(nEdepSegments):
 
         # Global position
-        pos = (np.array((z[dE],y[dE],x[dE])))*consts.cm2mm
+        pos = (np.array((z[edepInd],y[edepInd],x[edepInd])))*consts.cm2mm
 
-        sys.stdout.write('\r    current position: ' + str(pos) + ('(%.1f %%)' % ((dE+1)/float(len(t_data['dE']))*100)))
-        sys.stdout.flush()
-        
         # tpc
-        tpc = get_half_det_copy(pos)
+        itpc = get_half_det_copy(pos)
         
         # LUT position
-        lut_pos = larnd_to_lut_coord(pos,lut_geometry) 
+        lut_pos = larnd_to_lut_coord(pos, lut_geometry, itpc) 
 
         # voxel containing LUT position
         voxel = get_voxel(lut_pos,lut_geometry)
@@ -144,26 +146,26 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
             op_channel = op_dat[entry]
             
             # Calculates the number of photons reaching each optical channel
-            n_photons_read = vis_dat[entry]*n_photons[dE]
+            n_photons_read = vis_dat[entry]*n_photons[edepInd]
             
             # Flips op channels if edep occurs in tpc 2
-            if (tpc==1):
+            if (itpc==1):
                 op_channel = (op_channel+consts.n_op_channel/2)%consts.n_op_channel
             
             # Determines the travel time of the "fastest" photon
-            if (T1_dat[entry] < time[dE,int(op_channel)]):  
-                time[dE,int(op_channel)] = T1_dat[entry]
+            if (T1_dat[entry] < time[edepInd,int(op_channel)]):  
+                time[edepInd, int(op_channel)] = T1_dat[entry]
             
             # Accounts for higher light collection on the LCM detectors
             if (op_channel % 12) > 5: 
                 n_photons_read *= consts.norm_lcm_acl
                 
             # Index for storing light data the optical channels in the second TPC
-            if tpc == 1:
+            if itpc == 1:
                 op_channel += consts.n_op_channel
             
             # Assigns the number of photons read for each optical channel to an array
-            tphotons[dE,int(op_channel)] += n_photons_read
+            tphotons[edepInd, int(op_channel)] += n_photons_read
     
     # Assigns data to the h5 file
     light_dat['n_photons_det'] += tphotons

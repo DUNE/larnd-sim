@@ -66,6 +66,7 @@ mm2cm = 0.1
 cm2mm = 10
 
 tpc_borders = np.zeros((0, 3, 2))
+tpc_offsets = np.zeros((0, 3, 2))
 tile_borders = np.zeros((2,2))
 tile_size = np.zeros(3)
 n_pixels = 0, 0
@@ -121,6 +122,7 @@ def load_detector_properties(detprop_file, pixel_file):
     global ys
     global pixel_pitch
     global tpc_borders
+    global tpc_offsets
     global pixel_connection_dict
     global n_pixels
     global n_pixels_per_tile
