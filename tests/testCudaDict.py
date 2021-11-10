@@ -19,7 +19,7 @@ class TestCudaDict:
         5, 6, 7, 8, 9, 11, 21, 31, 41, 5000])
 
     def init_cuda_dict(self):
-        cd = CudaDict(default=self.test_default, tpb=256, bpg=256)
+        cd = CudaDict(default=self.test_default, tpb=256, bpg=1)
         assert len(cd) == 0
         assert not cp.any(cd.contains(self.test_keys))
         cd[self.test_keys] = self.test_values
