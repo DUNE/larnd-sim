@@ -95,8 +95,11 @@ def run_simulation(input_filename,
             input_has_trajectories = True
         except KeyError:
             input_has_trajectories = False
+    
+    # Made a separate array to store number of photons generated from quenching.py. Should be added to tracks as another dtype
+    phot_from_edep = np.zeros(len(tracks), dtype = ('n_photons_edep','f4'))
 
-    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_edep','f4'),('n_photons_det','f4'),('t0_det','f4')])
+    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_det','f4'),('t0_det','f4')])
 
     RangePop()
     
@@ -132,7 +135,7 @@ def run_simulation(input_filename,
     print("Quenching electrons...",end='')
     start_quenching = time()
     RangePush("quench")
-    quenching.quench[BPG,TPB](tracks, light_sim_dat, consts.birks)
+    quenching.quench[BPG,TPB](tracks, phot_from_edep, consts.birks)
     RangePop()
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
