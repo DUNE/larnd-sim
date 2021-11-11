@@ -35,7 +35,7 @@ class CudaDict(object):
         self.bpg = bpg
         self.default = default
         self._hashtable_keys = cp.full(1, _EMPTY_KEY, dtype=cp.int32)
-        self._hashtable_values = cp.empty(1, dtype=default.dtype)
+        self._hashtable_values = cp.full(1, default, dtype=default.dtype)
 
     def keys(self):
         mask = self._hashtable_keys != _EMPTY_KEY
@@ -49,7 +49,7 @@ class CudaDict(object):
         return self.keys(), self.values()
 
     def __getitem__(self, key):
-        values = cp.empty(key.shape[0], dtype=self._hashtable_values.dtype)
+        values = cp.full(key.shape[0], self.default, dtype=self._hashtable_values.dtype)
         cuda_hashtable_lookup[self.tpb, self.bpg](
             key, values, self._hashtable_keys, self._hashtable_values, self.default)
         return values
@@ -57,7 +57,7 @@ class CudaDict(object):
     def __setitem__(self, key, value):
         if len(self) == 0:
             self._hashtable_keys = cp.full(key.shape[0] + 1, _EMPTY_KEY, dtype=cp.int32)
-            self._hashtable_values = cp.empty(key.shape[0] + 1, dtype=value.dtype)
+            self._hashtable_values = cp.full(key.shape[0] + 1, self.default, dtype=value.dtype)
         else:
             raise NotImplementedError('Trying to update CudaDict, not yet supported')
         cuda_hashtable_insert[self.tpb, self.bpg](
