@@ -94,7 +94,7 @@ def run_simulation(input_filename,
         print("Pixel thresholds file:", pixel_thresholds_file)
         pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 256)
     else:
-        pixel_thresholds_lut = CudaDict(np.array([fee.DISCRIMINATION_THRESHOLD]), 1)
+        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
 
     RangePush("load_hd5_file")
