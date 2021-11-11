@@ -27,7 +27,7 @@ def get_lut_geometry(lut_path):
 
     return np.array([lut_min,lut_max,lut_ndiv])
 
-def get_voxel(pos,lut_geometry):
+def get_voxel(pos, lut_geometry):
     """
     Indexes the ID of the voxel in which the edep occurs in.
     Args:
@@ -76,7 +76,7 @@ def larnd_to_lut_coord(pos, itpc):
     
     return (lut_pos)
 
-def calculate_light_incidence(t_data,lut_path,light_dat):
+def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
     """
     Simulates the number of photons read by each optical channel depending on 
         where the edep occurs as well as the time it takes for a photon to reach the 
@@ -84,12 +84,13 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
     Args:
         t_data (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup
         lut_path (str): filename of numpy array (.npy) containing light calculation
-        light_dat (:obj:`numpy.ndarray`): to contain the result of light incidence calculation.
+        light_dep (:obj:`numpy.ndarray`): 1-Dimensional array containing number of photons produced
+            in each edep segment.
+        light_incidence (:obj:`numpy.ndarray`): to contain the result of light incidence calculation.
             this array has dimension (n_tracks, n_optical_channels) and each entry
-            is a structure of type (n_photons_edep (float32), n_photons_det (float32), t0_det (float32))
-            these correspond the number of photons produced by a given edep (stored only in the 0th channel),
-            the number detected in each channel (n_photons_edep*visibility), and the time of earliest
-            arrival at that channel.
+            is a structure of type (n_photons_det (float32), t0_det (float32))
+            these correspond to the number detected in each channel (n_photons_edep*visibility), 
+            and the time of earliest arrival at that channel.
     """
     
     # Loads in LUT file
@@ -108,7 +109,7 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
     z = t_data['z']
 
     # Defining number of produced photons from quencing.py
-    n_photons = light_dat['n_photons_edep'][:,0]
+    n_photons = light_dep['n_photons_edep']
 
     nEdepSegments = t_data.shape[0]
     
@@ -122,7 +123,7 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
         itpc = get_half_det_copy(pos)
         
         # LUT position
-        lut_pos = larnd_to_lut_coord(pos, lut_geometry, itpc) 
+        lut_pos = larnd_to_lut_coord(pos, itpc) 
 
         # voxel containing LUT position
         voxel = get_voxel(lut_pos,lut_geometry)
@@ -146,7 +147,7 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
             if (itpc==1):
                 op_channel = (op_channel+consts.n_op_channel/2)%consts.n_op_channel
             
-            # Determines the travel time of the "fastest " photon
+            # Determines the travel time of the "fastest" photon
             if (T1_dat[entry] < time[edepInd,int(op_channel)]):  
                 time[edepInd, int(op_channel)] = T1_dat[entry]
             
@@ -162,5 +163,5 @@ def calculate_light_incidence(t_data,lut_path,light_dat):
             tphotons[edepInd, int(op_channel)] += n_photons_read
     
     # Assigns data to the h5 file
-    light_dat['n_photons_det'] += tphotons
-    light_dat['t0_det'] += time
+    light_incidence['n_photons_det'] += tphotons
+    light_incidence['t0_det'] += time
