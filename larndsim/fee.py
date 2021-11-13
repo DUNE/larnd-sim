@@ -120,7 +120,11 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             if adc > digitize(0):
                 event = event_id_list[itick,iadc]
                 event_t0 = event_start_time_list[itick]
-                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0))
+                if event_t0 > 2**31-1:
+                    # 31-bit rollover
+                    packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYLE * 1e6))
+                event_t0 = event_t0 % (2**31)
+                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
