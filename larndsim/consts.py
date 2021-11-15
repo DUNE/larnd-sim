@@ -78,6 +78,10 @@ tile_orientations = {}
 tile_map = ()
 tile_chip_to_io = {}
 drift_length = 0
+lut_xrange = 0
+lut_yrange = 0
+lut_zrange = 0
+lut_vox_div = 0
 
 variable_types = {
     "eventID": "u4",
@@ -137,6 +141,10 @@ def load_detector_properties(detprop_file, pixel_file):
     global tile_map
     global tile_chip_to_io
     global drift_length
+    global lut_xrange
+    global lut_yrange
+    global lut_zrange
+    global lut_vox_div
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -155,6 +163,11 @@ def load_detector_properties(detprop_file, pixel_file):
     lifetime = detprop['lifetime']
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
+
+    lut_xrange = detprop['lut_xrange']
+    lut_yrange = detprop['lut_yrange']
+    lut_zrange = detprop['lut_zrange']
+    lut_vox_div = detprop['lut_vox_div']
 
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
