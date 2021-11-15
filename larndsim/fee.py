@@ -123,6 +123,9 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 if event_t0 > 2**31-1:
                     # 31-bit rollover
                     packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
+                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_frac.append([0]*current_fractions.shape[2])
+                    event_start_time_list[itick:] -= 2**31
                 event_t0 = event_t0 % (2**31)
                 time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)
 
