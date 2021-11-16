@@ -78,10 +78,10 @@ tile_orientations = {}
 tile_map = ()
 tile_chip_to_io = {}
 drift_length = 0
-lut_xrange = 0
-lut_yrange = 0
-lut_zrange = 0
-lut_vox_div = 0
+lut_xrange = ()
+lut_yrange = ()
+lut_zrange = ()
+lut_vox_div = ()
 
 variable_types = {
     "eventID": "u4",

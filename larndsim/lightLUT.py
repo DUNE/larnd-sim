@@ -9,40 +9,19 @@ import numpy as np
 from math import log, isnan
 from . import consts    
 
-def get_lut_geometry(lut_path):
-    """
-    Finds the maximum and minimum values along the x,y and z axis as well as how
-    many divisions (voxels) are along each axis.
-    Args:
-        lut_path (str): filename of numpy array (.npy) containing light calculation
-    Returns:
-        :obj:`numpy.ndarray`: 3x3 array of voxelization information (minimum, maximum, 
-            number of divisions) in each dimension
-    """
-    
-    f = np.load(lut_path)
-    lut_min = np.array([f['Min'][0],f['Min'][1],f['Min'][2]])
-    lut_max = np.array([f['Max'][0],f['Max'][1],f['Max'][2]])
-    lut_ndiv = np.array([f['NDivisions'][0],f['NDivisions'][1],f['NDivisions'][2]])
-
-    return np.array([lut_min,lut_max,lut_ndiv])
-
-def get_voxel(pos, lut_geometry):
+def get_voxel(pos):
     """
     Indexes the ID of the voxel in which the edep occurs in.
     Args:
         pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC volume
-        lut_geometry (obj:`numpy.ndarray`): 3x3 array of voxelization information 
-            (minimum, maximum, number of divisions) in each dimension
+
     Returns:
         :obj:`numpy.float64`: index of the voxel containing the input position
     """
-    
-    (lut_min,lut_max,lut_ndiv) = lut_geometry
 
-    i = np.floor(pos[2]/lut_ndiv[2])
-    j = np.floor(pos[1]/lut_ndiv[1])
-    k = np.floor(pos[0]/lut_ndiv[0])
+    i = np.floor(pos[2]/consts.lut_ndiv[2])
+    j = np.floor(pos[1]/consts.lut_ndiv[1])
+    k = np.floor(pos[0]/consts.lut_ndiv[0])
 
     return i,j,k
 
@@ -96,9 +75,6 @@ def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
     # Loads in LUT file
     np_lut = np.load(lut_path)
     
-    # Obtains lut geometry
-    lut_geometry = get_lut_geometry(lut_path)  
-    
     # Data containers
     time = np.full((t_data['dE'].size,consts.n_op_channel*2),20.)
     tphotons = np.zeros((t_data['dE'].size,consts.n_op_channel*2))
@@ -126,7 +102,7 @@ def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
         lut_pos = larnd_to_lut_coord(pos, itpc) 
 
         # voxel containing LUT position
-        voxel = get_voxel(lut_pos,lut_geometry)
+        voxel = get_voxel(lut_pos)
         
         # Calls voxel data
         lut_vox = np_lut[np_lut['Voxel'] == voxel]
