@@ -53,12 +53,16 @@ def run_simulation(input_filename,
 
     Args:
         input_filename (str): path of the edep-sim input file
-        output_filename (str): path of the HDF5 output file. If not specified
-            the output is added to the input file.
         pixel_layout (str): path of the YAML file containing the pixel
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
+        output_filename (str): path of the HDF5 output file. If not specified
+            the output is added to the input file.
+        response_file: path of the Numpy array containing the pre-calculated
+            field responses
+        bad_channels: path of the YAML file containing the channels to be 
+            disabled
         n_tracks (int): number of tracks to be simulated
     """
     start_simulation = time()
@@ -72,6 +76,7 @@ def run_simulation(input_filename,
     print("Pixel layout file:", pixel_layout)
     print("Detector propeties file:", detector_properties)
     print("edep-sim input file:", input_filename)
+    print("Response file:", response_file)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
     RangePush("load_detector_properties")
@@ -94,6 +99,14 @@ def run_simulation(input_filename,
             input_has_trajectories = True
         except KeyError:
             input_has_trajectories = False
+            
+        try:
+            vertices = np.array(f['eventTruth'])
+            input_has_vertices = True
+        except KeyError:
+            print("Input file does not have true vertices info")
+            input_has_vertices = False
+            
     RangePop()
     
     if tracks.size == 0:
@@ -115,18 +128,6 @@ def run_simulation(input_filename,
     tracks['z_end'] = x_end
     tracks['z'] = x
     RangePop()
-    
-    is_inside = np.zeros((tracks.shape[0]))
-    for itrk in range(tracks.shape[0]):
-        track = tracks[itrk]
-        for plane in consts.tpc_borders:
-            if plane[0][0] <= track['x_start'] <= plane[0][1] and plane[0][0] <= track['x_end'] <= plane[0][1] and \
-               plane[1][0] <= track['y_start'] <= plane[1][1] and plane[1][0] <= track['y_end'] <= plane[1][1] and \
-               min(plane[2][0],plane[2][1]) <= track['z_start'] <= max(plane[2][0],plane[2][1]) and min(plane[2][0],plane[2][1]) <= track['z_end'] <= max(plane[2][0],plane[2][1]):
-                is_inside[itrk] = 1
-                break
-    
-    tracks = tracks[is_inside==1]
     
     response = cp.load(response_file)
 
@@ -183,8 +184,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
         
-        for itrk in range(0, evt_tracks.shape[0], 50):
-            selected_tracks = evt_tracks[itrk:itrk+50]
+        for itrk in tqdm(range(0, evt_tracks.shape[0], 100), desc='Event segments...'):
+            selected_tracks = evt_tracks[itrk:itrk+100]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -347,6 +348,8 @@ def run_simulation(input_filename,
         f.create_dataset("tracks", data=tracks)
         if input_has_trajectories:
             f.create_dataset("trajectories", data=trajectories)
+        if input_has_vertices:
+            f.create_dataset("eventTruth", data=vertices)
         f['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
