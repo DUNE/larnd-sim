@@ -21,6 +21,10 @@ MAX_ADC_VALUES = 10
 DISCRIMINATION_THRESHOLD = 7e3*consts.e_charge
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
+#: ADC busy delay in clock cycles
+ADC_BUSY_DELAY = 9
+#: Reset time in clock cycles
+RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
@@ -240,27 +244,34 @@ def get_adc_values(pixels_signals,
         curre = pixels_signals[ip]
         ic = 0
         iadc = 0
+        adc_busy = 0
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
 #         integrate[ip][ic] = q_sum
 
-        while ic < curre.shape[0]:
+        while ic < curre.shape[0] or adc_busy > 0:
 
             if iadc >= MAX_ADC_VALUES:
                 print("More ADC values than possible, ", MAX_ADC_VALUES)
                 break
 
-            q = curre[ic]*consts.t_sampling
+            if ic < curre.shape[0]:
+                q = curre[ic]*consts.t_sampling
+
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
+            else:
+                q = 0
 
             q_sum += q
-
-            for itrk in range(current_fractions.shape[2]):
-                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
 #             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
             disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
 
-            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD + disc_noise:
+            if adc_busy > 0:
+                adc_busy -= 1
+
+            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD + disc_noise and adc_busy == 0:
                 crossing_time_tick = ic
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
@@ -299,7 +310,9 @@ def get_adc_values(pixels_signals,
                 #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
                 adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2
 
-                ic += round(CLOCK_CYCLE / consts.t_sampling)
+                ic += round(RESET_CYCLES * CLOCK_CYCLE / consts.t_sampling)
+                adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / consts.t_sampling)
+                
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
 #                 integrate[ip][ic] = q_sum
                 iadc += 1
