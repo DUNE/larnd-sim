@@ -19,9 +19,17 @@ def get_voxel(pos):
         :obj:`numpy.float64`: index of the voxel containing the input position
     """
 
-    i = np.floor(pos[2]/consts.lut_ndiv[2])
-    j = np.floor(pos[1]/consts.lut_ndiv[1])
-    k = np.floor(pos[0]/consts.lut_ndiv[0])
+    # i = np.floor(pos[2]/consts.lut_vox_div[2])
+    # j = np.floor(pos[1]/consts.lut_vox_div[1])
+    # k = np.floor(pos[0]/consts.lut_vox_div[0])
+    i = int((pos[2] - consts.lut_zrange[0])/(consts.lut_zrange[1] - consts.lut_zrange[0])*consts.lut_vox_div[2]) 
+    j = int((pos[1] - consts.lut_yrange[0])/(consts.lut_yrange[1] - consts.lut_yrange[0])*consts.lut_vox_div[1]) 
+    k = int((pos[0] - consts.lut_xrange[0])/(consts.lut_xrange[1] - consts.lut_xrange[0])*consts.lut_vox_div[0]) 
+
+    print('\n\n\n\n')
+    print(pos)
+    print(i,j,k)
+    print('\n\n\n\n')
 
     return i,j,k
 
@@ -105,7 +113,8 @@ def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
         voxel = get_voxel(lut_pos)
         
         # Calls voxel data
-        lut_vox = np_lut[np_lut['Voxel'] == voxel]
+        # lut_vox = np_lut[np_lut['Voxel'] == voxel]
+        lut_vox = np_lut[voxel[0], voxel[1], voxel[2],:,:]
         
         op_dat = lut_vox['OpChannel']
         vis_dat = lut_vox['Visibility']

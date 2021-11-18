@@ -15,4 +15,4 @@ tile_map:
 lut_xrange: [-145.517, 157.207]
 lut_yrange: [-630.936, 630.936]
 lut_zrange: [-310.15, 310.15]
-lut_vox_div: [14, 6, 8]
+lut_vox_div: [14, 26, 8]
