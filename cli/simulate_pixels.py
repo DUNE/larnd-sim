@@ -47,7 +47,7 @@ def run_simulation(input_filename,
                    output_filename='',
                    response_file='../larndsim/response_44.npy',
                    bad_channels=None,
-                   n_tracks=100000):
+                   n_tracks=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -63,7 +63,7 @@ def run_simulation(input_filename,
             field responses
         bad_channels: path of the YAML file containing the channels to be 
             disabled
-        n_tracks (int): number of tracks to be simulated
+        n_tracks (int, optional): number of tracks to be simulated
     """
     start_simulation = time()
 
@@ -114,7 +114,8 @@ def run_simulation(input_filename,
         return
 
     RangePush("slicing_and_swapping")
-    tracks = tracks[:n_tracks]
+    if n_tracks:
+        tracks = tracks[:n_tracks]
 
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -170,8 +171,9 @@ def run_simulation(input_filename,
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
     step = 1
+    track_step = 500
     tot_events = 0
-    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...'):
+    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...', ncols=80):
         start_tracks_batch = time()
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -184,8 +186,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
         
-        for itrk in tqdm(range(0, evt_tracks.shape[0], 100), desc='Event segments...'):
-            selected_tracks = evt_tracks[itrk:itrk+100]
+        for itrk in tqdm(range(0, evt_tracks.shape[0], track_step), desc='  Event segments...', ncols=80):
+            selected_tracks = evt_tracks[itrk:itrk+track_step]
             RangePush("event_id_map")
             # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
@@ -198,12 +200,18 @@ def run_simulation(input_filename,
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("pixels_from_track")
             longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
-#             max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
-            max_radius = 3.5
-            MAX_PIXELS = int((longest_pix*4+6)*max_radius*1.5)
-            MAX_ACTIVE_PIXELS = int(longest_pix*1.5)
-            active_pixels = cp.full((selected_tracks.shape[0], MAX_ACTIVE_PIXELS, 2), -1, dtype=np.int32)
-            neighboring_pixels = cp.full((selected_tracks.shape[0], MAX_PIXELS, 2), -1, dtype=np.int32)
+            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)+1
+    
+            TPB = 128
+            BPG = ceil(selected_tracks.shape[0] / TPB)
+
+            max_pixels = np.array([0])
+            pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
+
+            max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
+    
+            active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0], 2), -1, dtype=np.int32)
+            neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels, 2), -1, dtype=np.int32)
             n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
@@ -215,7 +223,7 @@ def run_simulation(input_filename,
                                                                         active_pixels,
                                                                         neighboring_pixels,
                                                                         n_pixels_list,
-                                                                        max_radius+1)
+                                                                        max_radius)
             RangePop()
 
             RangePush("unique_pix")

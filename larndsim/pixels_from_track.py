@@ -3,7 +3,7 @@ Module that finds which pixels lie on the projection on the anode plane
 of each track segment. It can eventually include also the neighboring
 pixels.
 """
-
+import numba as nb
 from numba import cuda
 from .consts import pixel_pitch, n_pixels, tpc_borders
 
@@ -12,6 +12,21 @@ logging.basicConfig()
 logger = logging.getLogger('pixels_from_track')
 logger.setLevel(logging.WARNING)
 logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
+
+@cuda.jit
+def max_pixels(tracks, n_max_pixels):
+    itrk = cuda.grid(1)
+
+    if itrk < tracks.shape[0]:
+        t = tracks[itrk]
+        this_border = tpc_borders[int(t["pixel_plane"])]
+        start_pixel = ((t["x_start"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
+                       (t["y_start"] - this_border[1][0]) // pixel_pitch)
+        end_pixel = ((t["x_end"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
+                     (t["y_end"]- this_border[1][0]) // pixel_pitch)
+        n_active_pixels = get_num_active_pixels(start_pixel[0], start_pixel[1],
+                                                end_pixel[0], end_pixel[1])
+        cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
 
 @cuda.jit
 def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
@@ -48,6 +63,57 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
+        
+@cuda.jit(device=True)
+def get_num_active_pixels(x0, y0, x1, y1):
+    """
+    Converts track segement to an array of active pixels
+    using Bresenham algorithm used to convert line to grid.
+
+    Args:
+        x0 (float): start `x` coordinate
+        y0 (float): start `y` coordinate
+        x1 (float): end `x` coordinate
+        y1 (float): end `y` coordinate
+        tot_pixels (:obj:`numpy.ndarray`): array where we store
+            the IDs of the pixels directly below the projection of
+            the segments
+    """
+
+    dx = x1 - x0
+    dy = y1 - y0
+    xsign = 1 if dx > 0 else -1
+    ysign = 1 if dy > 0 else -1
+
+    dx = abs(dx)
+    dy = abs(dy)
+
+    if dx > dy:
+        xx, xy, yx, yy = xsign, 0, 0, ysign
+    else:
+        dx, dy = dy, dx
+        xx, xy, yx, yy = 0, ysign, xsign, 0
+
+    D = 2*dy - dx
+    y = 0
+    
+    num_pixels = 0
+    
+    for x in range(dx + 1):
+        x_id = x0 + x*xx + y*yx
+        y_id = y0 + x*xy + y*yy
+        plane_id = x_id // n_pixels[0]
+        
+        if 0 <= x_id <= n_pixels[0]*(plane_id+1) and 0 <= y_id <= n_pixels[1]:
+            num_pixels += 1
+            
+        if D >= 0:
+            y += 1
+            D -= 2*dx
+            
+        D += 2*dy
+        
+    return num_pixels
 
 @cuda.jit(device=True)
 def get_active_pixels(x0, y0, x1, y1, tot_pixels):
@@ -81,7 +147,7 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
 
     D = 2*dy - dx
     y = 0
-
+        
     for x in range(dx + 1):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
@@ -95,7 +161,7 @@ def get_active_pixels(x0, y0, x1, y1, tot_pixels):
             D -= 2*dx
             
         D += 2*dy
-
+        
 @cuda.jit(device=True)
 def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
     """
