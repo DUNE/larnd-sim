@@ -22,7 +22,7 @@ DISCRIMINATION_THRESHOLD = 7e3*consts.e_charge
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
-ADC_BUSY_DELAY = 9
+ADC_BUSY_DELAY = 8
 #: Reset time in clock cycles
 RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
