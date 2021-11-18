@@ -286,7 +286,7 @@ def get_adc_values(pixels_signals,
             if adc_busy > 0:
                 adc_busy -= 1
 
-            if q_sum + q_noise >= DISCRIMINATION_THRESHOLD + disc_noise and adc_busy == 0:
+            if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
                 crossing_time_tick = ic
 
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
