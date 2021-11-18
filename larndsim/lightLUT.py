@@ -22,9 +22,9 @@ def get_voxel(pos):
     # i = np.floor(pos[2]/consts.lut_vox_div[2])
     # j = np.floor(pos[1]/consts.lut_vox_div[1])
     # k = np.floor(pos[0]/consts.lut_vox_div[0])
-    i = int((pos[2] - consts.lut_zrange[0])/(consts.lut_zrange[1] - consts.lut_zrange[0])*consts.lut_vox_div[2]) 
+    i = int((pos[0] - consts.lut_zrange[0])/(consts.lut_zrange[1] - consts.lut_zrange[0])*consts.lut_vox_div[2]) 
     j = int((pos[1] - consts.lut_yrange[0])/(consts.lut_yrange[1] - consts.lut_yrange[0])*consts.lut_vox_div[1]) 
-    k = int((pos[0] - consts.lut_xrange[0])/(consts.lut_xrange[1] - consts.lut_xrange[0])*consts.lut_vox_div[0]) 
+    k = int((pos[2] - consts.lut_xrange[0])/(consts.lut_xrange[1] - consts.lut_xrange[0])*consts.lut_vox_div[0]) 
 
     print('\n\n\n\n')
     print(pos)
@@ -44,7 +44,7 @@ def get_half_det_copy(pos):
         int: index of the TPC containing the input posision
     """
     
-    tpc_x = math.floor(pos[0]/(consts.ModuleDimension[0]/2.))+consts.n_mod[0]/2*consts.n_tpc[0]
+    tpc_x = math.floor(pos[2]/(consts.ModuleDimension[2]/2.))+consts.n_mod[2]/2*consts.n_tpc[2]
 
     return int(tpc_x)%2
 
@@ -59,8 +59,13 @@ def larnd_to_lut_coord(pos, itpc):
         :obj:`numpy.ndarray`: list of x, y, z coordinates translated to the LUT system
     """
     # shifts the larnd coord to the LUT coord system
-    lut_pos = pos - consts.tpc_offsets[itpc]*consts.cm2mm
-    
+    lut_pos = pos - consts.tpc_offsets[itpc]*consts.cm2mm 
+
+    if pos[2] < 0:
+        lut_pos -= np.array([0,0,consts.lut_zrange[0]])
+    else:
+        lut_pos += np.array([0,0,consts.lut_zrange[0]])
+
     return (lut_pos)
 
 def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
@@ -101,7 +106,7 @@ def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
     for edepInd in range(nEdepSegments):
 
         # Global position
-        pos = (np.array((z[edepInd],y[edepInd],x[edepInd])))*consts.cm2mm
+        pos = (np.array((x[edepInd],y[edepInd],z[edepInd])))*consts.cm2mm
 
         # tpc
         itpc = get_half_det_copy(pos)
@@ -112,25 +117,30 @@ def calculate_light_incidence(t_data, lut_path, light_dep, light_incidence):
         # voxel containing LUT position
         voxel = get_voxel(lut_pos)
         
-        # Calls voxel data
+        # Calls data on voxel
         # lut_vox = np_lut[np_lut['Voxel'] == voxel]
         lut_vox = np_lut[voxel[0], voxel[1], voxel[2],:,:]
         
-        op_dat = lut_vox['OpChannel']
-        vis_dat = lut_vox['Visibility']
-        T1_dat = lut_vox['T1']
+        # Makes a list of op channel indecies
+        op_dat = np.arange(len(lut_vox))
+
+        # Gets visibility data for the voxel
+        vis_dat = lut_vox[:,0]
+
+        # Gets T1 data for the voxel
+        T1_dat = lut_vox[:,1]
         
-        # loop voxel entry-list
+        # Loop through each op channel
         for entry in range(len(lut_vox)):
             # Defines which op channel data is collected from
             op_channel = op_dat[entry]
             
-            # Calculates the number of photons reaching each optical channel
-            n_photons_read = vis_dat[entry]*n_photons[edepInd]
-            
             # Flips op channels if edep occurs in tpc 2
             if (itpc==1):
                 op_channel = (op_channel+consts.n_op_channel/2)%consts.n_op_channel
+
+            # Calculates the number of photons reaching each optical channel
+            n_photons_read = vis_dat[entry]*n_photons[edepInd]
             
             # Determines the travel time of the "fastest" photon
             if (T1_dat[entry] < time[edepInd,int(op_channel)]):  
