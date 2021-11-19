@@ -104,12 +104,13 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
             t["pixel_plane"])
 
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], t["pixel_plane"], active_pixels[itrk])
+
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
         
 @cuda.jit(device=True)
-def get_num_active_pixels(x0, y0, x1, y1):
+def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
@@ -119,11 +120,11 @@ def get_num_active_pixels(x0, y0, x1, y1):
         y0 (float): start `y` coordinate
         x1 (float): end `x` coordinate
         y1 (float): end `y` coordinate
+        plane_id (int): plane index
         tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
     """
-
     dx = x1 - x0
     dy = y1 - y0
     xsign = 1 if dx > 0 else -1
@@ -146,9 +147,8 @@ def get_num_active_pixels(x0, y0, x1, y1):
     for x in range(dx + 1):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
-        plane_id = x_id // n_pixels[0]
         
-        if 0 <= x_id <= n_pixels[0]*(plane_id+1) and 0 <= y_id <= n_pixels[1]:
+        if 0 <= x_id < n_pixels[0] and 0 <= y_id < n_pixels[1]:
             num_pixels += 1
             
         if D >= 0:
@@ -160,21 +160,21 @@ def get_num_active_pixels(x0, y0, x1, y1):
     return num_pixels
 
 @cuda.jit(device=True)
-def get_active_pixels(start_x, start_y, end_x, end_y, plane, tot_pixels):
+def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
     """
     Converts track segement to an array of active pixels
     using Bresenham algorithm used to convert line to grid.
 
     Args:
-        start_id (int): end pixel id
-        end_id (int): end pixel id
+        x0 (float): start `x` coordinate
+        y0 (float): start `y` coordinate
+        x1 (float): end `x` coordinate
+        y1 (float): end `y` coordinate
+        plane_id (int): plane index
         tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
     """
-    x0, y0, plane_id0 = start_x, start_y, plane #id2pixel(start_id)
-    x1, y1, _ = end_x, end_y, 0 #id2pixel(end_id)
-    
     dx = x1 - x0
     dy = y1 - y0
     xsign = 1 if dx > 0 else -1
@@ -196,8 +196,9 @@ def get_active_pixels(start_x, start_y, end_x, end_y, plane, tot_pixels):
         x_id = x0 + x*xx + y*yx
         y_id = y0 + x*xy + y*yy
             
-        if 0 <= x_id < n_pixels[0] and 0 <= y_id < n_pixels[1] and plane_id0 < tpc_borders.shape[0]:
-            tot_pixels[x] = pixel2id(x_id, y_id, plane_id0)
+        if 0 <= x_id < n_pixels[0] and 0 <= y_id < n_pixels[1] and plane_id < tpc_borders.shape[0]:
+            tot_pixels[x] = pixel2id(x_id, y_id, plane_id)
+
         if D >= 0:
             y += 1
             D -= 2*dx
@@ -227,7 +228,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
 
     for pix in range(active_pixels.shape[0]):
 
-        if (active_pixels[pix] == -1):
+        if (active_pixels[pix][0] == -1) and (active_pixels[pix][1] == -1):
             continue
 
         for x_r in range(-radius, radius+1):
@@ -247,5 +248,5 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                     if is_unique:
                         neighboring_pixels[count] = new_pixel
                         count += 1
-
+                        
     return count
