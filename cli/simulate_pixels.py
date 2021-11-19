@@ -210,8 +210,8 @@ def run_simulation(input_filename,
 
             max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
     
-            active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0], 2), -1, dtype=np.int32)
-            neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels, 2), -1, dtype=np.int32)
+            active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
+            neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
             n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
             threadsperblock = 128
             blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
@@ -228,9 +228,10 @@ def run_simulation(input_filename,
 
             RangePush("unique_pix")
             shapes = neighboring_pixels.shape
-            joined = neighboring_pixels.reshape(shapes[0]*shapes[1],2)
-            unique_pix = cupy_unique_axis0(joined)
-            unique_pix = unique_pix[(unique_pix[:,0] != -1) & (unique_pix[:,1] != -1),:]
+            joined = neighboring_pixels.reshape(shapes[0]*shapes[1])
+            # unique_pix = cupy_unique_axis0(joined)
+            unique_pix = cp.unique(joined)
+            unique_pix = unique_pix[(unique_pix != -1),:]
             RangePop()
             
             if not unique_pix.shape[0]:
@@ -265,8 +266,8 @@ def run_simulation(input_filename,
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
             for i_ in range(selected_tracks.shape[0]):
-                compare = neighboring_pixels[i_, ..., cp.newaxis,:] == unique_pix
-                indices = cp.where(cp.logical_and(compare[..., 0], compare[..., 1]))
+                compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
+                indices = cp.where(compare)
                 pixel_index_map[i_, indices[0]] = indices[1]
             RangePop()
 

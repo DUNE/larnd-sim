@@ -10,6 +10,7 @@ import numba as nb
 from numba import cuda
 from .consts import tpc_borders, time_interval, n_pixels
 from . import consts
+from .pixels_from_track import id2pixel
 
 import logging
 logging.basicConfig()
@@ -231,11 +232,11 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    plane_id = pixel_id[0] // n_pixels[0]
+    px, py, plane_id = id2pixel(pixel_id)
 
     this_border = tpc_borders[int(plane_id)]
-    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * consts.pixel_pitch + this_border[0][0]
-    pix_y = pixel_id[1] * consts.pixel_pitch + this_border[1][0]
+    pix_x = px * consts.pixel_pitch + this_border[0][0]
+    pix_y = py * consts.pixel_pitch + this_border[1][0]
 
     return pix_x,pix_y
 
@@ -288,7 +289,7 @@ def tracks_current(signals, pixels, tracks, response):
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
 
-        if pID[0] >= 0 and pID[1] >= 0:
+        if pID >= 0:
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
@@ -441,7 +442,7 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
         for ipix in range(pixels.shape[1]):
             pID = pixels[itrk][ipix]
 
-            if upix[0] == pID[0] and upix[1] == pID[1]:
+            if upix == pID:
 
                 imap = 0
                 while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
