@@ -14,6 +14,7 @@ from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
 from . import consts
+from .pixels_from_track import id2pixel_nojit
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -103,10 +104,10 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
-        plane_id = int(pixel_id[0] // consts.n_pixels[0])
+        pix_x, pix_y, plane_id = id2pixel_nojit(pixel_id)
         module_id = plane_id//2+1
-        tile_x = int((pixel_id[0] - consts.n_pixels[0] * plane_id) // consts.n_pixels_per_tile[0])
-        tile_y = int(pixel_id[1] // consts.n_pixels_per_tile[1])
+        tile_x = int(pix_x//consts.n_pixels_per_tile[0])
+        tile_y = int(pix_y//consts.n_pixels_per_tile[1])
         anode_id = 0 if plane_id % 2 == 0 else 1
         tile_id = consts.tile_map[anode_id][tile_x][tile_y]
         
@@ -116,7 +117,14 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             if adc > digitize(0):
                 event = event_id_list[itick,iadc]
                 event_t0 = event_start_time_list[itick]
-                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0))
+                if event_t0 > 2**31-1:
+                    # 31-bit rollover
+                    packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
+                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_frac.append([0]*current_fractions.shape[2])
+                    event_start_time_list[itick:] -= 2**31
+                event_t0 = event_t0 % (2**31)
+                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)        
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
@@ -130,7 +138,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p = Packet_v2()
 
                 try:
-                    chip, channel = consts.pixel_connection_dict[rotate_tile(pixel_id%[consts.n_pixels_per_tile[0],consts.n_pixels_per_tile[1]], tile_id)]
+                    chip, channel = consts.pixel_connection_dict[rotate_tile((pix_x%consts.n_pixels_per_tile[0], pix_y%consts.n_pixels_per_tile[1]), tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
                     continue

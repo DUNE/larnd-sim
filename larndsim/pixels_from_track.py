@@ -62,12 +62,12 @@ def max_pixels(tracks, n_max_pixels):
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
         this_border = tpc_borders[int(t["pixel_plane"])]
-        start_pixel = ((t["x_start"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
+        start_pixel = ((t["x_start"] - this_border[0][0]) // pixel_pitch,
                        (t["y_start"] - this_border[1][0]) // pixel_pitch)
-        end_pixel = ((t["x_end"] - this_border[0][0]) // pixel_pitch + n_pixels[0]*t["pixel_plane"],
+        end_pixel = ((t["x_end"] - this_border[0][0]) // pixel_pitch,
                      (t["y_end"]- this_border[1][0]) // pixel_pitch)
         n_active_pixels = get_num_active_pixels(start_pixel[0], start_pixel[1],
-                                                end_pixel[0], end_pixel[1])
+                                                end_pixel[0], end_pixel[1], t["pixel_plane"])
         cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
 
 @cuda.jit
@@ -228,7 +228,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
 
     for pix in range(active_pixels.shape[0]):
 
-        if (active_pixels[pix][0] == -1) and (active_pixels[pix][1] == -1):
+        if (active_pixels[pix] == -1):
             continue
 
         for x_r in range(-radius, radius+1):
