@@ -94,7 +94,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
     if bad_channels:
         with open(bad_channels, 'r') as f:
             bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
-            
+
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
     event_start_time = np.cumsum(event_start_time)
@@ -110,7 +110,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
         tile_y = int(pix_y//consts.n_pixels_per_tile[1])
         anode_id = 0 if plane_id % 2 == 0 else 1
         tile_id = consts.tile_map[anode_id][tile_x][tile_y]
-        
+
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
@@ -124,7 +124,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                     packets_frac.append([0]*current_fractions.shape[2])
                     event_start_time_list[itick:] -= 2**31
                 event_t0 = event_t0 % (2**31)
-                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)        
+                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
