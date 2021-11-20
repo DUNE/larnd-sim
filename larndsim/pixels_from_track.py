@@ -14,7 +14,7 @@ logger.setLevel(logging.WARNING)
 logger.info("PIXEL_FROM_TRACK MODULE PARAMETERS")
 
 
-@cuda.jit(device=True)
+@nb.njit
 def pixel2id(pixel_x, pixel_y, pixel_plane):
     """
     Convert the x,y,plane tuple to a unique identifier
@@ -29,12 +29,7 @@ def pixel2id(pixel_x, pixel_y, pixel_plane):
     """
     return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
 
-
-def pixel2id_nojit(pixel_x, pixel_y, pixel_plane):
-    return pixel_x + n_pixels[0] * (pixel_y + n_pixels[1] * pixel_plane)
-
-
-@cuda.jit(device=True)
+@nb.njit
 def id2pixel(id):
     """
     Convert the unique pixel identifer to an x,y,plane tuple
@@ -48,12 +43,6 @@ def id2pixel(id):
     """
     return (id % n_pixels[0], (id // n_pixels[0]) % n_pixels[1],
             (id // (n_pixels[0] * n_pixels[1])))
-
-
-def id2pixel_nojit(id):
-    return (id % n_pixels[0], (id // n_pixels[0]) % n_pixels[1],
-            (id // (n_pixels[0] * n_pixels[1])))
-
 
 @cuda.jit
 def max_pixels(tracks, n_max_pixels):
