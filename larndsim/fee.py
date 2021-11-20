@@ -14,7 +14,7 @@ from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
 from . import consts
-from .pixels_from_track import id2pixel_nojit
+from .pixels_from_track import id2pixel
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -100,11 +100,11 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
     event_start_time = np.cumsum(event_start_time)
     event_start_time_list = event_start_time[unique_events_inv]
 
-    for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
+    for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...", ncols=80)):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
-        pix_x, pix_y, plane_id = id2pixel_nojit(pixel_id)
+        pix_x, pix_y, plane_id = id2pixel(pixel_id)
         module_id = plane_id//2+1
         tile_x = int(pix_x//consts.n_pixels_per_tile[0])
         tile_y = int(pix_y//consts.n_pixels_per_tile[1])
