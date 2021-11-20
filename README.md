@@ -25,22 +25,21 @@ This script produces a bi-dimensional structured array saved in the HDF5 format,
 We provide a command-line interface available at `cli/simulate_pixels.py`, which can run as:
 
 ```bash
-python cli/simulate_pixels.py \
---input_filename=input_file.h5 \
---detector_properties=larndsim/detector_properties/module0.yaml \
---pixel_layout=larndsim/pixel_layouts/multi_tile_layout-2.2.16.yaml \
---output_filename=output_file.h5 \
---n_tracks=100 \
---response=response.npy
+simulate_pixels.py \
+--input_filename=lbnfSpillLAr.edep.h5 \
+--detector_properties=larndsim/detector_properties/ndlar-module.yaml \
+--pixel_layout=larndsim/pixel_layouts/multi_tile_layout-3.0.40.yaml \
+--output_filename=lbnfSpillLAr.larndsim.h5 \
+--response=larndsim/response_38.npy
 ```
 
-The `response.npy` is a file containing an array of induced currents for several $(x,y)$ positions on the pixel. It is calculated externally to `larnd-sim` and the version used for LArPix v2 is available at `larndsim/response.npy`.
+The `response_38.npy` is a file containing an array of induced currents for several $(x,y)$ positions on the pixel, with a 38 mm pitch. It is calculated externally to `larnd-sim`. A version with 44 mm pitch is available in the `larndsim` directory.
 
 The output file will contain the datasets described in the [LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html), plus a dataset `tracks` containing the _true_ energy depositions in the detector, and a dataset `mc_packets_assn`, which has a list of indeces corresponding to the true energy deposition associated to each packet.
 
 ## Step-by-step simulation
 
-Here we will describe, step-by-step, how we perform the simulation. A full example is available in the `examples/Step-by-step simulation.ipynb` notebook.
+Here we will describe, step-by-step, how we perform the simulation. A full example for the ND-LAr detector is available in the `examples/NDLAr example.ipynb` notebook.
 
 ### Quenching and drifting stage
 
@@ -85,7 +84,7 @@ detsim.tracks_current[BPG,TPB](signals,
                                response)
 ```
 
-Here, `response` is a Numpy array containing a look-up table with a pre-calculated field response. The file valid for Module0 and SingleCube LArPix tiles is availabe at `larndsim/response.npy`.
+Here, `response` is a Numpy array containing a look-up table with a pre-calculated field response. The file valid for Module0 and SingleCube LArPix tiles is availabe at `larndsim/response-44.npy`. For ND-LAr the file is `larndsim/response_38.npy`.
 
 ### Accessing the signals
 
@@ -134,12 +133,14 @@ fee.get_adc_values[BPG,TPB](pixels_signals,
 where the random states `rng_states` are needed for the noise simulation.
 
 ### Export
+
 The final output is then exported to the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html):
+
 ```python
 fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
-                    cp.asnumpy(adc_tot_ticks_list),
-                    cp.asnumpy(unique_pix_tot),
-                    cp.asnumpy(current_fractions_tot),
-                    cp.asnumpy(track_pixel_map_tot),
-                    "example.h5")
+                   cp.asnumpy(adc_tot_ticks_list),
+                   cp.asnumpy(unique_pix_tot),
+                   cp.asnumpy(current_fractions_tot),
+                   cp.asnumpy(track_pixel_map_tot),
+                   "example.h5")
 ```

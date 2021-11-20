@@ -8,7 +8,7 @@ from math import pi, ceil, sqrt, erf, exp, log
 import numba as nb
 
 from numba import cuda
-from .consts import tpc_borders, time_interval, n_pixels
+from .consts import tpc_borders, time_interval
 from . import consts
 from .pixels_from_track import id2pixel
 
@@ -21,7 +21,7 @@ logger.info("DETSIM MODULE PARAMETERS")
 MAX_TRACKS_PER_PIXEL = 5
 
 @cuda.jit
-def time_intervals(track_starts, time_max, event_id_map, tracks):
+def time_intervals(track_starts, time_max, tracks):
     """
     Find the value of the longest signal time and stores the start
     time of each segment.
@@ -256,7 +256,7 @@ def get_closest_waveform(x, y, t, response):
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
     dt = consts.response_sampling
-    bin_width = consts.pixel_pitch / 10 
+    bin_width = consts.pixel_pitch / 10
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
