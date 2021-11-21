@@ -95,7 +95,6 @@ from larndsim import detsim
 ...
 detsim.time_intervals[blockspergrid,threadsperblock](track_starts,
                                                      max_length,
-                                                     event_id_map,
                                                      input_tracks)
 ```
 
