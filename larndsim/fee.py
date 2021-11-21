@@ -84,9 +84,9 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             for the `mc_packets_assn` dataset
     """
 
-    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[2]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
+    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
     packets = [TimestampPacket()]
-    packets_mc = [[-1]*track_ids.shape[2]]
+    packets_mc = [[-1]*track_ids.shape[1]]
     packets_frac = [[0]*current_fractions.shape[2]]
     packets_mc_ds = []
     last_event = -1
@@ -120,7 +120,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 if event_t0 > 2**31-1:
                     # 31-bit rollover
                     packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     event_start_time_list[itick:] -= 2**31
                 event_t0 = event_t0 % (2**31)
@@ -128,10 +128,10 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     last_event = event
 
@@ -168,7 +168,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p.first_packet = 1
                 p.assign_parity()
 
-                packets_mc.append(track_ids[itick][iadc])
+                packets_mc.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
             else:

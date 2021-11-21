@@ -113,6 +113,7 @@ def run_simulation(input_filename,
     tracks['z_start'] = x_start
     tracks['z_end'] = x_end
     tracks['z'] = x
+    tracks['eventID'] = 1
     RangePop()
 
     response = cp.load(response_file)
@@ -156,7 +157,7 @@ def run_simulation(input_filename,
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
     step = 1
-    track_step = 500
+    track_step = 2000
     tot_events = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...', ncols=80):
         start_tracks_batch = time()
@@ -182,7 +183,7 @@ def run_simulation(input_filename,
             # the anode plane using the Bresenham's algorithm. We also take into
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("pixels_from_track")
-            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)+1
+            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
 
             TPB = 128
             BPG = ceil(selected_tracks.shape[0] / TPB)
@@ -302,7 +303,6 @@ def run_simulation(input_filename,
             unique_pix_tot.append(cp.asnumpy(unique_pix))
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], fee.MAX_ADC_VALUES, axis=1)
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
 
         tot_events += step
