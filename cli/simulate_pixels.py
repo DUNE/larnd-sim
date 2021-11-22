@@ -140,12 +140,6 @@ def run_simulation(input_filename,
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
-    print("Calculating optical responses...",end='')
-    start_lightLUT = time()
-    lightLUT.calculate_light_incidence(tracks, light_lut_filename, phot_from_edep, light_sim_dat)
-    end_lightLUT = time()
-    print(f" {end_lightLUT-start_lightLUT:.2f} s")
-
     print("Drifting electrons...",end='')
     start_drifting = time()
     RangePush("drift")
@@ -153,6 +147,13 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
+
+    print("Calculating optical responses...",end='')
+    start_lightLUT = time()
+    lightLUT.calculate_light_incidence(tracks, light_lut_filename, phot_from_edep, light_sim_dat)
+    end_lightLUT = time()
+    print(f" {end_lightLUT-start_lightLUT:.2f} s")
+
     step = 1
     adc_tot_list = []
     adc_tot_ticks_list = []
