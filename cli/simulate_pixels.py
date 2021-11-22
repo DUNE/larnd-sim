@@ -1,10 +1,7 @@
 #!/usr/bin/env python
-
-import os,sys,inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0,parentdir)
-
+"""
+Command-line interface to larnd-sim module.
+"""
 from math import ceil
 from time import time
 
@@ -13,7 +10,6 @@ import cupy as cp
 import fire
 import h5py
 
-from numba import cuda
 from numba.cuda.random import create_xoroshiro128p_states
 
 from tqdm import tqdm
@@ -21,7 +17,7 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.cuda_dict import CudaDict
 
-logo = """
+LOGO = """
   _                      _            _
  | |                    | |          (_)
  | | __ _ _ __ _ __   __| |______ ___ _ _ __ ___
@@ -30,17 +26,6 @@ logo = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
-
-def cupy_unique_axis0(array):
-    # axis is still not supported for cupy.unique, this
-    # is a workaround
-    if len(array.shape) != 2:
-        raise ValueError("Input array must be 2D.")
-    sortarr     = array[cp.lexsort(array.T[::-1])]
-    mask        = cp.empty(array.shape[0], dtype=cp.bool_)
-    mask[0]     = True
-    mask[1:]    = cp.any(sortarr[1:] != sortarr[:-1], axis=1)
-    return sortarr[mask]
 
 def run_simulation(input_filename,
                    pixel_layout,
@@ -64,7 +49,7 @@ def run_simulation(input_filename,
             the output is added to the input file.
         response_file: path of the Numpy array containing the pre-calculated
             field responses
-        bad_channels: path of the YAML file containing the channels to be 
+        bad_channels: path of the YAML file containing the channels to be
             disabled
         n_tracks (int, optional): number of tracks to be simulated
     """
@@ -74,7 +59,7 @@ def run_simulation(input_filename,
 
     RangePush("run_simulation")
 
-    print(logo)
+    print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Pixel layout file:", pixel_layout)
     print("Detector propeties file:", detector_properties)
@@ -110,16 +95,16 @@ def run_simulation(input_filename,
             input_has_trajectories = True
         except KeyError:
             input_has_trajectories = False
-            
+
         try:
             vertices = np.array(f['eventTruth'])
             input_has_vertices = True
         except KeyError:
             print("Input file does not have true vertices info")
             input_has_vertices = False
-            
+
     RangePop()
-    
+
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
@@ -140,7 +125,7 @@ def run_simulation(input_filename,
     tracks['z_end'] = x_end
     tracks['z'] = x
     RangePop()
-    
+
     response = cp.load(response_file)
 
     TPB = 256
@@ -164,7 +149,7 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
-    
+
     # initialize lists to collect results from GPU
     event_id_list = []
     adc_tot_list = []
@@ -172,17 +157,17 @@ def run_simulation(input_filename,
     track_pixel_map_tot = []
     unique_pix_tot = []
     current_fractions_tot = []
-    
+
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
     _, _, start_idx = np.intersect1d(tot_evids, tracks['eventID'], return_indices=True)
     _, _, rev_idx = np.intersect1d(tot_evids, tracks['eventID'][::-1], return_indices=True)
     end_idx = len(tracks['eventID']) - 1 - rev_idx
-    
+
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
     step = 1
-    track_step = 500
+    track_step = 2000
     tot_events = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...', ncols=80):
         start_tracks_batch = time()
@@ -196,55 +181,48 @@ def run_simulation(input_filename,
         track_subset = tracks[min(start_idx[ievd:ievd + step]):max(end_idx[ievd:ievd + step])+1]
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
-        
+
         for itrk in tqdm(range(0, evt_tracks.shape[0], track_step), desc='  Event segments...', ncols=80):
             selected_tracks = evt_tracks[itrk:itrk+track_step]
             RangePush("event_id_map")
-            # Here we build a map between tracks and event IDs
             event_ids = selected_tracks['eventID']
             unique_eventIDs = np.unique(event_ids)
-            event_id_map = np.searchsorted(unique_eventIDs, event_ids)
             RangePop()
 
             # We find the pixels intersected by the projection of the tracks on
             # the anode plane using the Bresenham's algorithm. We also take into
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("pixels_from_track")
-            longest_pix = ceil(max(selected_tracks["dx"])/consts.pixel_pitch)
-            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)+1
-    
+            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
+
             TPB = 128
             BPG = ceil(selected_tracks.shape[0] / TPB)
-
             max_pixels = np.array([0])
             pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
 
             max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
-    
+
             active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
             neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
             n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
-            threadsperblock = 128
-            blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
 
             if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                 continue
-     
-            pixels_from_track.get_pixels[blockspergrid,threadsperblock](selected_tracks,
-                                                                        active_pixels,
-                                                                        neighboring_pixels,
-                                                                        n_pixels_list,
-                                                                        max_radius)
+
+            pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
+                                                  active_pixels,
+                                                  neighboring_pixels,
+                                                  n_pixels_list,
+                                                  max_radius)
             RangePop()
 
             RangePush("unique_pix")
             shapes = neighboring_pixels.shape
             joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
-            #unique_pix = cupy_unique_axis0(joined)
             unique_pix = cp.unique(joined)
             unique_pix = unique_pix[(unique_pix != -1)]
             RangePop()
-            
+
             if not unique_pix.shape[0]:
                 continue
 
@@ -252,9 +230,7 @@ def run_simulation(input_filename,
             # Here we find the longest signal in time and we store an array with the start in time of each track
             max_length = cp.array([0])
             track_starts = cp.empty(selected_tracks.shape[0])
-            threadsperblock = 128
-            blockspergrid = ceil(selected_tracks.shape[0] / threadsperblock)
-            detsim.time_intervals[blockspergrid,threadsperblock](track_starts, max_length, event_id_map, selected_tracks)
+            detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
             RangePop()
 
             RangePush("tracks_current")
@@ -271,7 +247,7 @@ def run_simulation(input_filename,
                                                                  neighboring_pixels,
                                                                  selected_tracks,
                                                                  response)
-            
+
             RangePop()
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
@@ -306,7 +282,7 @@ def run_simulation(input_filename,
                                                                     track_pixel_map,
                                                                     pixels_tracks_signals)
             RangePop()
-            
+
             RangePush("get_adc_values")
             # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
             time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1], pixels_signals.shape[1]+1)
@@ -314,7 +290,7 @@ def run_simulation(input_filename,
             adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            
+
             current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
             rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
             pixel_thresholds_lut.tpb = TPB
@@ -332,7 +308,6 @@ def run_simulation(input_filename,
                                          current_fractions,
                                          pixel_thresholds)
 
-
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
@@ -343,7 +318,6 @@ def run_simulation(input_filename,
             unique_pix_tot.append(cp.asnumpy(unique_pix))
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map = cp.repeat(track_pixel_map[:, cp.newaxis], fee.MAX_ADC_VALUES, axis=1)
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
 
         tot_events += step

@@ -16,7 +16,7 @@ from glob import glob
 import os
 from tqdm import tqdm
 from . import consts
-from .pixels_from_track import id2pixel_nojit
+from .pixels_from_track import id2pixel
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -90,9 +90,9 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             for the `mc_packets_assn` dataset
     """
 
-    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[2]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
+    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
     packets = [TimestampPacket()]
-    packets_mc = [[-1]*track_ids.shape[2]]
+    packets_mc = [[-1]*track_ids.shape[1]]
     packets_frac = [[0]*current_fractions.shape[2]]
     packets_mc_ds = []
     last_event = -1
@@ -100,23 +100,23 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
     if bad_channels:
         with open(bad_channels, 'r') as f:
             bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
-            
+
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
     event_start_time = np.cumsum(event_start_time)
     event_start_time_list = event_start_time[unique_events_inv]
 
-    for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...")):
+    for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...", ncols=80)):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
-        pix_x, pix_y, plane_id = id2pixel_nojit(pixel_id)
+        pix_x, pix_y, plane_id = id2pixel(pixel_id)
         module_id = plane_id//2+1
         tile_x = int(pix_x//consts.n_pixels_per_tile[0])
         tile_y = int(pix_y//consts.n_pixels_per_tile[1])
         anode_id = 0 if plane_id % 2 == 0 else 1
         tile_id = consts.tile_map[anode_id][tile_x][tile_y]
-        
+
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
@@ -126,7 +126,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 if event_t0 > 2**31-1:
                     # 31-bit rollover
                     packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     event_start_time_list[itick:] -= 2**31
                 event_t0 = event_t0 % (2**31)
@@ -134,10 +134,10 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
 
                 if event != last_event:
                     packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[2])
+                    packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     last_event = event
 
@@ -174,7 +174,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p.first_packet = 1
                 p.assign_parity()
 
-                packets_mc.append(track_ids[itick][iadc])
+                packets_mc.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
             else:
