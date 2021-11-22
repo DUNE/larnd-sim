@@ -19,6 +19,7 @@ from numba.cuda.random import create_xoroshiro128p_states
 from tqdm import tqdm
 
 from larndsim import consts
+from larndsim.cuda_dict import CudaDict
 
 logo = """
   _                      _            _
@@ -47,7 +48,8 @@ def run_simulation(input_filename,
                    output_filename='',
                    response_file='../larndsim/response_44.npy',
                    bad_channels=None,
-                   n_tracks=None):
+                   n_tracks=None,
+                   pixel_thresholds_file=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -57,6 +59,7 @@ def run_simulation(input_filename,
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
+        pixel_thresholds_file (str): path to npz file containing pixel thresholds
         output_filename (str): path of the HDF5 output file. If not specified
             the output is added to the input file.
         response_file: path of the Numpy array containing the pre-calculated
@@ -87,6 +90,14 @@ def run_simulation(input_filename,
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
     from larndsim import quenching, drifting, detsim, pixels_from_track, fee
+    RangePop()
+
+    RangePush("load_pixel_thresholds")
+    if pixel_thresholds_file is not None:
+        print("Pixel thresholds file:", pixel_thresholds_file)
+        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 256)
+    else:
+        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
 
     RangePush("load_hd5_file")
@@ -228,10 +239,10 @@ def run_simulation(input_filename,
 
             RangePush("unique_pix")
             shapes = neighboring_pixels.shape
-            joined = neighboring_pixels.reshape(shapes[0]*shapes[1])
-            # unique_pix = cupy_unique_axis0(joined)
+            joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
+            #unique_pix = cupy_unique_axis0(joined)
             unique_pix = cp.unique(joined)
-            unique_pix = unique_pix[(unique_pix != -1),:]
+            unique_pix = unique_pix[(unique_pix != -1)]
             RangePop()
             
             if not unique_pix.shape[0]:
@@ -306,15 +317,21 @@ def run_simulation(input_filename,
             
             current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
             rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
-           
-            fee.get_adc_values[BPG,TPB](pixels_signals,
-                                        pixels_tracks_signals,
-                                        time_ticks,
-                                        integral_list,
-                                        adc_ticks_list,
-                                        0,
-                                        rng_states,
-                                        current_fractions)
+            pixel_thresholds_lut.tpb = TPB
+            pixel_thresholds_lut.bpg = BPG
+            orig_shape = unique_pix.shape
+            pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(orig_shape)
+
+            fee.get_adc_values[BPG, TPB](pixels_signals,
+                                         pixels_tracks_signals,
+                                         time_ticks,
+                                         integral_list,
+                                         adc_ticks_list,
+                                         0,
+                                         rng_states,
+                                         current_fractions,
+                                         pixel_thresholds)
+
 
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event

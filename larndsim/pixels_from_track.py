@@ -104,7 +104,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
             t["pixel_plane"])
 
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], t["pixel_plane"], active_pixels[itrk])
-
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
@@ -160,6 +159,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     return num_pixels
 
 @cuda.jit(device=True)
+
 def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
     """
     Converts track segement to an array of active pixels
