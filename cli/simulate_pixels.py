@@ -113,7 +113,6 @@ def run_simulation(input_filename,
     tracks['z_start'] = x_start
     tracks['z_end'] = x_end
     tracks['z'] = x
-    tracks['eventID'] = 1
     RangePop()
 
     response = cp.load(response_file)
