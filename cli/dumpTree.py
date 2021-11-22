@@ -122,7 +122,7 @@ def dump(input_file, output_file):
                                ('pdgId', 'i4'), ('x_start', 'f4'),
                                ('y_start', 'f4'), ('t_start', 'f4'),
                                ('dx', 'f4'), ('long_diff', 'f4'),
-                               ('pixel_plane', 'u4'), ('t_end', 'f4'),
+                               ('pixel_plane', 'i4'), ('t_end', 'f4'),
                                ('dEdx', 'f4'), ('dE', 'f4'), ('t', 'f4'),
                                ('y', 'f4'), ('x', 'f4'), ('z', 'f4')])
 
