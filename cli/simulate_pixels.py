@@ -99,6 +99,7 @@ def run_simulation(input_filename,
     # Made a separate array to store number of photons generated from quenching.py. Should be added to tracks as another dtype
     phot_from_edep = np.zeros(len(tracks), dtype = [('n_photons_edep','f4')])
 
+    # Makes an empty array to store data from lightlut 
     light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_det','f4'),('t0_det','f4')])
 
     RangePop()
@@ -140,12 +141,6 @@ def run_simulation(input_filename,
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
-    print("Calculating optical responses...",end='')
-    start_lightLUT = time()
-    lightLUT.calculate_light_incidence(tracks, light_lut_filename, phot_from_edep, light_sim_dat)
-    end_lightLUT = time()
-    print(f" {end_lightLUT-start_lightLUT:.2f} s")
-
     print("Drifting electrons...",end='')
     start_drifting = time()
     RangePush("drift")
@@ -153,6 +148,13 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
+
+    print("Calculating optical responses...",end='')
+    start_lightLUT = time()
+    lightLUT.calculate_light_incidence(tracks, light_lut_filename, phot_from_edep, light_sim_dat)
+    end_lightLUT = time()
+    print(f" {end_lightLUT-start_lightLUT:.2f} s")
+
     step = 1
     adc_tot_list = []
     adc_tot_ticks_list = []
