@@ -19,7 +19,26 @@ def get_voxel(pos, itpc):
         :obj:`numpy.float64`: index of the voxel containing the input position
     """
 
-    j = int((pos[1] - tpc_borders[1][0])/(tpc_borders[1][1] - tpc_borders[1][0])*consts.lut_vox_div[1]) 
+    tpc_borders = consts.tpc_borders[itpc]
+
+    # if we are in an "odd" TPC, we need to rotate x 
+    # this is to preserve the "left/right"-ness of the optical channels
+    # with respect to the anode plane
+    is_odd = tpc_borders[2][1] > tpc_borders[2][0]
+
+    xMin = tpc_borders[0][0] - 2e-2
+    xMax = tpc_borders[0][1] + 2e-2
+    yMin = tpc_borders[1][0] - 2e-2
+    yMax = tpc_borders[1][1] + 2e-2
+    zMin = tpc_borders[2][0] - 2e-2
+    zMax = tpc_borders[2][1] + 2e-2
+
+    if is_odd:
+        i = int((pos[0] - xMin)/(xMax - xMin)*consts.lut_vox_div[0])
+    else:
+        i = int((xMax - pos[0])/(xMax - xMin)*consts.lut_vox_div[0])
+    j = int((pos[1] - yMin)/(yMax - yMin)*consts.lut_vox_div[1])
+    k = int((pos[2] - zMin)/(zMax - zMin)*consts.lut_vox_div[2])
 
     return i,j,k
 
