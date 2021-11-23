@@ -43,17 +43,10 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
     # Loads in LUT file
     np_lut = np.load(lut_path)
     
-    # Data containers
-    time = np.full((tracks['dE'].size,consts.n_op_channel*2),20.)
-    tphotons = np.zeros((tracks['dE'].size,consts.n_op_channel*2))
-    
     # Defines variables of global position. Currently using the average between the start and end positions of the edep
     x = tracks['x']
     y = tracks['y']
     z = tracks['z']
-
-    # Defining number of produced photons from quencing.py
-    n_photons = light_dep['n_photons_edep']
 
     nEdepSegments = tracks.shape[0]
     
@@ -62,6 +55,9 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
 
         # Global position
         pos = (np.array((x[edepInd],y[edepInd],z[edepInd])))
+
+        # Defining number of produced photons from quencing.py
+        n_photons = light_dep['n_photons_edep'][edepInd]
 
         # tpc
         itpc = tracks["pixel_plane"][edepInd]
@@ -81,17 +77,5 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
         # Gets T1 data for the voxel
         T1_dat = lut_vox[:,1]
 
-        # arclight and LCM modules have a different efficiency
-        # (this should go in the detector properties yaml)
-        OMefficiency = sum([6*[1.],
-                            6*[consts.norm_lcm_acl],
-                            6*[1.],
-                            6*[consts.norm_lcm_acl],
-                            6*[1.],
-                            6*[consts.norm_lcm_acl],
-                            6*[1.],
-                            6*[consts.norm_lcm_acl]],
-                           start = [])
-        
-        for outputInd, eff, vis, t1 in zip(output_channels, OMefficiency, vis_dat, T1_dat):
-            light_incidence[edepInd, outputInd] = (eff*vis*n_photons[edepInd], t1)
+        for outputInd, eff, vis, t1 in zip(output_channels, consts.op_channel_efficiency, vis_dat, T1_dat):
+            light_incidence[edepInd, outputInd] = (eff*vis*n_photons, t1)
