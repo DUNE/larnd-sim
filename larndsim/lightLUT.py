@@ -22,9 +22,9 @@ def get_voxel(pos):
     # i = np.floor(pos[2]/consts.lut_vox_div[2])
     # j = np.floor(pos[1]/consts.lut_vox_div[1])
     # k = np.floor(pos[0]/consts.lut_vox_div[0])
-    i = int((pos[0] - consts.lut_zrange[0])/(consts.lut_zrange[1] - consts.lut_zrange[0])*consts.lut_vox_div[2]) 
+    i = int((pos[0] - consts.lut_xrange[0])/(consts.lut_xrange[1] - consts.lut_xrange[0])*consts.lut_vox_div[2]) 
     j = int((pos[1] - consts.lut_yrange[0])/(consts.lut_yrange[1] - consts.lut_yrange[0])*consts.lut_vox_div[1]) 
-    k = int((pos[2] - consts.lut_xrange[0])/(consts.lut_xrange[1] - consts.lut_xrange[0])*consts.lut_vox_div[0]) 
+    k = int((pos[2] - consts.lut_zrange[0])/(consts.lut_zrange[1] - consts.lut_zrange[0])*consts.lut_vox_div[0]) 
 
     print('\n\n\n\n')
     print(pos)
@@ -34,7 +34,7 @@ def get_voxel(pos):
     return i,j,k
 
 
-def get_half_det_copy(pos):
+def get_tpc(pos):
     """
     Determines in which TPC the edep takes place.
     This should actually call the detector properties yaml.
@@ -59,7 +59,6 @@ def larnd_to_lut_coord(pos, itpc):
         :obj:`numpy.ndarray`: list of x, y, z coordinates translated to the LUT system
     """
     # shifts the larnd coord to the LUT coord system
-    lut_pos = pos - consts.tpc_offsets[itpc]*consts.cm2mm 
 
     if pos[2] < 0:
         lut_pos -= np.array([0,0,consts.lut_zrange[0]])
