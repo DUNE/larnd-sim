@@ -21,11 +21,12 @@ def get_voxel(pos, itpc):
 
     tpc_borders = consts.tpc_borders[itpc]
 
-    # if we are in an "odd" TPC, we need to rotate x 
+    # If we are in an "odd" TPC, we need to rotate x 
     # this is to preserve the "left/right"-ness of the optical channels
     # with respect to the anode plane
     is_odd = tpc_borders[2][1] > tpc_borders[2][0]
 
+    # Assigns tpc borders to variables 
     xMin = tpc_borders[0][0] - 2e-2
     xMax = tpc_borders[0][1] + 2e-2
     yMin = tpc_borders[1][0] - 2e-2
