@@ -11,12 +11,12 @@ from . import consts
 
 def get_voxel(pos, itpc):
     """
-    Indexes the ID of the voxel in which the edep occurs in.
+    Finds and returns the indices of the voxel in which the edep occurs.
     Args:
         pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC volume
         itpc (int): index of the tpc corresponding to this position (calculated in drift)
     Returns:
-        :obj:`numpy.float64`: index of the voxel containing the input position
+        (tuple) indices (in x, y, z dimensions) of the voxel containing the input position
     """
 
     tpc_borders = consts.tpc_borders[itpc]
