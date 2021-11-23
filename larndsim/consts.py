@@ -30,11 +30,6 @@ ScintPreScale = 0.03
 #: Ion + excitation work function
 Wph = 19.5e-6 # MeV
 
-## Light Sim params
-# Number of optical channels
-n_op_channel = 48
-norm_lcm_acl = 14.9
-
 ## TPC params
 #: Drift velocity in :math:`cm/\mu s`
 vdrift = 0.1648 # cm / us,
@@ -78,10 +73,9 @@ tile_orientations = {}
 tile_map = ()
 tile_chip_to_io = {}
 drift_length = 0
-lut_xrange = ()
-lut_yrange = ()
-lut_zrange = ()
 lut_vox_div = ()
+n_op_channel = 0
+op_channel_efficiency = []
 
 variable_types = {
     "eventID": "u4",
@@ -141,10 +135,9 @@ def load_detector_properties(detprop_file, pixel_file):
     global tile_map
     global tile_chip_to_io
     global drift_length
-    global lut_xrange
-    global lut_yrange
-    global lut_zrange
     global lut_vox_div
+    global n_op_channel
+    global op_channel_efficiency
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -164,10 +157,9 @@ def load_detector_properties(detprop_file, pixel_file):
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
 
-    lut_xrange = detprop['lut_xrange']
-    lut_yrange = detprop['lut_yrange']
-    lut_zrange = detprop['lut_zrange']
     lut_vox_div = detprop['lut_vox_div']
+    n_op_channel = detprop['n_op_channel']
+    op_channel_efficiency = detprop['op_channel_efficiency']
 
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
@@ -209,12 +201,3 @@ def load_detector_properties(detprop_file, pixel_file):
     #: Number of pixels per axis
     n_pixels = len(np.unique(xs))*ntiles_x, len(np.unique(ys))*ntiles_y
     n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
-
-
-# hacky stuff for lightLUT that probably belongs in the module descriptor files
-# Numpy array containing the number of TPCs on the x,y and z axis respectively
-n_tpc = [2,1,1] 
-# Numpy array showing the x,y and z sizes of the modules of the TPC
-ModuleDimension = [670.,2022.414,670.]
-# Numpy array displaying the number of modules in the x,y and z axis
-n_mod = [1,1,1]
