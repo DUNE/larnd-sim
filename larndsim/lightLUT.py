@@ -98,7 +98,7 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
         # Calls data from voxel
         lut_vox = np_lut[voxel[0], voxel[1], voxel[2],:,:]
 
-        # Indices corresponding the the channels in a given tpc
+        # Indices corresponding to the channels in a given tpc
         output_channels = np.arange(consts.n_op_channel) + int(itpc*consts.n_op_channel)
 
         # Calls visibility data for the voxel
