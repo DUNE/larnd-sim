@@ -21,12 +21,15 @@ def get_voxel(pos, itpc):
 
     tpc_borders = consts.tpc_borders[itpc]
 
-    # If we are in an "odd" TPC, we need to rotate x 
+    # If we are in an "odd" TPC, that is, if the index of 
+    # the tpc is an odd number, we need to rotate x 
     # this is to preserve the "left/right"-ness of the optical channels
     # with respect to the anode plane
-    is_odd = tpc_borders[2][1] > tpc_borders[2][0]
+    is_even = tpc_borders[2][1] > tpc_borders[2][0]
 
-    # Assigns tpc borders to variables 
+    # Assigns tpc borders to variables
+    # +- 2e-2 mimics the logic used in drifting.py to prevent event 
+    # voxel indicies from being located outside the LUT
     xMin = tpc_borders[0][0] - 2e-2
     xMax = tpc_borders[0][1] + 2e-2
     yMin = tpc_borders[1][0] - 2e-2
@@ -34,9 +37,14 @@ def get_voxel(pos, itpc):
     zMin = tpc_borders[2][0] - 2e-2
     zMax = tpc_borders[2][1] + 2e-2
 
-    if is_odd:
+    # Determines which voxel the event takes place in
+    # based on the fractional dstance the event takes place in the volume
+    # for the x, y, and z dimensions
+    if is_even:
         i = int((pos[0] - xMin)/(xMax - xMin)*consts.lut_vox_div[0])
     else:
+        # if is_even, is false we measure i from the xMax side
+        # rather than the xMin side as means of rotating the x component
         i = int((xMax - pos[0])/(xMax - xMin)*consts.lut_vox_div[0])
     j = int((pos[1] - yMin)/(yMax - yMin)*consts.lut_vox_div[1])
     k = int((pos[2] - zMin)/(zMax - zMin)*consts.lut_vox_div[2])
@@ -63,11 +71,13 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
     # Loads in LUT file
     np_lut = np.load(lut_path)
     
-    # Defines variables of global position. Currently using the average between the start and end positions of the edep
+    # Defines variables of global position. 
+    # Currently using the average between the start and end positions of the edep
     x = tracks['x']
     y = tracks['y']
     z = tracks['z']
 
+    # Determines number of edeps
     nEdepSegments = tracks.shape[0]
     
     # Loop edep positions
@@ -79,23 +89,24 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
         # Defining number of produced photons from quencing.py
         n_photons = light_dep['n_photons_edep'][edepInd]
 
-        # tpc
+        # Identifies which tpc event takes place in
         itpc = tracks["pixel_plane"][edepInd]
         
-        # voxel containing LUT position
+        # Voxel containing LUT position
         voxel = get_voxel(pos, itpc)
         
-        # Calls data on voxel
+        # Calls data from voxel
         lut_vox = np_lut[voxel[0], voxel[1], voxel[2],:,:]
 
-        # the indices corresponding the the channels in a given tpc
+        # Indices corresponding the the channels in a given tpc
         output_channels = np.arange(consts.n_op_channel) + int(itpc*consts.n_op_channel)
 
-        # Gets visibility data for the voxel
+        # Calls visibility data for the voxel
         vis_dat = lut_vox[:,0]
 
-        # Gets T1 data for the voxel
+        # Calls T1 data for the voxel
         T1_dat = lut_vox[:,1]
 
+        # Assigns the LUT data to the light_incidence array
         for outputInd, eff, vis, t1 in zip(output_channels, consts.op_channel_efficiency, vis_dat, T1_dat):
             light_incidence[edepInd, outputInd] = (eff*vis*n_photons, t1)
