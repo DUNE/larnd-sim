@@ -399,9 +399,8 @@ information</p></li>
 <li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
 where S is the number of track segments, P is the number of pixels, and T is
 the number of time ticks. The output is stored here.</p></li>
-<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x 2, where S is
-the number of track segments, P is the number of pixels and the third dimension
-contains the two pixel ID numbers.</p></li>
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
+the number of track segments, P is the number of pixels and contains the pixel ID number.</p></li>
 <li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
 <li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
 </ul>
