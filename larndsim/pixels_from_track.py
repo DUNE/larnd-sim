@@ -93,7 +93,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
             t["pixel_plane"])
 
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], t["pixel_plane"], active_pixels[itrk])
-
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])

@@ -232,11 +232,11 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    px, py, plane_id = id2pixel(pixel_id)
+    i_x, i_y, plane_id = id2pixel(pixel_id)
 
     this_border = tpc_borders[int(plane_id)]
-    pix_x = px * consts.pixel_pitch + this_border[0][0]
-    pix_y = py * consts.pixel_pitch + this_border[1][0]
+    pix_x = i_x * consts.pixel_pitch + this_border[0][0]
+    pix_y = i_y * consts.pixel_pitch + this_border[1][0]
 
     return pix_x,pix_y
 
@@ -276,9 +276,8 @@ def tracks_current(signals, pixels, tracks, response):
         signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
             where S is the number of track segments, P is the number of pixels, and T is
             the number of time ticks. The output is stored here.
-        pixels (:obj:`numpy.ndarray`): 3D array with dimensions S x P x 2, where S is
-            the number of track segments, P is the number of pixels and the third dimension
-            contains the two pixel ID numbers.
+        pixels (:obj:`numpy.ndarray`): 2D array with dimensions S x P , where S is
+            the number of track segments, P is the number of pixels and contains the pixel ID number.
         tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
         response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
     """
@@ -288,8 +287,9 @@ def tracks_current(signals, pixels, tracks, response):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+        pID_x, pID_y, pID_plane = id2pixel(pID)
 
-        if pID >= 0:
+        if pID_x >= 0 and pID_y >= 0:
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
