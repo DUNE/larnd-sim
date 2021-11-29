@@ -32,6 +32,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename='',
                    response_file='../larndsim/response_44.npy',
+                   light_lut_filename='../larndsim/lightLUT.npy',
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None):
@@ -74,7 +75,7 @@ def run_simulation(input_filename,
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
-    from larndsim import quenching, drifting, detsim, pixels_from_track, fee
+    from larndsim import quenching, drifting, detsim, pixels_from_track, fee, lightLUT
     RangePop()
 
     RangePush("load_pixel_thresholds")
@@ -104,14 +105,19 @@ def run_simulation(input_filename,
             input_has_vertices = False
 
     RangePop()
+    
+    # Makes an empty array to store data from lightlut 
+    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_det','f4'),('t0_det','f4')]
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
 
     RangePush("slicing_and_swapping")
+
     if n_tracks:
         tracks = tracks[:n_tracks]
+        light_sim_dat = light_sim_dat[:n_tracks]
 
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -149,6 +155,12 @@ def run_simulation(input_filename,
     RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
+
+    print("Calculating optical responses...",end='')
+    start_lightLUT = time()
+    lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
+    end_lightLUT = time()
+    print(f" {end_lightLUT-start_lightLUT:.2f} s")
 
     # initialize lists to collect results from GPU
     event_id_list = []
@@ -346,6 +358,7 @@ def run_simulation(input_filename,
 
     with h5py.File(output_filename, 'a') as f:
         f.create_dataset("tracks", data=tracks)
+        f.create_dataset('light_dat', data = light_sim_dat)
         if input_has_trajectories:
             f.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
