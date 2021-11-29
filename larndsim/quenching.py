@@ -48,5 +48,4 @@ def quench(tracks, mode):
             raise RuntimeError("Invalid recombination value")
 
         tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
-
         tracks[itrk]["n_photons"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale

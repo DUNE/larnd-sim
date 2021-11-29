@@ -77,6 +77,7 @@ tile_chip_to_io = {}
 drift_length = 0
 lut_vox_div = ()
 n_op_channel = 0
+light_simulated = True
 op_channel_efficiency = []
 
 variable_types = {
@@ -145,6 +146,7 @@ def load_detector_properties(detprop_file, pixel_file):
     global op_channel_efficiency
     global module_to_io_groups
     global response_sampling
+    global light_simulated
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -166,11 +168,14 @@ def load_detector_properties(detprop_file, pixel_file):
     long_diff = detprop['long_diff']
     tran_diff = detprop['tran_diff']
     response_sampling = detprop['response_sampling']
-
-    lut_vox_div = detprop['lut_vox_div']
-    n_op_channel = detprop['n_op_channel']
-    op_channel_efficiency = detprop['op_channel_efficiency']
-
+    
+    try: 
+        lut_vox_div = detprop['lut_vox_div']
+        n_op_channel = detprop['n_op_channel']
+        op_channel_efficiency = detprop['op_channel_efficiency']
+    except KeyError:
+        light_simulated = False
+    
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
 
