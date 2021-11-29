@@ -107,7 +107,7 @@ def run_simulation(input_filename,
     RangePop()
     
     # Makes an empty array to store data from lightlut 
-    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype = [('n_photons_det','f4'),('t0_det','f4')]
+    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
