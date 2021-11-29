@@ -24,6 +24,7 @@ def quench(tracks, mode):
 
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
+        light_dat (:obj:`numpy.ndarray`): array containing the light production information
         mode (int): recombination model.
     """
     itrk = cuda.grid(1)
@@ -47,3 +48,5 @@ def quench(tracks, mode):
             raise RuntimeError("Invalid recombination value")
 
         tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
+
+        tracks[itrk]["n_photons"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale
