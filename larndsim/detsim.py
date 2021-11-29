@@ -8,8 +8,9 @@ from math import pi, ceil, sqrt, erf, exp, log
 import numba as nb
 
 from numba import cuda
-from .consts import tpc_borders, time_interval, n_pixels
+from .consts import tpc_borders, time_interval
 from . import consts
+from .pixels_from_track import id2pixel
 
 import logging
 logging.basicConfig()
@@ -17,10 +18,10 @@ logger = logging.getLogger('detsim')
 logger.setLevel(logging.WARNING)
 logger.info("DETSIM MODULE PARAMETERS")
 
-MAX_TRACKS_PER_PIXEL = 10
+MAX_TRACKS_PER_PIXEL = 5
 
 @cuda.jit
-def time_intervals(track_starts, time_max, event_id_map, tracks):
+def time_intervals(track_starts, time_max, tracks):
     """
     Find the value of the longest signal time and stores the start
     time of each segment.
@@ -42,7 +43,7 @@ def time_intervals(track_starts, time_max, event_id_map, tracks):
         t_end = min(time_interval[1], round((track["t_end"] + 1) / consts.t_sampling) * consts.t_sampling)
         t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
         t_length = t_end - t_start
-        track_starts[itrk] = t_start + event_id_map[itrk] * time_interval[1] * 3
+        track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
 
 @nb.njit
@@ -231,11 +232,11 @@ def get_pixel_coordinates(pixel_id):
     """
     Returns the coordinates of the pixel center given the pixel ID
     """
-    plane_id = pixel_id[0] // n_pixels[0]
+    i_x, i_y, plane_id = id2pixel(pixel_id)
 
     this_border = tpc_borders[int(plane_id)]
-    pix_x = (pixel_id[0] - n_pixels[0] * plane_id) * consts.pixel_pitch + this_border[0][0]
-    pix_y = pixel_id[1] * consts.pixel_pitch + this_border[1][0]
+    pix_x = i_x * consts.pixel_pitch + this_border[0][0]
+    pix_y = i_y * consts.pixel_pitch + this_border[1][0]
 
     return pix_x,pix_y
 
@@ -254,8 +255,8 @@ def get_closest_waveform(x, y, t, response):
     Returns:
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
-    dt = 0.5e-1
-    bin_width = 0.038
+    dt = consts.response_sampling
+    bin_width = consts.pixel_pitch / 10
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
@@ -275,9 +276,8 @@ def tracks_current(signals, pixels, tracks, response):
         signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
             where S is the number of track segments, P is the number of pixels, and T is
             the number of time ticks. The output is stored here.
-        pixels (:obj:`numpy.ndarray`): 3D array with dimensions S x P x 2, where S is
-            the number of track segments, P is the number of pixels and the third dimension
-            contains the two pixel ID numbers.
+        pixels (:obj:`numpy.ndarray`): 2D array with dimensions S x P , where S is
+            the number of track segments, P is the number of pixels and contains the pixel ID number.
         tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
         response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
     """
@@ -287,8 +287,9 @@ def tracks_current(signals, pixels, tracks, response):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+        pID_x, pID_y, pID_plane = id2pixel(pID)
 
-        if pID[0] >= 0 and pID[1] >= 0:
+        if pID_x >= 0 and pID_y >= 0:
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
@@ -441,7 +442,7 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
         for ipix in range(pixels.shape[1]):
             pID = pixels[itrk][ipix]
 
-            if upix[0] == pID[0] and upix[1] == pID[1]:
+            if upix == pID:
 
                 imap = 0
                 while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
