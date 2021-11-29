@@ -120,7 +120,6 @@ def load_detector_properties(detprop_file, pixel_file):
     global ys
     global pixel_pitch
     global tpc_borders
-    global tpc_offsets
     global pixel_connection_dict
     global n_pixels
     global n_pixels_per_tile
