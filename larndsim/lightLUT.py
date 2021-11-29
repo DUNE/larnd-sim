@@ -51,7 +51,7 @@ def get_voxel(pos, itpc):
 
     return i,j,k
 
-def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
+def calculate_light_incidence(tracks, lut_path, light_incidence):
     """
     Simulates the number of photons read by each optical channel depending on 
         where the edep occurs as well as the time it takes for a photon to reach the 
@@ -87,7 +87,7 @@ def calculate_light_incidence(tracks, lut_path, light_dep, light_incidence):
         pos = (np.array((x[edepInd],y[edepInd],z[edepInd])))
 
         # Defining number of produced photons from quencing.py
-        n_photons = light_dep['n_photons_edep'][edepInd]
+        n_photons = tracks['n_photons_edep'][edepInd]
 
         # Identifies which tpc event takes place in
         itpc = tracks["pixel_plane"][edepInd]

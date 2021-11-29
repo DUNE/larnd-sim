@@ -15,7 +15,7 @@ logger.setLevel(logging.WARNING)
 logger.info("QUENCHING MODULE PARAMETERS")
 
 @cuda.jit
-def quench(tracks, light_dat, mode):
+def quench(tracks, mode):
     """
     This CUDA kernel takes as input an array of track segments and calculates
     the number of electrons that reach the anode plane after recombination.
@@ -49,4 +49,4 @@ def quench(tracks, light_dat, mode):
 
         tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
 
-        light_dat[itrk]["n_photons_edep"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale
+        tracks[itrk]["n_photons_edep"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale
