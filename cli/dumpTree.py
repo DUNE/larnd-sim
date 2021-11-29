@@ -125,7 +125,7 @@ def dump(input_file, output_file):
                                ('pixel_plane', 'u4'), ('t_end', 'f4'),
                                ('dEdx', 'f4'), ('dE', 'f4'), ('t', 'f4'),
                                ('y', 'f4'), ('x', 'f4'), ('z', 'f4'),
-                               ('n_photons_edep','f4')])
+                               ('n_photons','f4')])
 
     trajectories_dtype = np.dtype([('eventID', 'u4'), ('trackID', 'u4'),
                                    ('parentID', 'i4'),
@@ -208,7 +208,7 @@ def dump(input_file, output_file):
                 segment[iHit]['long_diff'] = 0
                 segment[iHit]['tran_diff'] = 0
                 segment[iHit]['pixel_plane'] = 0
-                segment[iHit]['n_photons_edep'] = 0
+                segment[iHit]['n_photons'] = 0
             segments_list.append(segment)
     trajectories_list = np.concatenate(trajectories_list, axis=0)
     segments_list = np.concatenate(segments_list, axis=0)

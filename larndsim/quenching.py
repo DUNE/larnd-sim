@@ -49,4 +49,4 @@ def quench(tracks, mode):
 
         tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
 
-        tracks[itrk]["n_photons_edep"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale
+        tracks[itrk]["n_photons"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale

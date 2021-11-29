@@ -87,7 +87,7 @@ def calculate_light_incidence(tracks, lut_path, light_incidence):
         pos = (np.array((x[edepInd],y[edepInd],z[edepInd])))
 
         # Defining number of produced photons from quencing.py
-        n_photons = tracks['n_photons_edep'][edepInd]
+        n_photons = tracks['n_photons'][edepInd]
 
         # Identifies which tpc event takes place in
         itpc = tracks["pixel_plane"][edepInd]
