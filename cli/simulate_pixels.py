@@ -11,6 +11,7 @@ import fire
 import h5py
 
 from numba.cuda.random import create_xoroshiro128p_states
+import numpy.lib.recfunctions as rfn
 
 from tqdm import tqdm
 
@@ -107,7 +108,8 @@ def run_simulation(input_filename,
     RangePop()
     
     # Makes an empty array to store data from lightlut 
-    light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
+    if consts.light_simulated:
+        light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -117,7 +119,12 @@ def run_simulation(input_filename,
 
     if n_tracks:
         tracks = tracks[:n_tracks]
-        light_sim_dat = light_sim_dat[:n_tracks]
+        if consts.light_simulated:
+            light_sim_dat = light_sim_dat[:n_tracks]
+    
+    if 'n_photons' not in selected_tracks.dtype.names:
+        n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
+        tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -156,11 +163,12 @@ def run_simulation(input_filename,
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
 
-    print("Calculating optical responses...",end='')
-    start_lightLUT = time()
-    lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
-    end_lightLUT = time()
-    print(f" {end_lightLUT-start_lightLUT:.2f} s")
+    if consts.light_simulated:
+        print("Calculating optical responses...",end='')
+        start_lightLUT = time()
+        lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
+        end_lightLUT = time()
+        print(f" {end_lightLUT-start_lightLUT:.2f} s")
 
     # initialize lists to collect results from GPU
     event_id_list = []
