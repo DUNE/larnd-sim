@@ -15,7 +15,7 @@ class TestQuenching:
     #normal valid values
     tracks = np.zeros((100, 22))
     tracks = np.core.records.fromarrays(tracks.transpose(), 
-                                        names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
+                                        names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, n_photons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
                                         formats = "i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, i8")
     tracks["dE"] = np.random.uniform(0.1, 100, 100)
     tracks["dEdx"] = np.random.uniform(1, 100, 100)
@@ -24,14 +24,14 @@ class TestQuenching:
     #a track with dEdx = 0, dE was set to 1 (any non-zero value) to test the recombination factor calculation
     track_zero = np.zeros((1,22))
     track_zero = np.core.records.fromarrays(track_zero.transpose(), 
-                                            names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
+                                            names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, n_photons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
                                            formats = "i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, i8")
     track_zero["dE"] = 1
 
     #a track with extremely high dEdx
     track_inf = np.zeros((1,22))
     track_inf = np.core.records.fromarrays(track_inf.transpose(), 
-                                           names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
+                                           names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, n_photons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
                                            formats = "i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, i8")
     track_inf["dE"] = 1e10
     track_inf["dEdx"] = 1e10

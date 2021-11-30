@@ -44,7 +44,7 @@ class TestCudaDict:
         filename = os.path.join(tmpdir, 'test_cd.npz')
         CudaDict.save(filename, cd)
 
-        new_cd = CudaDict.load(filename, tpb=cd.tpb, bpg=cd.bpg)
+        new_cd = CudaDict.load(filename, tpb=cd.tpb)
         assert len(new_cd) == len(cd)
         assert cp.all(cd.contains(new_cd.keys()))
         assert cp.all(new_cd.contains(cd.keys()))
