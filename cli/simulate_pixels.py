@@ -31,7 +31,7 @@ LOGO = """
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
-                   output_filename='',
+                   output_filename,
                    response_file='../larndsim/response_44.npy',
                    light_lut_filename='../larndsim/lightLUT.npy',
                    bad_channels=None,
@@ -122,7 +122,7 @@ def run_simulation(input_filename,
         if consts.light_simulated:
             light_sim_dat = light_sim_dat[:n_tracks]
     
-    if 'n_photons' not in selected_tracks.dtype.names:
+    if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
