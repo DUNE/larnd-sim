@@ -6,13 +6,8 @@ through the detector
 from math import log, isnan
 from numba import cuda
 
+from .consts import detector, physics, light
 from . import consts
-
-import logging
-logging.basicConfig()
-logger = logging.getLogger('quenching')
-logger.setLevel(logging.WARNING)
-logger.info("QUENCHING MODULE PARAMETERS")
 
 @cuda.jit
 def quench(tracks, mode):
@@ -24,7 +19,6 @@ def quench(tracks, mode):
 
     Args:
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
-        light_dat (:obj:`numpy.ndarray`): array containing the light production information
         mode (int): recombination model.
     """
     itrk = cuda.grid(1)
@@ -34,18 +28,18 @@ def quench(tracks, mode):
         dE = tracks[itrk]["dE"]
 
         recomb = 0
-        if mode == consts.box:
+        if mode == physics.BOX:
             # Baller, 2013 JINST 8 P08005
-            csi = consts.beta * dEdx / (consts.eField * consts.lArDensity)
-            recomb = max(0, log(consts.alpha + csi)/csi)
-        elif mode == consts.birks:
+            csi = physics.BOX_BETA * dEdx / (detector.E_FIELD * detector.LAR_DENSITY)
+            recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
+        elif mode == physics.BIRKS:
             # Amoruso, et al NIM A 523 (2004) 275
-            recomb = consts.Ab / (1 + consts.kb * dEdx / (consts.eField * consts.lArDensity))
+            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
         else:
             raise ValueError("Invalid recombination mode: must be 'box' or 'birks'")
 
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk]["n_electrons"] = recomb * dE * consts.MeVToElectrons
-        tracks[itrk]["n_photons"] = (dE/consts.Wph - tracks[itrk]["n_electrons"])*consts.ScintPreScale
+        tracks[itrk]["n_electrons"] = recomb * dE * consts.MEV2ELECTRONS
+        tracks[itrk]["n_photons"] = (dE/light.WPH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

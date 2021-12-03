@@ -2,7 +2,7 @@
 
 import setuptools
 
-VER = "0.1.0"
+VER = "0.2.1"
 
 setuptools.setup(
     name="larndsim",
@@ -13,7 +13,7 @@ setuptools.setup(
     url="https://github.com/DUNE/larnd-sim",
     packages=setuptools.find_packages(),
     scripts=["cli/simulate_pixels.py", "cli/dumpTree.py"],
-    install_requires=["numpy", "pytest", "numba==0.52", "larpix-control", "larpix-geometry", "tqdm", "fire", "cupy"],
+    install_requires=["numpy", "pytest", "numba", "larpix-control", "larpix-geometry", "tqdm", "fire"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: by End-User Class :: Developers",
