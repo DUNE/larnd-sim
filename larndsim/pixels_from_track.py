@@ -23,22 +23,31 @@ def pixel2id(pixel_x, pixel_y, pixel_plane):
     return pixel_x + N_PIXELS[0] * (pixel_y + N_PIXELS[1] * pixel_plane)
 
 @nb.njit
-def id2pixel(id):
+def id2pixel(pid):
     """
     Convert the unique pixel identifer to an x,y,plane tuple
 
     Args:
-        id (int): unique pixel identifier
+        pid (int): unique pixel identifier
     Returns:
-        pixel_x (int): number of pixel pitches in x-dimension
-        pixel_y (int): number of pixel pitches in y-dimension
-        pixel_plane (int): pixel plane number
+        tuple: number of pixel pitches in x-dimension,
+            number of pixel pitches in y-dimension,
+            pixel plane number
     """
-    return (id % N_PIXELS[0], (id // N_PIXELS[0]) % N_PIXELS[1],
-            (id // (N_PIXELS[0] * N_PIXELS[1])))
+    return (pid % N_PIXELS[0], (pid // N_PIXELS[0]) % N_PIXELS[1],
+            (pid // (N_PIXELS[0] * N_PIXELS[1])))
 
 @cuda.jit
 def max_pixels(tracks, n_max_pixels):
+    """
+    CUDA kernels that calculates the maximum number of pixels in the
+    selected tracks.
+
+    Args:
+        tracks (:obj:`numpy.ndarray`): tracks array.
+        n_max_pixels (:obj:`numpy.ndarray`): array to store the maximum
+            number of pixels in the selected tracks.
+    """
     itrk = cuda.grid(1)
 
     if itrk < tracks.shape[0]:
@@ -53,7 +62,7 @@ def max_pixels(tracks, n_max_pixels):
         cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
 
 @cuda.jit
-def get_pixels(tracks, active_pixels, neighboring_pixels, N_PIXELS_list, radius):
+def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
     """
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
@@ -67,7 +76,7 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, N_PIXELS_list, radius)
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments and the ones next to them
-        N_PIXELS_list (:obj:`numpy.ndarray`): number of total involved
+        n_pixels_list (:obj:`numpy.ndarray`): number of total involved
             pixels
         radius (int): number of pixels around the active pixels that
             we are considering
@@ -85,8 +94,9 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, N_PIXELS_list, radius)
             int((t["y_end"] - this_border[1][0]) // PIXEL_PITCH),
             t["pixel_plane"])
 
-        get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1], t["pixel_plane"], active_pixels[itrk])
-        N_PIXELS_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
+        get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1],
+                          t["pixel_plane"], active_pixels[itrk])
+        n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
                                                      neighboring_pixels[itrk])
 
@@ -105,6 +115,10 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
         tot_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
+
+    Returns:
+        int: number of pixels intercepted by the projection of the
+            track on the anode plane.
     """
     dx = abs(x1 - x0)
     sx = 1 if x0 < x1 else -1
@@ -112,15 +126,15 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     sy = 1 if y0 < y1 else -1
     err = dx + dy
 
-    n=0
+    n = 0
     if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
-        n+=1
+        n += 1
 
     while x0 != x1 or y0 != y1:
 
         e2 = 2*err
 
-        if (e2 - dy > dx - e2):
+        if e2 - dy > dx - e2:
             err += dy
             x0 += sx
         else:
@@ -128,7 +142,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
             y0 += sy
 
         if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
-            n+=1
+            n += 1
 
     return n
 
@@ -165,7 +179,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
 
         e2 = 2*err
 
-        if (e2 - dy > dx - e2):
+        if e2 - dy > dx - e2:
             err += dy
             x0 += sx
         else:
@@ -198,7 +212,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
 
     for pix in range(active_pixels.shape[0]):
 
-        if (active_pixels[pix] == -1):
+        if active_pixels[pix] == -1:
             continue
 
         for x_r in range(-radius, radius+1):
