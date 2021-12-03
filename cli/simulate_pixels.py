@@ -212,7 +212,7 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event segments...', ncols=80):
+        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event %i segments...' % ievd, ncols=80):
             selected_tracks = evt_tracks[itrk:itrk+TRACK_STEP]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
