@@ -6,17 +6,22 @@ from math import ceil
 from time import time
 
 import numpy as np
+import numpy.lib.recfunctions as rfn
+
 import cupy as cp
+from cupy.cuda.nvtx import RangePush, RangePop
+
 import fire
 import h5py
 
 from numba.cuda.random import create_xoroshiro128p_states
-import numpy.lib.recfunctions as rfn
 
 from tqdm import tqdm
 
 from larndsim import consts
 from larndsim.cuda_dict import CudaDict
+
+TRACK_STEP = 2000
 
 LOGO = """
   _                      _            _
@@ -27,6 +32,29 @@ LOGO = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
+
+def swap_coordinates(tracks):
+    """
+    Swap x and z coordinates in tracks.
+    This is because the convention in larnd-sim is different
+    from the convention in edep-sim. FIXME.
+
+    Args:
+        tracks (:obj:`numpy.ndarray`): tracks array.
+    """
+    x_start = np.copy(tracks['x_start'] )
+    x_end = np.copy(tracks['x_end'])
+    x = np.copy(tracks['x'])
+
+    tracks['x_start'] = np.copy(tracks['z_start'])
+    tracks['x_end'] = np.copy(tracks['z_end'])
+    tracks['x'] = np.copy(tracks['z'])
+
+    tracks['z_start'] = x_start
+    tracks['z_end'] = x_end
+    tracks['z'] = x
+
+    return tracks
 
 def run_simulation(input_filename,
                    pixel_layout,
@@ -57,8 +85,6 @@ def run_simulation(input_filename,
     """
     start_simulation = time()
 
-    from cupy.cuda.nvtx import RangePush, RangePop
-
     RangePush("run_simulation")
 
     print(LOGO)
@@ -70,7 +96,8 @@ def run_simulation(input_filename,
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
     RangePush("load_detector_properties")
-    consts.load_detector_properties(detector_properties, pixel_layout)
+    consts.load_properties(detector_properties, pixel_layout)
+    from larndsim.consts import light, detector, physics
     RangePop()
 
     RangePush("load_larndsim_modules")
@@ -89,7 +116,6 @@ def run_simulation(input_filename,
 
     RangePush("load_hd5_file")
     # First of all we load the edep-sim output
-    # For this sample we need to invert $z$ and $y$ axes
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
         try:
@@ -106,38 +132,27 @@ def run_simulation(input_filename,
             input_has_vertices = False
 
     RangePop()
-    
-    # Makes an empty array to store data from lightlut 
-    if consts.light_simulated:
-        light_sim_dat = np.zeros([len(tracks),consts.n_op_channel*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
+
+    # Makes an empty array to store data from lightlut
+    if light.LIGHT_SIMULATED:
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
 
-    RangePush("slicing_and_swapping")
-
     if n_tracks:
         tracks = tracks[:n_tracks]
-        if consts.light_simulated:
+        if light.LIGHT_SIMULATED:
             light_sim_dat = light_sim_dat[:n_tracks]
-    
+
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
-    x_start = np.copy(tracks['x_start'] )
-    x_end = np.copy(tracks['x_end'])
-    x = np.copy(tracks['x'])
-
-    tracks['x_start'] = np.copy(tracks['z_start'])
-    tracks['x_end'] = np.copy(tracks['z_end'])
-    tracks['x'] = np.copy(tracks['z'])
-
-    tracks['z_start'] = x_start
-    tracks['z_end'] = x_end
-    tracks['z'] = x
-    RangePop()
+    # Here we swap the x and z coordinates of the tracks
+    # because of the different convention in larnd-sim wrt edep-sim
+    tracks = swap_coordinates(tracks)
 
     response = cp.load(response_file)
 
@@ -149,21 +164,17 @@ def run_simulation(input_filename,
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons...",end='')
     start_quenching = time()
-    RangePush("quench")
-    quenching.quench[BPG,TPB](tracks, consts.birks)
-    RangePop()
+    quenching.quench[BPG,TPB](tracks, physics.BIRKS)
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
     print("Drifting electrons...",end='')
     start_drifting = time()
-    RangePush("drift")
     drifting.drift[BPG,TPB](tracks)
-    RangePop()
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
 
-    if consts.light_simulated:
+    if light.LIGHT_SIMULATED:
         print("Calculating optical responses...",end='')
         start_lightLUT = time()
         lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
@@ -187,7 +198,6 @@ def run_simulation(input_filename,
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
     step = 1
-    track_step = 2000
     tot_events = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...', ncols=80):
         start_tracks_batch = time()
@@ -202,8 +212,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], track_step), desc='  Event segments...', ncols=80):
-            selected_tracks = evt_tracks[itrk:itrk+track_step]
+        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event %i segments...' % ievd, leave=False, ncols=80):
+            selected_tracks = evt_tracks[itrk:itrk+TRACK_STEP]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
             unique_eventIDs = np.unique(event_ids)
@@ -213,13 +223,15 @@ def run_simulation(input_filename,
             # the anode plane using the Bresenham's algorithm. We also take into
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("pixels_from_track")
-            max_radius = ceil(max(selected_tracks["tran_diff"])*5/consts.pixel_pitch)
+            max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
 
             TPB = 128
             BPG = ceil(selected_tracks.shape[0] / TPB)
             max_pixels = np.array([0])
             pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
 
+            # This formula tries to estimate the maximum number of pixels which can have
+            # a current induced on them.
             max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
 
             active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
@@ -258,17 +270,17 @@ def run_simulation(input_filename,
             signals = cp.zeros((selected_tracks.shape[0],
                                 neighboring_pixels.shape[1],
                                 cp.asnumpy(max_length)[0]), dtype=np.float32)
-            threadsperblock = (1,1,64)
-            blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
-            blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
-            blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
-            blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            detsim.tracks_current[blockspergrid,threadsperblock](signals,
-                                                                 neighboring_pixels,
-                                                                 selected_tracks,
-                                                                 response)
-
+            TPB = (1,1,64)
+            BPG_X = ceil(signals.shape[0] / TPB[0])
+            BPG_Y = ceil(signals.shape[1] / TPB[1])
+            BPG_Z = ceil(signals.shape[2] / TPB[2])
+            BPG = (BPG_X, BPG_Y, BPG_Z)
+            detsim.tracks_current[BPG,TPB](signals,
+                                           neighboring_pixels,
+                                           selected_tracks,
+                                           response)
             RangePop()
+
             RangePush("pixel_index_map")
             # Here we create a map between tracks and index in the unique pixel array
             pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
@@ -288,35 +300,34 @@ def run_simulation(input_filename,
 
             RangePush("sum_pixels_signals")
             # Here we combine the induced current on the same pixels by different tracks
-            threadsperblock = (8,8,8)
-            blockspergrid_x = ceil(signals.shape[0] / threadsperblock[0])
-            blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
-            blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
-            blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            pixels_signals = cp.zeros((len(unique_pix), len(consts.time_ticks)))
-            pixels_tracks_signals = cp.zeros((len(unique_pix),len(consts.time_ticks),track_pixel_map.shape[1]))
-            detsim.sum_pixel_signals[blockspergrid,threadsperblock](pixels_signals,
-                                                                    signals,
-                                                                    track_starts,
-                                                                    pixel_index_map,
-                                                                    track_pixel_map,
-                                                                    pixels_tracks_signals)
+            TPB = (8,8,8)
+            BPG_X = ceil(signals.shape[0] / TPB[0])
+            BPG_Y = ceil(signals.shape[1] / TPB[1])
+            BPG_Z = ceil(signals.shape[2] / TPB[2])
+            BPG = (BPG_X, BPG_Y, BPG_Z)
+            pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
+            pixels_tracks_signals = cp.zeros((len(unique_pix),len(detector.TIME_TICKS),track_pixel_map.shape[1]))
+            detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
+                                              signals,
+                                              track_starts,
+                                              pixel_index_map,
+                                              track_pixel_map,
+                                              pixels_tracks_signals)
             RangePop()
 
             RangePush("get_adc_values")
             # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-            time_ticks = cp.linspace(0, len(unique_eventIDs)*consts.time_interval[1], pixels_signals.shape[1]+1)
+            time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
             integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
             adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
+            current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-
-            current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
             rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
-            orig_shape = unique_pix.shape
-            pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(orig_shape)
+            pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
 
             fee.get_adc_values[BPG, TPB](pixels_signals,
                                          pixels_tracks_signals,
@@ -364,14 +375,15 @@ def run_simulation(input_filename,
                        bad_channels=bad_channels)
     RangePop()
 
-    with h5py.File(output_filename, 'a') as f:
-        f.create_dataset("tracks", data=tracks)
-        f.create_dataset('light_dat', data = light_sim_dat)
+    with h5py.File(output_filename, 'a') as output_file:
+        output_file.create_dataset("tracks", data=tracks)
+        if light.LIGHT_SIMULATED:
+            output_file.create_dataset('light_dat', data=light_sim_dat)
         if input_has_trajectories:
-            f.create_dataset("trajectories", data=trajectories)
+            output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
-            f.create_dataset("eventTruth", data=vertices)
-        f['configs'].attrs['pixel_layout'] = pixel_layout
+            output_file.create_dataset("eventTruth", data=vertices)
+        output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
 
