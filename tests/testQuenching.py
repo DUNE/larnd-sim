@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from larndsim import quenching
-from larndsim import consts
+from larndsim.consts import detector, physics
 
 from math import ceil
 
@@ -44,12 +44,12 @@ class TestQuenching:
 
         TPB = 128
         BPG = ceil(tracks_birks.shape[0] / TPB)
-        quenching.quench[BPG,TPB](tracks_birks, consts.birks)
+        quenching.quench[BPG,TPB](tracks_birks, physics.BIRKS)
         nelectrons = tracks_birks["n_electrons"]
 
-        recomb = consts.Ab / (1 + consts.kb * dedx / (consts.eField * consts.lArDensity))
+        recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dedx / (detector.E_FIELD * detector.LAR_DENSITY))
 
-        assert nelectrons == pytest.approx(recomb * de * consts.MeVToElectrons)
+        assert nelectrons == pytest.approx(recomb * de * physics.MEV2ELECTRONS)
 
     def test_boxModel(self):
 
@@ -59,13 +59,13 @@ class TestQuenching:
 
         TPB = 128
         BPG = ceil(tracks_box.shape[0] / TPB)
-        quenching.quench[BPG,TPB](tracks_box, consts.box)
+        quenching.quench[BPG,TPB](tracks_box, physics.BOX)
         nelectrons = tracks_box["n_electrons"]
 
-        csi = consts.beta * dedx / (consts.eField * consts.lArDensity)
-        recomb = np.log(consts.alpha + csi)/csi
+        csi = physics.BOX_BETA * dedx / (detector.E_FIELD * detector.LAR_DENSITY)
+        recomb = np.log(physics.BOX_ALPHA + csi)/csi
 
-        assert nelectrons == pytest.approx(recomb * de * consts.MeVToElectrons)
+        assert nelectrons == pytest.approx(recomb * de * physics.MEV2ELECTRONS)
 
     def test_birksModel_zero(self):
 
@@ -74,12 +74,12 @@ class TestQuenching:
 
         TPB = 1
         BPG = 1
-        quenching.quench[BPG,TPB](track_birks_zero, consts.birks)
+        quenching.quench[BPG,TPB](track_birks_zero, physics.BIRKS)
         nelectrons = track_birks_zero["n_electrons"]
 
-        recomb = consts.Ab
+        recomb = physics.BIRKS_Ab
 
-        assert nelectrons == pytest.approx(recomb * de * consts.MeVToElectrons)
+        assert nelectrons == pytest.approx(recomb * de * physics.MEV2ELECTRONS)
 
     def test_boxModel_zero(self):
 
@@ -88,12 +88,12 @@ class TestQuenching:
 
         TPB = 1
         BPG = 1
-        quenching.quench[BPG,TPB](tracks_box_zero, consts.box)
+        quenching.quench[BPG,TPB](tracks_box_zero, physics.BOX)
         nelectrons = tracks_box_zero["n_electrons"]
 
         recomb = 0.0
 
-        assert nelectrons == pytest.approx(recomb * de * consts.MeVToElectrons)
+        assert nelectrons == pytest.approx(recomb * de * physics.MEV2ELECTRONS)
 
     def test_birksModel_inf(self):
 
@@ -102,10 +102,10 @@ class TestQuenching:
 
         TPB = 1
         BPG = 1
-        quenching.quench[BPG,TPB](track_birks_inf, consts.birks)
+        quenching.quench[BPG,TPB](track_birks_inf, physics.BIRKS)
         nelectrons = track_birks_inf["n_electrons"]
 
-        recomb = nelectrons/(de * consts.MeVToElectrons)
+        recomb = nelectrons/(de * physics.MEV2ELECTRONS)
 
         assert recomb > 0 and recomb < 1e-6
 
@@ -116,9 +116,9 @@ class TestQuenching:
 
         TPB = 1
         BPG = 1
-        quenching.quench[BPG,TPB](tracks_box_inf, consts.box)
+        quenching.quench[BPG,TPB](tracks_box_inf, physics.BOX)
         nelectrons = tracks_box_inf["n_electrons"]
 
-        recomb = nelectrons/(de * consts.MeVToElectrons)
+        recomb = nelectrons/(de * physics.MEV2ELECTRONS)
 
         assert recomb > 0 and recomb < 1e-6

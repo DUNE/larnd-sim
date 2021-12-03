@@ -27,8 +27,6 @@ def time_intervals(track_starts, time_max, tracks):
             we store the segments start time
         time_max (:obj:`numpy.ndarray`): array where we store
             the longest signal time
-        event_id_map (:obj:`numpy.ndarray`): array containing
-            the event ID corresponding to each track
         tracks (:obj:`numpy.ndarray`): array containing the segment
             information
     """
@@ -166,6 +164,14 @@ def truncexpon(x, loc=0, scale=1):
     """
     A truncated exponential distribution.
     To shift and/or scale the distribution use the `loc` and `scale` parameters.
+    
+    Args:
+        x (float): where to evaluate the function
+        loc (float, optional): shift position of the distribution. Defaults to 0.
+        scale (float, optional): scale the distribution. Defaults to 1.
+        
+    Returns:
+        float: exp(-(x-loc)/scale)/scale
     """
     y = (x-loc)/scale
 
@@ -370,6 +376,12 @@ def tracks_current(signals, pixels, tracks, response):
 def sign(x):
     """
     Sign function
+    
+    Args:
+        x (float): input number
+    
+    Returns:
+        int: 1 if x>=0 else -1
     """
     return 1 if x >= 0 else -1
 

@@ -4,7 +4,7 @@ Set global variables with detector and physics properties
 from . import detector, light
 
 MM2CM = 0.1
-MEV2ELECTRONS = 4.237e+04
+CM2MM = 10
 
 def load_properties(detprop_file, pixel_file):
     """
