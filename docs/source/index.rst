@@ -45,6 +45,15 @@ Constants
 
 .. automodule:: larndsim.consts
     :members:
+    
+.. automodule:: larndsim.consts.detector
+    :members:
+
+.. automodule:: larndsim.consts.physics
+    :members:
+
+.. automodule:: larndsim.consts.light
+    :members:
 
 Indices and tables
 ==================
