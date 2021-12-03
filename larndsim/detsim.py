@@ -252,7 +252,7 @@ def get_closest_waveform(x, y, t, response):
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
     dt = detector.RESPONSE_SAMPLING
-    bin_width = detector.PIXEL_PITCH * consts.CM2MM
+    bin_width = detector.PIXEL_PITCH * consts.MM2CM
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
