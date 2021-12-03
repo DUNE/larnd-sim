@@ -92,7 +92,12 @@
 <li><a class="reference internal" href="#module-larndsim.detsim">Detector simulation stage</a></li>
 <li><a class="reference internal" href="#module-larndsim.pixels_from_track">Pixel finder utility</a></li>
 <li><a class="reference internal" href="#electronics-module">Electronics module</a></li>
-<li><a class="reference internal" href="#module-larndsim.consts">Constants</a></li>
+<li><a class="reference internal" href="#module-larndsim.consts">Constants</a><ul>
+<li><a class="reference internal" href="#module-larndsim.consts.detector">Detector constants</a></li>
+<li><a class="reference internal" href="#module-larndsim.consts.physics">Physics constants</a></li>
+<li><a class="reference internal" href="#module-larndsim.consts.light">Light constants</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
@@ -167,6 +172,8 @@
 <h1>Welcome to larnd-sim’s documentation!<a class="headerlink" href="#welcome-to-larnd-sim-s-documentation" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 </div>
+<p>This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.</p>
+<p>The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the <a class="reference external" href="https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html">LArPix HDF5 format</a>.</p>
 <div class="section" id="module-larndsim.quenching">
 <span id="quenching-stage"></span><h2>Quenching stage<a class="headerlink" href="#module-larndsim.quenching" title="Permalink to this headline">¶</a></h2>
 <p>Module to implement the quenching of the ionized electrons
@@ -628,7 +635,9 @@ as global variables</p>
 </dl>
 </dd></dl>
 
-<span class="target" id="module-larndsim.consts.detector"></span><p>Set detector constants</p>
+<div class="section" id="module-larndsim.consts.detector">
+<span id="detector-constants"></span><h3>Detector constants<a class="headerlink" href="#module-larndsim.consts.detector" title="Permalink to this headline">¶</a></h3>
+<p>Set detector constants</p>
 <dl class="data">
 <dt id="larndsim.consts.detector.DRIFT_LENGTH">
 <code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">DRIFT_LENGTH</code><em class="property"> = 0</em><a class="headerlink" href="#larndsim.consts.detector.DRIFT_LENGTH" title="Permalink to this definition">¶</a></dt>
@@ -802,7 +811,10 @@ filename</p></li>
 </dl>
 </dd></dl>
 
-<span class="target" id="module-larndsim.consts.physics"></span><p>Set physics constants</p>
+</div>
+<div class="section" id="module-larndsim.consts.physics">
+<span id="physics-constants"></span><h3>Physics constants<a class="headerlink" href="#module-larndsim.consts.physics" title="Permalink to this headline">¶</a></h3>
+<p>Set physics constants</p>
 <dl class="data">
 <dt id="larndsim.consts.physics.BIRKS_Ab">
 <code class="sig-prename descclassname">larndsim.consts.physics.</code><code class="sig-name descname">BIRKS_Ab</code><em class="property"> = 0.8</em><a class="headerlink" href="#larndsim.consts.physics.BIRKS_Ab" title="Permalink to this definition">¶</a></dt>
@@ -845,7 +857,10 @@ filename</p></li>
 <dd><p>Average energy expended per ion pair in LAr in <span class="math notranslate nohighlight">\(eV\)</span> from Phys. Rev. A 10, 1452</p>
 </dd></dl>
 
-<span class="target" id="module-larndsim.consts.light"></span><p>Sets ligth-related constants</p>
+</div>
+<div class="section" id="module-larndsim.consts.light">
+<span id="light-constants"></span><h3>Light constants<a class="headerlink" href="#module-larndsim.consts.light" title="Permalink to this headline">¶</a></h3>
+<p>Sets ligth-related constants</p>
 <dl class="data">
 <dt id="larndsim.consts.light.WPH">
 <code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">WPH</code><em class="property"> = 1.95e-05</em><a class="headerlink" href="#larndsim.consts.light.WPH" title="Permalink to this definition">¶</a></dt>
@@ -864,6 +879,7 @@ and stores the light-related constants as global variables</p>
 </dl>
 </dd></dl>
 
+</div>
 </div>
 </div>
 <div class="section" id="indices-and-tables">

@@ -9,6 +9,10 @@ Welcome to larnd-sim's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   
+This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.
+
+The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the `LArPix HDF5 format <https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html>`_.
 
 Quenching stage
 ###############
@@ -46,11 +50,20 @@ Constants
 .. automodule:: larndsim.consts
     :members:
     
+Detector constants
+**********************
+    
 .. automodule:: larndsim.consts.detector
     :members:
 
+Physics constants
+**********************
+
 .. automodule:: larndsim.consts.physics
     :members:
+
+Light constants
+**********************
 
 .. automodule:: larndsim.consts.light
     :members:
