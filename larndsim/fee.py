@@ -264,7 +264,7 @@ def get_adc_values(pixels_signals,
         while ic < curre.shape[0] or adc_busy > 0:
 
             if iadc >= MAX_ADC_VALUES:
-                print("More ADC values than possible, ", MAX_ADC_VALUES)
+                print("More ADC values than possible,", MAX_ADC_VALUES)
                 break
 
             if ic < curre.shape[0]:
