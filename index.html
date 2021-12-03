@@ -87,6 +87,7 @@
               <!-- Local TOC -->
               <div class="local-toc"><ul>
 <li><a class="reference internal" href="#">Welcome to larnd-sim’s documentation!</a><ul>
+<li><a class="reference internal" href="#module-cli">Command-line interface</a></li>
 <li><a class="reference internal" href="#module-larndsim.quenching">Quenching stage</a></li>
 <li><a class="reference internal" href="#module-larndsim.drifting">Drifting stage</a></li>
 <li><a class="reference internal" href="#module-larndsim.detsim">Detector simulation stage</a></li>
@@ -174,6 +175,9 @@
 </div>
 <p>This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.</p>
 <p>The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the <a class="reference external" href="https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html">LArPix HDF5 format</a>.</p>
+<div class="section" id="module-cli">
+<span id="command-line-interface"></span><h2>Command-line interface<a class="headerlink" href="#module-cli" title="Permalink to this headline">¶</a></h2>
+</div>
 <div class="section" id="module-larndsim.quenching">
 <span id="quenching-stage"></span><h2>Quenching stage<a class="headerlink" href="#module-larndsim.quenching" title="Permalink to this headline">¶</a></h2>
 <p>Module to implement the quenching of the ionized electrons
@@ -182,14 +186,14 @@ through the detector</p>
 <dt id="larndsim.quenching.quench">
 <code class="sig-prename descclassname">larndsim.quenching.</code><code class="sig-name descname">quench</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">mode</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.quenching.quench" title="Permalink to this definition">¶</a></dt>
 <dd><p>This CUDA kernel takes as input an array of track segments and calculates
-the number of electrons that reach the anode plane after recombination.
+the number of electrons and photons that reach the anode plane after recombination.
 It is possible to pick among two models: Box (Baller, 2013 JINST 8 P08005) or
 Birks (Amoruso, et al NIM A 523 (2004) 275).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p></li>
-<li><p><strong>mode</strong> (<em>int</em>) – recombination model.</p></li>
+<li><p><strong>mode</strong> (<em>int</em>) – recombination model (physics.BOX or physics.BIRKS).</p></li>
 </ul>
 </dd>
 </dl>
@@ -862,8 +866,14 @@ filename</p></li>
 <span id="light-constants"></span><h3>Light constants<a class="headerlink" href="#module-larndsim.consts.light" title="Permalink to this headline">¶</a></h3>
 <p>Sets ligth-related constants</p>
 <dl class="data">
-<dt id="larndsim.consts.light.WPH">
-<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">WPH</code><em class="property"> = 1.95e-05</em><a class="headerlink" href="#larndsim.consts.light.WPH" title="Permalink to this definition">¶</a></dt>
+<dt id="larndsim.consts.light.SCINT_PRESCALE">
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">SCINT_PRESCALE</code><em class="property"> = 1</em><a class="headerlink" href="#larndsim.consts.light.SCINT_PRESCALE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prescale factor analogous to ScintPreScale in LArSoft FIXME</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.consts.light.W_PH">
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">W_PH</code><em class="property"> = 1.95e-05</em><a class="headerlink" href="#larndsim.consts.light.W_PH" title="Permalink to this definition">¶</a></dt>
 <dd><p>Ion + excitation work function in <cite>MeV</cite></p>
 </dd></dl>
 

@@ -14,6 +14,13 @@ This software aims to simulate a pixelated Liquid Argon Time Projection Chamber.
 
 The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the `LArPix HDF5 format <https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html>`_.
 
+Command-line interface
+######################
+
+.. automodule:: cli
+    :members:
+
+
 Quenching stage
 ###############
 
