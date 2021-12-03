@@ -12,16 +12,15 @@ from numba.cuda.random import xoroshiro128p_normal_float32
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
-from glob import glob
-import os
 from tqdm import tqdm
-from . import consts
+from .consts import detector, physics
+
 from .pixels_from_track import id2pixel
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
 #: Discrimination threshold
-DISCRIMINATION_THRESHOLD = 7e3*consts.e_charge
+DISCRIMINATION_THRESHOLD = 7e3 * physics.E_CHARGE
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
@@ -56,17 +55,17 @@ logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
-    axes = consts.tile_orientations[tile_id]
+    axes = detector.TILE_ORIENTATIONS[tile_id]
     x_axis = axes[2]
     y_axis = axes[1]
 
     pix_x = pixel_id[0]
     if x_axis < 0:
-        pix_x = consts.n_pixels_per_tile[0]-pixel_id[0]-1
+        pix_x = detector.N_PIXELS_PER_TILE[0]-pixel_id[0]-1
 
     pix_y = pixel_id[1]
     if y_axis < 0:
-        pix_y = consts.n_pixels_per_tile[1]-pixel_id[1]-1
+        pix_y = detector.N_PIXELS_PER_TILE[1]-pixel_id[1]-1
 
     return pix_x, pix_y
 
@@ -98,8 +97,8 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
     last_event = -1
 
     if bad_channels:
-        with open(bad_channels, 'r') as f:
-            bad_channels_list = yaml.load(f, Loader=yaml.FullLoader)
+        with open(bad_channels, 'r') as bad_channels_file:
+            bad_channels_list = yaml.load(bad_channels_file, Loader=yaml.FullLoader)
 
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
@@ -112,10 +111,10 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
 
         pix_x, pix_y, plane_id = id2pixel(pixel_id)
         module_id = plane_id//2+1
-        tile_x = int(pix_x//consts.n_pixels_per_tile[0])
-        tile_y = int(pix_y//consts.n_pixels_per_tile[1])
+        tile_x = int(pix_x//detector.N_PIXELS_PER_TILE[0])
+        tile_y = int(pix_y//detector.N_PIXELS_PER_TILE[1])
         anode_id = 0 if plane_id % 2 == 0 else 1
-        tile_id = consts.tile_map[anode_id][tile_x][tile_y]
+        tile_id = detector.TILE_MAP[anode_id][tile_x][tile_y]
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
@@ -144,7 +143,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p = Packet_v2()
 
                 try:
-                    chip, channel = consts.pixel_connection_dict[rotate_tile((pix_x%consts.n_pixels_per_tile[0], pix_y%consts.n_pixels_per_tile[1]), tile_id)]
+                    chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x%detector.N_PIXELS_PER_TILE[0], pix_y%detector.N_PIXELS_PER_TILE[1]), tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
                     continue
@@ -153,13 +152,13 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p.timestamp = time_tick
 
                 try:
-                    io_group_io_channel = consts.tile_chip_to_io[tile_id][chip]
+                    io_group_io_channel = detector.TILE_CHIP_TO_IO[tile_id][chip]
                 except KeyError:
                     logger.info("Chip %i on tile %i not found" % (chip, tile_id))
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
-                io_group = consts.module_to_io_groups[module_id][io_group-1]
+                io_group = detector.MODULE_TO_IO_GROUPS[module_id][io_group-1]
                 chip_key = "%i-%i-%i" % (io_group, io_channel, chip)
 
                 if bad_channels:
@@ -194,11 +193,11 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             del f['mc_packets_assn']
         f.create_dataset("mc_packets_assn", data=packets_mc_ds)
 
-        f['configs'].attrs['vdrift'] = consts.vdrift
-        f['configs'].attrs['long_diff'] = consts.long_diff
-        f['configs'].attrs['tran_diff'] = consts.tran_diff
-        f['configs'].attrs['lifetime'] = consts.lifetime
-        f['configs'].attrs['drift_length'] = consts.drift_length
+        f['configs'].attrs['vdrift'] = detector.V_DRIFT
+        f['configs'].attrs['long_diff'] = detector.LONG_DIFF
+        f['configs'].attrs['tran_diff'] = detector.TRAN_DIFF
+        f['configs'].attrs['lifetime'] = detector.ELECTRON_LIFETIME
+        f['configs'].attrs['drift_length'] = detector.DRIFT_LENGTH
 
     return packets, packets_mc_ds
 
@@ -216,7 +215,7 @@ def digitize(integral_list):
     """
     import cupy as cp
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / consts.e_charge + V_PEDESTAL - V_CM), 0)
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / physics.E_CHARGE + V_PEDESTAL - V_CM), 0)
                                 * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
 
     return adcs
@@ -259,7 +258,7 @@ def get_adc_values(pixels_signals,
         ic = 0
         iadc = 0
         adc_busy = 0
-        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
+        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
 #         integrate[ip][ic] = q_sum
 
         while ic < curre.shape[0] or adc_busy > 0:
@@ -269,18 +268,18 @@ def get_adc_values(pixels_signals,
                 break
 
             if ic < curre.shape[0]:
-                q = curre[ic]*consts.t_sampling
+                q = curre[ic] * detector.TIME_SAMPLING
 
                 for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
+                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
             else:
                 q = 0
 
             q_sum += q
 #             integrate[ip][ic] = q_sum
 
-            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
-            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
+            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
 
             if adc_busy > 0:
                 adc_busy -= 1
@@ -288,25 +287,25 @@ def get_adc_values(pixels_signals,
             if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
                 crossing_time_tick = ic
 
-                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / consts.t_sampling)
+                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / detector.TIME_SAMPLING)
                 integrate_end = ic+interval
 
                 ic+=1
 
                 while ic <= integrate_end and ic < curre.shape[0]:
-                    q = curre[ic] * consts.t_sampling
+                    q = curre[ic] * detector.TIME_SAMPLING
                     q_sum += q
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk]*consts.t_sampling
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
 #                     integrate[ip][ic] = q_sum
                     ic+=1
 
-                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
-                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * consts.e_charge
+                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
+                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
 
                 if adc < pixel_thresholds[ip] + disc_noise:
-                    ic += round(CLOCK_CYCLE / consts.t_sampling)
-                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * consts.e_charge
+                    ic += round(CLOCK_CYCLE / detector.TIME_SAMPLING)
+                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
 #                     integrate[ip][ic] = q_sum
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0
@@ -324,10 +323,10 @@ def get_adc_values(pixels_signals,
                 #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
                 adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2
 
-                ic += round(RESET_CYCLES * CLOCK_CYCLE / consts.t_sampling)
-                adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / consts.t_sampling)
-                
-                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * consts.e_charge
+                ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
+                adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
+
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
 #                 integrate[ip][ic] = q_sum
                 iadc += 1
                 continue
