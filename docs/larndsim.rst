@@ -11,6 +11,21 @@ larndsim.consts module
    :members:
    :undoc-members:
    :show-inheritance:
+   
+.. automodule:: larndsim.consts.detector
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: larndsim.consts.physics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   
+.. automodule:: larndsim.consts.light
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 larndsim.detsim module
 ----------------------
