@@ -21,7 +21,7 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.cuda_dict import CudaDict
 
-TRACK_STEP = 2000
+BATCH_SIZE = 4000
 
 LOGO = """
   _                      _            _
@@ -41,6 +41,9 @@ def swap_coordinates(tracks):
 
     Args:
         tracks (:obj:`numpy.ndarray`): tracks array.
+        
+    Returns:
+        :obj:`numpy.ndarray`: tracks with swapped axes. 
     """
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -60,8 +63,8 @@ def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
                    output_filename,
-                   response_file='../larndsim/response_44.npy',
-                   light_lut_filename='../larndsim/lightLUT.npy',
+                   response_file='../larndsim/bin/response_44.npy',
+                   light_lut_file='../larndsim/bin/lightLUT.npy',
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None):
@@ -74,14 +77,18 @@ def run_simulation(input_filename,
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
-        pixel_thresholds_file (str): path to npz file containing pixel thresholds
         output_filename (str): path of the HDF5 output file. If not specified
             the output is added to the input file.
-        response_file: path of the Numpy array containing the pre-calculated
-            field responses
-        bad_channels: path of the YAML file containing the channels to be
-            disabled
-        n_tracks (int, optional): number of tracks to be simulated
+        response_file (str, optional): path of the Numpy array containing the pre-calculated
+            field responses. Defaults to ../larndsim/bin/response_44.npy.
+        light_lut_file (str, optional): path of the Numpy array containing the light
+            look-up table. Defaults to ../larndsim/bin/lightLUT.npy.
+        bad_channels (str, optional): path of the YAML file containing the channels to be
+            disabled. Defaults to None
+        n_tracks (int, optional): number of tracks to be simulated. Defaults to None
+            (all tracks).
+        pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
+            to None.
     """
     start_simulation = time()
 
@@ -199,7 +206,7 @@ def run_simulation(input_filename,
     tracks_batch_runtimes = []
     step = 1
     tot_events = 0
-    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating pixels...', ncols=80):
+    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80):
         start_tracks_batch = time()
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -212,8 +219,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event %i segments...' % ievd, leave=False, ncols=80):
-            selected_tracks = evt_tracks[itrk:itrk+TRACK_STEP]
+        for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE), desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+            selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
             unique_eventIDs = np.unique(event_ids)
