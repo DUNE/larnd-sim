@@ -19,7 +19,6 @@ from numba.cuda.random import create_xoroshiro128p_states
 from tqdm import tqdm
 
 from larndsim import consts
-from larndsim.consts import light, detector, physics
 from larndsim.cuda_dict import CudaDict
 
 TRACK_STEP = 2000
@@ -98,6 +97,7 @@ def run_simulation(input_filename,
         print("Disabled channel list: ", bad_channels)
     RangePush("load_detector_properties")
     consts.load_properties(detector_properties, pixel_layout)
+    from larndsim.consts import light, detector, physics
     RangePop()
 
     RangePush("load_larndsim_modules")
@@ -212,7 +212,7 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event %i segments...' % ievd, ncols=80):
+        for itrk in tqdm(range(0, evt_tracks.shape[0], TRACK_STEP), desc='  Event %i segments...' % ievd, leave=False, ncols=80):
             selected_tracks = evt_tracks[itrk:itrk+TRACK_STEP]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
