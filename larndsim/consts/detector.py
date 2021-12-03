@@ -135,7 +135,7 @@ def set_detector_properties(detprop_file, pixel_file):
 
     tile_indeces = tile_layout['tile_indeces']
     TILE_ORIENTATIONS = tile_layout['tile_orientations']
-    TILE_POSITIONS = tile_layout['tile_positions'] * MM2CM
+    TILE_POSITIONS = tile_layout['tile_positions']
     tpc_ids = np.unique(np.array(list(tile_indeces.values()))[:,0], axis=0)
 
     anodes = defaultdict(list)
@@ -156,12 +156,12 @@ def set_detector_properties(detprop_file, pixel_file):
             tiles = np.vstack(anodes[anode])
             tiles *= MM2CM
             drift_direction = 1 if anode == 1 else -1
-            x_border = min(tiles[:,2]) + TILE_BORDERS[0][0] + tpc_offset[0], \
-                       max(tiles[:,2]) + TILE_BORDERS[0][1] + tpc_offset[0]
-            y_border = min(tiles[:,1]) + TILE_BORDERS[1][0] + tpc_offset[1], \
-                       max(tiles[:,1]) + TILE_BORDERS[1][1] + tpc_offset[1]
-            z_border = min(tiles[:,0]) + tpc_offset[2], \
-                       max(tiles[:,0]) + DRIFT_LENGTH * drift_direction + tpc_offset[2]
+            x_border = min(tiles[:,2] * MM2CM) + TILE_BORDERS[0][0] + tpc_offset[0], \
+                       max(tiles[:,2] * MM2CM) + TILE_BORDERS[0][1] + tpc_offset[0]
+            y_border = min(tiles[:,1] * MM2CM) + TILE_BORDERS[1][0] + tpc_offset[1], \
+                       max(tiles[:,1] * MM2CM) + TILE_BORDERS[1][1] + tpc_offset[1]
+            z_border = min(tiles[:,0] * MM2CM) + tpc_offset[2], \
+                       max(tiles[:,0] * MM2CM) + DRIFT_LENGTH * drift_direction + tpc_offset[2]
             TPC_BORDERS[it*2+ia] = (x_border, y_border, z_border)
 
     TILE_MAP = detprop['tile_map']
