@@ -41,5 +41,5 @@ def quench(tracks, mode):
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk]["n_electrons"] = recomb * dE * consts.MEV2ELECTRONS
+        tracks[itrk]["n_electrons"] = recomb * dE * physics.MEV2ELECTRONS
         tracks[itrk]["n_photons"] = (dE/light.WPH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

@@ -13,9 +13,10 @@ BIRKS_Ab = 0.800
 BIRKS_kb = 0.0486 # g/cm2/MeV Amoruso, et al NIM A 523 (2004) 275
 #: Electron charge in Coulomb
 E_CHARGE = 1.602e-19
-
-#: Ion + excitation work function
-W = 19.5e-6 # MeV
+#: Average energy expended per ion pair in LAr in :math:`eV` from Phys. Rev. A 10, 1452
+W_ION = 23.6
+#: From MeV to electrons in LAr 
+MEV2ELECTRONS = 1/W_ION*1e6
 
 ## Quenching parameters
 BOX = 1
