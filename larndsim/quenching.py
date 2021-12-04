@@ -7,7 +7,6 @@ from math import log, isnan
 from numba import cuda
 
 from .consts import detector, physics, light
-from . import consts
 
 @cuda.jit
 def quench(tracks, mode):
@@ -41,5 +40,5 @@ def quench(tracks, mode):
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk]["n_electrons"] = recomb * dE * physics.MEV2ELECTRONS
+        tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
         tracks[itrk]["n_photons"] = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
