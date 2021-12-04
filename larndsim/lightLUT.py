@@ -13,16 +13,16 @@ from .consts import light
 from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY
 from .consts.detector import TPC_BORDERS
 
-
 @nb.njit
 def get_voxel(pos, itpc):
     """
     Finds and returns the indices of the voxel in which the edep occurs.
+
     Args:
         pos (tuple): x, y, z coordinates within a generic TPC volume
         itpc (int): index of the tpc corresponding to this position (calculated in drift)
     Returns:
-        (tuple) indices (in x, y, z dimensions) of the voxel containing the input position
+        tuple: indices (in x, y, z dimensions) of the voxel containing the input position
     """
 
     this_tpc_borders = TPC_BORDERS[itpc]
@@ -36,26 +36,27 @@ def get_voxel(pos, itpc):
     # Assigns tpc borders to variables
     # +- 2e-2 mimics the logic used in drifting.py to prevent event
     # voxel indicies from being located outside the LUT
-    xMin = this_tpc_borders[0][0] - 2e-2
-    xMax = this_tpc_borders[0][1] + 2e-2
-    yMin = this_tpc_borders[1][0] - 2e-2
-    yMax = this_tpc_borders[1][1] + 2e-2
-    zMin = this_tpc_borders[2][0] - 2e-2
-    zMax = this_tpc_borders[2][1] + 2e-2
+    x_min = this_tpc_borders[0][0] - 2e-2
+    x_max = this_tpc_borders[0][1] + 2e-2
+    y_min = this_tpc_borders[1][0] - 2e-2
+    y_max = this_tpc_borders[1][1] + 2e-2
+    z_min = this_tpc_borders[2][0] - 2e-2
+    z_max = this_tpc_borders[2][1] + 2e-2
 
     # Determines which voxel the event takes place in
     # based on the fractional dstance the event takes place in the volume
     # for the x, y, and z dimensions
     if is_even:
-        i = int((pos[0] - xMin)/(xMax - xMin) * LUT_VOX_DIV[0])
+        i = int((pos[0] - x_min)/(x_max - x_min) * light.LUT_VOX_DIV[0])
     else:
         # if is_even, is false we measure i from the xMax side
         # rather than the xMin side as means of rotating the x component
-        i = int((xMax - pos[0])/(xMax - xMin) * LUT_VOX_DIV[0])
-    j = int((pos[1] - yMin)/(yMax - yMin) * LUT_VOX_DIV[1])
-    k = int((pos[2] - zMin)/(zMax - zMin) * LUT_VOX_DIV[2])
+        i = int((x_max - pos[0])/(x_max - x_min) * light.LUT_VOX_DIV[0])
 
-    return i,j,k
+    j = int((pos[1] - y_min)/(y_max - y_min) * light.LUT_VOX_DIV[1])
+    k = int((pos[2] - z_min)/(z_max - z_min) * light.LUT_VOX_DIV[2])
+
+    return i, j, k
 
 @cuda.jit
 def calculate_light_incidence(tracks, lut, light_incidence):
@@ -63,6 +64,7 @@ def calculate_light_incidence(tracks, lut, light_incidence):
     Simulates the number of photons read by each optical channel depending on
         where the edep occurs as well as the time it takes for a photon to reach the
         nearest photomultiplier tube (the "fastest" photon)
+
     Args:
         tracks (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup.
         lut (:obj:`numpy.ndarray`): Numpy array (.npy) containing light lookup table.
