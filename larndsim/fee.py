@@ -3,6 +3,7 @@ Module that simulates the front-end electronics (triggering, ADC)
 """
 
 import numpy as np
+import cupy as cp
 import h5py
 import yaml
 
@@ -55,6 +56,16 @@ logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
 
 def rotate_tile(pixel_id, tile_id):
+    """
+    Returns the pixel ID of the rotated tile.
+
+    Args:
+        pixel_id(int): pixel ID
+        tile_id(int): tile ID
+
+    Returns:
+        tuple: pixel indeces
+    """
     axes = detector.TILE_ORIENTATIONS[tile_id]
     x_axis = axes[2]
     y_axis = axes[1]
@@ -69,7 +80,14 @@ def rotate_tile(pixel_id, tile_id):
 
     return pix_x, pix_y
 
-def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_fractions, track_ids, filename, bad_channels=None):
+def export_to_hdf5(event_id_list,
+                   adc_list,
+                   adc_ticks_list,
+                   unique_pix,
+                   current_fractions,
+                   track_ids,
+                   filename,
+                   bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -122,12 +140,14 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
             if adc > digitize(0):
                 event = event_id_list[itick,iadc]
                 event_t0 = event_start_time_list[itick]
+
                 if event_t0 > 2**31-1:
                     # 31-bit rollover
                     packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
                     packets_mc.append([-1]*track_ids.shape[1])
                     packets_frac.append([0]*current_fractions.shape[2])
                     event_start_time_list[itick:] -= 2**31
+
                 event_t0 = event_t0 % (2**31)
                 time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)
 
@@ -143,7 +163,9 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 p = Packet_v2()
 
                 try:
-                    chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x%detector.N_PIXELS_PER_TILE[0], pix_y%detector.N_PIXELS_PER_TILE[1]), tile_id)]
+                    chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x % detector.N_PIXELS_PER_TILE[0],
+                                                                                pix_y % detector.N_PIXELS_PER_TILE[1]),
+                                                                   tile_id)]
                 except KeyError:
                     logger.warning("Pixel ID not valid", pixel_id)
                     continue
@@ -154,7 +176,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 try:
                     io_group_io_channel = detector.TILE_CHIP_TO_IO[tile_id][chip]
                 except KeyError:
-                    logger.info("Chip %i on tile %i not found" % (chip, tile_id))
+                    logger.info(f"Chip {chip} on tile {tile_id} not found")
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
@@ -164,7 +186,7 @@ def export_to_hdf5(event_id_list, adc_list, adc_ticks_list, unique_pix, current_
                 if bad_channels:
                     if chip_key in bad_channels_list:
                         if channel in bad_channels_list[chip_key]:
-                            logger.info("Channel %i on chip %s disabled" % (channel, chip_key))
+                            logger.info(f"Channel {channel} on chip {chip_key} disabled")
                             continue
 
                 p.chip_key = chip_key
@@ -213,7 +235,6 @@ def digitize(integral_list):
     Returns:
         : obj: `numpy.ndarray`: list of ADC values for each pixel
     """
-    import cupy as cp
     xp = cp.get_array_module(integral_list)
     adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / physics.E_CHARGE + V_PEDESTAL - V_CM), 0)
                                 * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
