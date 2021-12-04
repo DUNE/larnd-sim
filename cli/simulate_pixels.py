@@ -64,7 +64,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
-                   light_lut_file='../larndsim/bin/lightLUT.npy',
+                   light_lut_filename='../larndsim/bin/lightLUT.npy',
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None):
@@ -184,7 +184,10 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...",end='')
         start_lightLUT = time()
-        lightLUT.calculate_light_incidence(tracks, light_lut_filename, light_sim_dat)
+        lut = cp.load(light_lut_filename)
+        TPB = 256
+        BPG = ceil(tracks.shape[0] / TPB)
+        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
         end_lightLUT = time()
         print(f" {end_lightLUT-start_lightLUT:.2f} s")
 

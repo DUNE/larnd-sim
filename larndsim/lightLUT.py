@@ -4,21 +4,28 @@ location of the edep to the location of each photodetector
 """
 
 import numpy as np
+import numba as nb
+import cupy as cp
 
-from .consts import light, detector
+from numba import cuda
 
+from .consts import light
+from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY
+from .consts.detector import TPC_BORDERS
+
+@nb.njit
 def get_voxel(pos, itpc):
     """
     Finds and returns the indices of the voxel in which the edep occurs.
 
     Args:
-        pos (:obj:`numpy.ndarray`): list of x, y, z coordinates within a generic TPC volume
+        pos (tuple): x, y, z coordinates within a generic TPC volume
         itpc (int): index of the tpc corresponding to this position (calculated in drift)
     Returns:
         tuple: indices (in x, y, z dimensions) of the voxel containing the input position
     """
 
-    this_tpc_borders = detector.TPC_BORDERS[itpc]
+    this_tpc_borders = TPC_BORDERS[itpc]
 
     # If we are in an "odd" TPC, that is, if the index of
     # the tpc is an odd number, we need to rotate x
@@ -51,51 +58,40 @@ def get_voxel(pos, itpc):
 
     return i, j, k
 
-def calculate_light_incidence(tracks, lut_path, light_incidence):
+@cuda.jit
+def calculate_light_incidence(tracks, lut, light_incidence):
     """
     Simulates the number of photons read by each optical channel depending on
         where the edep occurs as well as the time it takes for a photon to reach the
         nearest photomultiplier tube (the "fastest" photon)
 
     Args:
-        tracks (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup
-        lut_path (str): filename of numpy array (.npy) containing light calculation
+        tracks (:obj:`numpy.ndarray`): track array containing edep segments, positions are used for lookup.
+        lut (:obj:`numpy.ndarray`): Numpy array (.npy) containing light lookup table.
         light_incidence (:obj:`numpy.ndarray`): to contain the result of light incidence calculation.
-            this array has dimension (n_tracks, n_optical_channels) and each entry
-            is a structure of type (n_photons_det (float32), t0_det (float32))
-            these correspond to the number detected in each channel (n_photons_edep*visibility),
+            This array has dimension (n_tracks, n_optical_channels) and each entry
+            is a structure of type (n_photons_det (float32), t0_det (float32)).
+            These correspond to the number detected in each channel (n_photons_edep*visibility),
             and the time of earliest arrival at that channel.
     """
+    itrk = cuda.grid(1)
 
-    # Loads in LUT file
-    np_lut = np.load(lut_path)
-
-    # Defines variables of global position.
-    # Currently using the average between the start and end positions of the edep
-    x = tracks['x']
-    y = tracks['y']
-    z = tracks['z']
-
-    # Loop edep positions
-    for edep_i in range(tracks.shape[0]):
+    if itrk < tracks.shape[0]:
 
         # Global position
-        pos = (np.array((x[edep_i],y[edep_i],z[edep_i])))
+        pos = (tracks['x'][itrk],tracks['y'][itrk],tracks['z'][itrk])
 
         # Defining number of produced photons from quencing.py
-        n_photons = tracks['n_photons'][edep_i]
+        n_photons = tracks['n_photons'][itrk]
 
         # Identifies which tpc event takes place in
-        itpc = tracks["pixel_plane"][edep_i]
+        itpc = tracks["pixel_plane"][itrk]
 
         # Voxel containing LUT position
         voxel = get_voxel(pos, itpc)
 
         # Calls data from voxel
-        lut_vox = np_lut[voxel[0], voxel[1], voxel[2],:,:]
-
-        # Indices corresponding to the channels in a given tpc
-        output_channels = np.arange(light.N_OP_CHANNEL) + int(itpc*light.N_OP_CHANNEL)
+        lut_vox = lut[voxel[0], voxel[1], voxel[2],:,:]
 
         # Calls visibility data for the voxel
         vis_dat = lut_vox[:,0]
@@ -104,5 +100,11 @@ def calculate_light_incidence(tracks, lut_path, light_incidence):
         T1_dat = lut_vox[:,1]
 
         # Assigns the LUT data to the light_incidence array
-        for output_i, eff, vis, t1 in zip(output_channels, light.OP_CHANNEL_EFFICIENCY, vis_dat, T1_dat):
-            light_incidence[edep_i, output_i] = (eff*vis*n_photons, t1)
+        for output_i in range(light.N_OP_CHANNEL):
+            op_channel_index = output_i + int(itpc*light.N_OP_CHANNEL)
+            eff = OP_CHANNEL_EFFICIENCY[output_i]
+            vis = vis_dat[output_i]
+            t1 = T1_dat[output_i]
+
+            light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
+            light_incidence['t0_det'][itrk,op_channel_index] = t1
