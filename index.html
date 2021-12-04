@@ -551,12 +551,22 @@ the IDs of the pixels directly below the projection of
 the segments</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>number of pixels intercepted by the projection of the</dt><dd><p>track on the anode plane.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
 </dl>
 </dd></dl>
 
 <dl class="function">
 <dt id="larndsim.pixels_from_track.get_pixels">
-<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_pixels</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">active_pixels</em>, <em class="sig-param">neighboring_pixels</em>, <em class="sig-param">N_PIXELS_list</em>, <em class="sig-param">radius</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_pixels" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">get_pixels</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">active_pixels</em>, <em class="sig-param">neighboring_pixels</em>, <em class="sig-param">n_pixels_list</em>, <em class="sig-param">radius</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.get_pixels" title="Permalink to this definition">¶</a></dt>
 <dd><p>For all tracks, takes the xy start and end position
 and calculates all impacted pixels by the track segment</p>
 <dl class="field-list simple">
@@ -570,7 +580,7 @@ the segments</p></li>
 <li><p><strong>neighboring_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
 the IDs of the pixels directly below the projection of
 the segments and the ones next to them</p></li>
-<li><p><strong>N_PIXELS_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – number of total involved
+<li><p><strong>n_pixels_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – number of total involved
 pixels</p></li>
 <li><p><strong>radius</strong> (<em>int</em>) – number of pixels around the active pixels that
 we are considering</p></li>
@@ -585,15 +595,34 @@ we are considering</p></li>
 <dd><p>Convert the unique pixel identifer to an x,y,plane tuple</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>id</strong> (<em>int</em>) – unique pixel identifier</p>
+<dd class="field-odd"><p><strong>pid</strong> (<em>int</em>) – unique pixel identifier</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>number of pixel pitches in x-dimension
-pixel_y (int): number of pixel pitches in y-dimension
-pixel_plane (int): pixel plane number</p>
+<dd class="field-even"><p><dl class="simple">
+<dt>number of pixel pitches in x-dimension,</dt><dd><p>number of pixel pitches in y-dimension,
+pixel plane number</p>
+</dd>
+</dl>
+</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>pixel_x (int)</p>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.pixels_from_track.max_pixels">
+<code class="sig-prename descclassname">larndsim.pixels_from_track.</code><code class="sig-name descname">max_pixels</code><span class="sig-paren">(</span><em class="sig-param">tracks</em>, <em class="sig-param">n_max_pixels</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.pixels_from_track.max_pixels" title="Permalink to this definition">¶</a></dt>
+<dd><p>CUDA kernels that calculates the maximum number of pixels in the
+selected tracks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – tracks array.</p></li>
+<li><p><strong>n_max_pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array to store the maximum
+number of pixels in the selected tracks.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
