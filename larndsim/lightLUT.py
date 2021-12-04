@@ -47,14 +47,14 @@ def get_voxel(pos, itpc):
     # based on the fractional dstance the event takes place in the volume
     # for the x, y, and z dimensions
     if is_even:
-        i = int((pos[0] - x_min)/(x_max - x_min) * light.LUT_VOX_DIV[0])
+        i = int((pos[0] - x_min)/(x_max - x_min) * LUT_VOX_DIV[0])
     else:
         # if is_even, is false we measure i from the xMax side
         # rather than the xMin side as means of rotating the x component
-        i = int((x_max - pos[0])/(x_max - x_min) * light.LUT_VOX_DIV[0])
+        i = int((x_max - pos[0])/(x_max - x_min) * LUT_VOX_DIV[0])
 
-    j = int((pos[1] - y_min)/(y_max - y_min) * light.LUT_VOX_DIV[1])
-    k = int((pos[2] - z_min)/(z_max - z_min) * light.LUT_VOX_DIV[2])
+    j = int((pos[1] - y_min)/(y_max - y_min) * LUT_VOX_DIV[1])
+    k = int((pos[2] - z_min)/(z_max - z_min) * LUT_VOX_DIV[2])
 
     return i, j, k
 
