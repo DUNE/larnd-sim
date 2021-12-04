@@ -2,11 +2,12 @@
 Sets ligth-related constants
 """
 import yaml
+import numpy as np
 
-LUT_VOX_DIV = ()
+LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
 LIGHT_SIMULATED = True
-OP_CHANNEL_EFFICIENCY = []
+OP_CHANNEL_EFFICIENCY = np.zeros(0)
 #: Prescale factor analogous to ScintPreScale in LArSoft FIXME
 SCINT_PRESCALE = 1
 #: Ion + excitation work function in `MeV`
@@ -30,8 +31,8 @@ def set_light_properties(detprop_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
-        LUT_VOX_DIV = detprop['lut_vox_div']
+        LUT_VOX_DIV = np.array(detprop['lut_vox_div'])
         N_OP_CHANNEL = detprop['n_op_channel']
-        OP_CHANNEL_EFFICIENCY = detprop['op_channel_efficiency']
+        OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
     except KeyError:
         LIGHT_SIMULATED = False
