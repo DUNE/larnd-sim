@@ -3,9 +3,7 @@ Module that simulates the scattering of photons throughout the detector from the
 location of the edep to the location of each photodetector
 """
 
-import numpy as np
 import numba as nb
-import cupy as cp
 
 from numba import cuda
 
