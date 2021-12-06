@@ -33,8 +33,8 @@ RESET_CYCLES = 1
 CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
 GAIN = 4/1e3
-#: Buffer risetime in :math:`\mu s`
-BUFFER_RISETIME = 0.170
+#: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
+BUFFER_RISETIME = 0 # 0.170
 #: Common-mode voltage in :math:`mV`
 V_CM = 288
 #: Reference voltage in :math:`mV`
@@ -291,17 +291,20 @@ def get_adc_values(pixels_signals,
                 print("More ADC values than possible,", MAX_ADC_VALUES)
                 break
 
+            q = 0
             if ic < curre.shape[0]:
-                q = 0
-                for jc in range(last_reset, min(ic+1, curre.shape[0])):
-                    w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
-                    q += curre[jc] * detector.TIME_SAMPLING * w
+                if BUFFER_RISETIME > 0:
+                    for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                        w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                        q += curre[jc] * detector.TIME_SAMPLING * w
 
+                        for itrk in range(current_fractions.shape[2]):
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+
+                else:
+                    q += curre[ic] * detector.TIME_SAMPLING
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
-
-            else:
-                q = 0
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
 
             q_sum += q
 
@@ -321,13 +324,19 @@ def get_adc_values(pixels_signals,
 
                 while ic <= integrate_end and ic < curre.shape[0]:
                     q = 0
-                    
-                    for jc in range(last_reset, min(ic+1, curre.shape[0])):
-                        w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
-                        q += curre[jc] * detector.TIME_SAMPLING * w
 
+                    if BUFFER_RISETIME > 0:
+                        for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                            w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                            q += curre[jc] * detector.TIME_SAMPLING * w
+
+                            for itrk in range(current_fractions.shape[2]):
+                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+
+                    else:
+                        q += curre[ic] * detector.TIME_SAMPLING
                         for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
                             
                     q_sum += q
                     ic+=1
