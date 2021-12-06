@@ -2,9 +2,7 @@ from numba import cuda
 import cupy as cp
 from math import ceil
 
-
 _EMPTY_KEY = 2**31-1
-
 
 class CudaDict(object):
     '''

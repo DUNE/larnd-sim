@@ -8,15 +8,11 @@ from math import pi, ceil, sqrt, erf, exp, log
 import numba as nb
 
 from numba import cuda
-from .consts import tpc_borders, time_interval
-from . import consts
-from .pixels_from_track import id2pixel
 
-import logging
-logging.basicConfig()
-logger = logging.getLogger('detsim')
-logger.setLevel(logging.WARNING)
-logger.info("DETSIM MODULE PARAMETERS")
+from . import consts
+from .consts.detector import TPC_BORDERS, TIME_INTERVAL
+from .consts import detector, physics
+from .pixels_from_track import id2pixel
 
 MAX_TRACKS_PER_PIXEL = 5
 
@@ -31,8 +27,6 @@ def time_intervals(track_starts, time_max, tracks):
             we store the segments start time
         time_max (:obj:`numpy.ndarray`): array where we store
             the longest signal time
-        event_id_map (:obj:`numpy.ndarray`): array containing
-            the event ID corresponding to each track
         tracks (:obj:`numpy.ndarray`): array containing the segment
             information
     """
@@ -40,11 +34,11 @@ def time_intervals(track_starts, time_max, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(time_interval[1], round((track["t_end"] + 1) / consts.t_sampling) * consts.t_sampling)
-        t_start = max(time_interval[0], round((track["t_start"] - consts.time_padding) / consts.t_sampling) * consts.t_sampling)
+        t_end = min(TIME_INTERVAL[1], round((track["t_end"] + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+        t_start = max(TIME_INTERVAL[0], round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
         t_length = t_end - t_start
         track_starts[itrk] = t_start
-        cuda.atomic.max(time_max, 0, ceil(t_length / consts.t_sampling))
+        cuda.atomic.max(time_max, 0, ceil(t_length / detector.TIME_SAMPLING))
 
 @nb.njit
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
@@ -170,6 +164,14 @@ def truncexpon(x, loc=0, scale=1):
     """
     A truncated exponential distribution.
     To shift and/or scale the distribution use the `loc` and `scale` parameters.
+    
+    Args:
+        x (float): where to evaluate the function
+        loc (float, optional): shift position of the distribution. Defaults to 0.
+        scale (float, optional): scale the distribution. Defaults to 1.
+        
+    Returns:
+        float: exp(-(x-loc)/scale)/scale
     """
     y = (x-loc)/scale
 
@@ -234,9 +236,9 @@ def get_pixel_coordinates(pixel_id):
     """
     i_x, i_y, plane_id = id2pixel(pixel_id)
 
-    this_border = tpc_borders[int(plane_id)]
-    pix_x = i_x * consts.pixel_pitch + this_border[0][0]
-    pix_y = i_y * consts.pixel_pitch + this_border[1][0]
+    this_border = TPC_BORDERS[int(plane_id)]
+    pix_x = i_x * detector.PIXEL_PITCH + this_border[0][0]
+    pix_y = i_y * detector.PIXEL_PITCH + this_border[1][0]
 
     return pix_x,pix_y
 
@@ -255,8 +257,8 @@ def get_closest_waveform(x, y, t, response):
     Returns:
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
-    dt = consts.response_sampling
-    bin_width = consts.pixel_pitch / 10
+    dt = detector.RESPONSE_SAMPLING
+    bin_width = detector.PIXEL_PITCH * consts.MM2CM
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
@@ -293,8 +295,8 @@ def tracks_current(signals, pixels, tracks, response):
 
             # Pixel coordinates
             x_p, y_p = get_pixel_coordinates(pID)
-            x_p += consts.pixel_pitch/2
-            y_p += consts.pixel_pitch/2
+            x_p += detector.PIXEL_PITCH / 2
+            y_p += detector.PIXEL_PITCH / 2
 
             if t["z_start"] < t["z_end"]:
                 start = (t["x_start"], t["y_start"], t["z_start"])
@@ -312,7 +314,7 @@ def tracks_current(signals, pixels, tracks, response):
             # The impact factor is the the size of the transverse diffusion or, if too small,
             # half the diagonal of the pixel pad
             impact_factor = max(sqrt((5*sigmas[0])**2 + (5*sigmas[1])**2),
-                                sqrt(consts.pixel_pitch**2 + consts.pixel_pitch**2)/2)*2
+                                sqrt(detector.PIXEL_PITCH**2 + detector.PIXEL_PITCH**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
 #             print(z_poca,z_start,z_end,start[2])
@@ -324,49 +326,49 @@ def tracks_current(signals, pixels, tracks, response):
                 x_start, y_start = track_point(start, direction, z_start)
                 x_end, y_end = track_point(start, direction, z_end)
 
-                y_step = (abs(y_end-y_start) + 8*sigmas[1]) / (consts.sampled_points - 1)
-                x_step = (abs(x_end-x_start) + 8*sigmas[0]) / (consts.sampled_points - 1)
+                y_step = (abs(y_end-y_start) + 8*sigmas[1]) / (detector.SAMPLED_POINTS - 1)
+                x_step = (abs(x_end-x_start) + 8*sigmas[0]) / (detector.SAMPLED_POINTS - 1)
 
-                z_sampling = consts.t_sampling / 2.
-                z_steps = max(consts.sampled_points, ceil(abs(z_end_int-z_start_int) / z_sampling))
+                z_sampling = detector.TIME_SAMPLING / 2.
+                z_steps = max(detector.SAMPLED_POINTS, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(time_interval[0], round((t["t_start"]-consts.time_padding) / consts.t_sampling) * consts.t_sampling)
+                t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
 
                 total_current = 0
 
-                time_tick = t_start + it*consts.t_sampling
+                time_tick = t_start + it * detector.TIME_SAMPLING
 
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    t0 = abs(z - tpc_borders[t["pixel_plane"]][2][0]) / consts.vdrift - consts.time_window
+                    t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
 
-                    if not t0 < time_tick < t0+consts.time_window:
+                    if not t0 < time_tick < t0 + detector.TIME_WINDOW:
                         continue
 
                     # FIXME: this sampling is far from ideal, we should sample around the track
                     # and not in a cube containing the track
-                    for ix in range(consts.sampled_points):
+                    for ix in range(detector.SAMPLED_POINTS):
 
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
-                        if x_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
+                        if x_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
                             continue
 
-                        for iy in range(consts.sampled_points):
+                        for iy in range(detector.SAMPLED_POINTS):
 
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if y_dist > consts.pixel_pitch/2+consts.pixel_pitch/4:
+                            if y_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
                                 continue
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
 
-                            total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * charge * consts.e_charge
+                            total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * charge * physics.E_CHARGE
 
                         signals[itrk,ipix,it] = total_current
 
@@ -374,6 +376,12 @@ def tracks_current(signals, pixels, tracks, response):
 def sign(x):
     """
     Sign function
+    
+    Args:
+        x (float): input number
+    
+    Returns:
+        int: 1 if x>=0 else -1
     """
     return 1 if x >= 0 else -1
 
@@ -403,7 +411,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
         pixel_index = pixel_index_map[itrk][ipix]
-        start_tick = round(track_starts[itrk] / consts.t_sampling)
+        start_tick = round(track_starts[itrk] / detector.TIME_SAMPLING)
 
         if pixel_index >= 0:
             counter = 0
