@@ -92,7 +92,7 @@
 <li><a class="reference internal" href="#module-larndsim.drifting">Drifting stage</a></li>
 <li><a class="reference internal" href="#module-larndsim.detsim">Detector simulation stage</a></li>
 <li><a class="reference internal" href="#module-larndsim.pixels_from_track">Pixel finder utility</a></li>
-<li><a class="reference internal" href="#electronics-module">Electronics module</a></li>
+<li><a class="reference internal" href="#module-larndsim.fee">Electronics module</a></li>
 <li><a class="reference internal" href="#module-larndsim.consts">Constants</a><ul>
 <li><a class="reference internal" href="#module-larndsim.consts.detector">Detector constants</a></li>
 <li><a class="reference internal" href="#module-larndsim.consts.physics">Physics constants</a></li>
@@ -646,8 +646,201 @@ number of pixels in the selected tracks.</p></li>
 </dd></dl>
 
 </div>
-<div class="section" id="electronics-module">
-<h2>Electronics module<a class="headerlink" href="#electronics-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-larndsim.fee">
+<span id="electronics-module"></span><h2>Electronics module<a class="headerlink" href="#module-larndsim.fee" title="Permalink to this headline">¶</a></h2>
+<p>Module that simulates the front-end electronics (triggering, ADC)</p>
+<dl class="data">
+<dt id="larndsim.fee.ADC_BUSY_DELAY">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">ADC_BUSY_DELAY</code><em class="property"> = 8</em><a class="headerlink" href="#larndsim.fee.ADC_BUSY_DELAY" title="Permalink to this definition">¶</a></dt>
+<dd><p>ADC busy delay in clock cycles</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.ADC_COUNTS">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">ADC_COUNTS</code><em class="property"> = 256</em><a class="headerlink" href="#larndsim.fee.ADC_COUNTS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of ADC counts</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.ADC_HOLD_DELAY">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">ADC_HOLD_DELAY</code><em class="property"> = 15</em><a class="headerlink" href="#larndsim.fee.ADC_HOLD_DELAY" title="Permalink to this definition">¶</a></dt>
+<dd><p>ADC hold delay in clock cycles</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.BUFFER_RISETIME">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">BUFFER_RISETIME</code><em class="property"> = 0</em><a class="headerlink" href="#larndsim.fee.BUFFER_RISETIME" title="Permalink to this definition">¶</a></dt>
+<dd><p>Buffer risetime in <span class="math notranslate nohighlight">\(\mu s\)</span> (set &gt;0 to include buffer response simulation)</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.CLOCK_CYCLE">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">CLOCK_CYCLE</code><em class="property"> = 0.1</em><a class="headerlink" href="#larndsim.fee.CLOCK_CYCLE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clock cycle time in <span class="math notranslate nohighlight">\(\mu s\)</span></p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.DISCRIMINATION_THRESHOLD">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">DISCRIMINATION_THRESHOLD</code><em class="property"> = 1.1214e-15</em><a class="headerlink" href="#larndsim.fee.DISCRIMINATION_THRESHOLD" title="Permalink to this definition">¶</a></dt>
+<dd><p>Discrimination threshold</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.DISCRIMINATOR_NOISE">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">DISCRIMINATOR_NOISE</code><em class="property"> = 650</em><a class="headerlink" href="#larndsim.fee.DISCRIMINATOR_NOISE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Discriminator noise in e-</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.EVENT_RATE">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">EVENT_RATE</code><em class="property"> = 1000000</em><a class="headerlink" href="#larndsim.fee.EVENT_RATE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Average time between events in clock cycles</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.GAIN">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">GAIN</code><em class="property"> = 0.004</em><a class="headerlink" href="#larndsim.fee.GAIN" title="Permalink to this definition">¶</a></dt>
+<dd><p>Front-end gain in <span class="math notranslate nohighlight">\(mV/ke-\)</span></p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.MAX_ADC_VALUES">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">MAX_ADC_VALUES</code><em class="property"> = 10</em><a class="headerlink" href="#larndsim.fee.MAX_ADC_VALUES" title="Permalink to this definition">¶</a></dt>
+<dd><p>Maximum number of ADC values stored per pixel</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.RESET_CYCLES">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">RESET_CYCLES</code><em class="property"> = 1</em><a class="headerlink" href="#larndsim.fee.RESET_CYCLES" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset time in clock cycles</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.RESET_NOISE_CHARGE">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">RESET_NOISE_CHARGE</code><em class="property"> = 900</em><a class="headerlink" href="#larndsim.fee.RESET_NOISE_CHARGE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset noise in e-</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.UNCORRELATED_NOISE_CHARGE">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">UNCORRELATED_NOISE_CHARGE</code><em class="property"> = 500</em><a class="headerlink" href="#larndsim.fee.UNCORRELATED_NOISE_CHARGE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Uncorrelated noise in e-</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.V_CM">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_CM</code><em class="property"> = 288</em><a class="headerlink" href="#larndsim.fee.V_CM" title="Permalink to this definition">¶</a></dt>
+<dd><p>Common-mode voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.V_PEDESTAL">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_PEDESTAL</code><em class="property"> = 580</em><a class="headerlink" href="#larndsim.fee.V_PEDESTAL" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pedestal voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.fee.V_REF">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">V_REF</code><em class="property"> = 1300</em><a class="headerlink" href="#larndsim.fee.V_REF" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reference voltage in <span class="math notranslate nohighlight">\(mV\)</span></p>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.fee.digitize">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">digitize</code><span class="sig-paren">(</span><em class="sig-param">integral_list</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.digitize" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function takes as input the integrated charge and returns the digitized
+ADC counts.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>integral_list(</strong> – obj: <cite>numpy.ndarray</cite>): list of charge collected by each pixel</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>obj: <cite>numpy.ndarray</cite>: list of ADC values for each pixel</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.fee.export_to_hdf5">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param">event_id_list</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">unique_pix</em>, <em class="sig-param">current_fractions</em>, <em class="sig-param">track_ids</em>, <em class="sig-param">filename</em>, <em class="sig-param">bad_channels=None</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the ADC counts in the LArPix HDF5 format.
+:Parameters: * <strong>event_id_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of event ids for each ADC value for each pixel</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p></li>
+<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
+<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of pixel IDs</p></li>
+<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the fractional current
+induced by each track on each pixel</p></li>
+<li><p><strong>track_ids</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the track IDs associated
+to each pixel</p></li>
+<li><p><strong>filename</strong> (<em>str</em>) – filename of HDF5 output file</p></li>
+<li><p><strong>bad_channels</strong> (<em>dict</em>) – dictionary containing as value a list of bad channels and as
+the chip key</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>a tuple containing the list of LArPix packets and the list of entries</dt><dd><p>for the <cite>mc_packets_assn</cite> dataset</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.fee.get_adc_values">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">get_adc_values</code><span class="sig-paren">(</span><em class="sig-param">pixels_signals</em>, <em class="sig-param">pixels_signals_tracks</em>, <em class="sig-param">time_ticks</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">time_padding</em>, <em class="sig-param">rng_states</em>, <em class="sig-param">current_fractions</em>, <em class="sig-param">pixel_thresholds</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.get_adc_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implementation of self-trigger logic</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents for
+each pixel</p></li>
+<li><p><strong>pixels_signals_tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents
+for each track that induces current on each pixel</p></li>
+<li><p><strong>time_ticks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
+<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of integrated charges for each
+pixel</p></li>
+<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of the time ticks that
+correspond to each integrated charge</p></li>
+<li><p><strong>time_padding</strong> (<em>float</em>) – time interval to add to each time tick.</p></li>
+<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
+generation</p></li>
+<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain
+the fraction of current induced on the pixel by each track</p></li>
+<li><p><strong>pixel_thresholds(</strong> – obj: <cite>numpy.ndarray</cite>): list of discriminator
+thresholds for each pixel</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.fee.rotate_tile">
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">rotate_tile</code><span class="sig-paren">(</span><em class="sig-param">pixel_id</em>, <em class="sig-param">tile_id</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.rotate_tile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the pixel ID of the rotated tile.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pixel_id</strong> (<em>int</em>) – pixel ID</p></li>
+<li><p><strong>tile_id</strong> (<em>int</em>) – tile ID</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>pixel indeces</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 <div class="section" id="module-larndsim.consts">
 <span id="constants"></span><h2>Constants<a class="headerlink" href="#module-larndsim.consts" title="Permalink to this headline">¶</a></h2>
