@@ -9,6 +9,7 @@ import yaml
 
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
+from math import exp
 
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
@@ -32,6 +33,8 @@ RESET_CYCLES = 1
 CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
 GAIN = 4/1e3
+#: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
+BUFFER_RISETIME = 0 # 0.170
 #: Common-mode voltage in :math:`mV`
 V_CM = 288
 #: Reference voltage in :math:`mV`
@@ -279,8 +282,8 @@ def get_adc_values(pixels_signals,
         ic = 0
         iadc = 0
         adc_busy = 0
+        last_reset = 0
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
-#         integrate[ip][ic] = q_sum
 
         while ic < curre.shape[0] or adc_busy > 0:
 
@@ -288,16 +291,22 @@ def get_adc_values(pixels_signals,
                 print("More ADC values than possible,", MAX_ADC_VALUES)
                 break
 
+            q = 0
             if ic < curre.shape[0]:
-                q = curre[ic] * detector.TIME_SAMPLING
+                if BUFFER_RISETIME > 0:
+                    for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                        w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                        q += curre[jc] * detector.TIME_SAMPLING * w
 
-                for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
-            else:
-                q = 0
+                        for itrk in range(current_fractions.shape[2]):
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+
+                else:
+                    q += curre[ic] * detector.TIME_SAMPLING
+                    for itrk in range(current_fractions.shape[2]):
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
 
             q_sum += q
-#             integrate[ip][ic] = q_sum
 
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
             disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
@@ -314,11 +323,22 @@ def get_adc_values(pixels_signals,
                 ic+=1
 
                 while ic <= integrate_end and ic < curre.shape[0]:
-                    q = curre[ic] * detector.TIME_SAMPLING
+                    q = 0
+
+                    if BUFFER_RISETIME > 0:
+                        for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                            w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                            q += curre[jc] * detector.TIME_SAMPLING * w
+
+                            for itrk in range(current_fractions.shape[2]):
+                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+
+                    else:
+                        q += curre[ic] * detector.TIME_SAMPLING
+                        for itrk in range(current_fractions.shape[2]):
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                            
                     q_sum += q
-                    for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
-#                     integrate[ip][ic] = q_sum
                     ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
@@ -327,9 +347,10 @@ def get_adc_values(pixels_signals,
                 if adc < pixel_thresholds[ip] + disc_noise:
                     ic += round(CLOCK_CYCLE / detector.TIME_SAMPLING)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
-#                     integrate[ip][ic] = q_sum
+
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0
+                    last_reset = ic
                     continue
 
                 tot_backtracked = 0
@@ -345,10 +366,11 @@ def get_adc_values(pixels_signals,
                 adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2
 
                 ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
+                last_reset = ic
                 adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
-
+                
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
-#                 integrate[ip][ic] = q_sum
+
                 iadc += 1
                 continue
 
