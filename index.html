@@ -936,6 +936,12 @@ as global variables</p>
 </dd></dl>
 
 <dl class="data">
+<dt id="larndsim.consts.detector.TEMPERATURE">
+<code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">TEMPERATURE</code><em class="property"> = 87.17</em><a class="headerlink" href="#larndsim.consts.detector.TEMPERATURE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Detector temperature in K</p>
+</dd></dl>
+
+<dl class="data">
 <dt id="larndsim.consts.detector.TILE_BORDERS">
 <code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">TILE_BORDERS</code><em class="property"> = array([[0., 0.],        [0., 0.]])</em><a class="headerlink" href="#larndsim.consts.detector.TILE_BORDERS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Pixel tile borders in <span class="math notranslate nohighlight">\(cm\)</span></p>
@@ -1017,6 +1023,32 @@ as global variables</p>
 <dt id="larndsim.consts.detector.V_DRIFT">
 <code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">V_DRIFT</code><em class="property"> = 0.1648</em><a class="headerlink" href="#larndsim.consts.detector.V_DRIFT" title="Permalink to this definition">¶</a></dt>
 <dd><p>Drift velocity in <span class="math notranslate nohighlight">\(cm/\mu s\)</span></p>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.consts.detector.electron_mobility">
+<code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">electron_mobility</code><span class="sig-paren">(</span><em class="sig-param">efield</em>, <em class="sig-param">temperature</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.consts.detector.electron_mobility" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculation of the electron mobility w.r.t temperature and electric
+field.
+.. rubric:: References</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://lar.bnl.gov/properties/trans.html">https://lar.bnl.gov/properties/trans.html</a> (summary)</p></li>
+<li><p><a class="reference external" href="https://doi.org/10.1016/j.nima.2016.01.073">https://doi.org/10.1016/j.nima.2016.01.073</a> (parameterization)</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>efield</strong> (<em>float</em>) – electric field in kV/cm</p></li>
+<li><p><strong>temperature</strong> (<em>float</em>) – temperature</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>electron mobility in cm^2/kV/us</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="function">
