@@ -258,7 +258,7 @@ def get_closest_waveform(x, y, t, response):
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
     dt = detector.RESPONSE_SAMPLING
-    bin_width = detector.PIXEL_PITCH * consts.MM2CM
+    bin_width = detector.RESPONSE_BIN_SIZE
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
@@ -354,7 +354,7 @@ def tracks_current(signals, pixels, tracks, response):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
-                        if x_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
+                        if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
                             continue
 
                         for iy in range(detector.SAMPLED_POINTS):
@@ -362,7 +362,7 @@ def tracks_current(signals, pixels, tracks, response):
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if y_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
+                            if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                                 continue
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
