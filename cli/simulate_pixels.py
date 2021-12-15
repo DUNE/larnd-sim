@@ -285,10 +285,8 @@ def run_simulation(input_filename,
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            detsim.tracks_current[BPG,TPB](signals,
-                                           neighboring_pixels,
-                                           selected_tracks,
-                                           response)
+            rng_states = create_xoroshiro128p_states(int(np.prod(TPB) * np.prod(BPG)), seed=ievd)
+            detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
             RangePush("pixel_index_map")
