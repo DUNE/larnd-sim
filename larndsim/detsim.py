@@ -8,6 +8,7 @@ from math import pi, ceil, sqrt, erf, exp, log
 import numba as nb
 
 from numba import cuda
+from numba.cuda.random import xoroshiro128p_normal_float32
 
 from . import consts
 from .consts.detector import TPC_BORDERS, TIME_INTERVAL
@@ -15,6 +16,8 @@ from .consts import detector, physics
 from .pixels_from_track import id2pixel
 
 MAX_TRACKS_PER_PIXEL = 5
+MIN_STEP_SIZE = 0.1 # cm
+MC_SAMPLE_MULTIPLIER = 1
 
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
@@ -268,6 +271,88 @@ def get_closest_waveform(x, y, t, response):
         return response[i][j][k]
 
     return 0
+
+@cuda.jit
+def tracks_current_mc(signals, pixels, tracks, response, rng_states):
+    """
+    This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
+    MC method
+
+    Args:
+        signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
+            where S is the number of track segments, P is the number of pixels, and T is
+            the number of time ticks. The output is stored here.
+        pixels (:obj:`numpy.ndarray`): 2D array with dimensions S x P , where S is
+            the number of track segments, P is the number of pixels and contains the pixel ID number.
+        tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
+        response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
+        rng_states (:obj:`numpy.ndarray`): array of random states for noise
+            generation
+    """
+    itrk, ipix, it = cuda.grid(3)
+    
+    if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
+        t = tracks[itrk]
+        pID = pixels[itrk][ipix]
+        pID_x, pID_y, pID_plane = id2pixel(pID)
+
+        if pID_x >= 0 and pID_y >= 0:
+
+            # Pixel coordinates
+            x_p, y_p = get_pixel_coordinates(pID)
+            x_p += detector.PIXEL_PITCH / 2
+            y_p += detector.PIXEL_PITCH / 2
+
+            if t["z_start"] < t["z_end"]:
+                start = (t["x_start"], t["y_start"], t["z_start"])
+                end = (t["x_end"], t["y_end"], t["z_end"])
+            else:
+                end = (t["x_start"], t["y_start"], t["z_start"])
+                start = (t["x_end"], t["y_end"], t["z_end"])
+                
+            t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+            time_tick = t_start + it * detector.TIME_SAMPLING
+
+            segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
+            length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
+
+            direction = (segment[0]/length, segment[1]/length, segment[2]/length)
+            sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
+            step = max(min(sigmas), MIN_STEP_SIZE) # minimum resolution of 0.1mm
+            nstep = round(length/step)
+            
+            sample_q = t["n_electrons"] / (MC_SAMPLE_MULTIPLIER * nstep)
+            
+            total_current = 0
+            for istep in range(nstep):
+                for _ in range(MC_SAMPLE_MULTIPLIER):
+                    x = start[0] + istep * direction[0]
+                    y = start[1] + istep * direction[1]
+                    z = start[2] + istep * direction[2]
+                    
+                    # apply diffusion
+                    x += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[0]
+                    y += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[1]
+                    z += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[2]
+                    
+                    t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+
+                    if not t0 < time_tick < t0 + detector.TIME_WINDOW:
+                        continue
+                        
+                    x_dist = abs(x_p - x)
+                    y_dist = abs(y_p - y)
+                    if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
+                        continue
+                    if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
+                        continue
+                    
+                    total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * sample_q * physics.E_CHARGE
+
+            signals[itrk,ipix,it] = total_current
+                    
+            
+            
 
 @cuda.jit
 def tracks_current(signals, pixels, tracks, response):
