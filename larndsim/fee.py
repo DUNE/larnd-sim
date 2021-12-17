@@ -115,12 +115,13 @@ def export_to_hdf5(event_id_list,
     packets_mc = []
     packets_frac = []
 
+    packets.append(TimestampPacket())
+    packets_mc.append([-1] * track_ids.shape[1])
+    packets_frac.append([0] * current_fractions.shape[2])
     for io_group in io_groups:
-        packets.append(TimestampPacket(io_group=io_group))
         packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
-        for _ in range(2):
-            packets_mc.append([-1] * track_ids.shape[1])
-            packets_frac.append([0] * current_fractions.shape[2])
+        packets_mc.append([-1] * track_ids.shape[1])
+        packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
     last_event = -1
@@ -149,22 +150,25 @@ def export_to_hdf5(event_id_list,
             t = ts[iadc]
 
             if adc > digitize(0):
-                event = event_id_list[itick,iadc]
-                event_t0 = event_start_time_list[itick]
-                time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
+                while True:
+                    event = event_id_list[itick,iadc]
+                    event_t0 = event_start_time_list[itick]
+                    time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
 
-                if event_t0 > 2**31 - 1 or time_tick > 2**31 - 1:
-                    # 31-bit rollover
-                    rollover_count += 1
-                    for io_group in io_groups:
-                        packets.append(TimestampPacket(io_group=io_group,
-                                                       timestamp=floor(rollover_count * (2**31) * CLOCK_CYCLE * 1e-6)))
-                        packets.append(SyncPacket(sync_type=b'S',
-                                                  timestamp=(2**31), io_group=io_group))
-                        for _ in range(2):
+                    if event_t0 > 2**31 - 1 or time_tick > 2**31 - 1:
+                        # 31-bit rollover
+                        rollover_count += 1
+                        packets.append(TimestampPacket(timestamp=floor(rollover_count * (2**31) * CLOCK_CYCLE * 1e-6)))
+                        packets_mc.append([-1] * track_ids.shape[1])
+                        packets_frac.append([0] * current_fractions.shape[2])
+                        for io_group in io_groups:
+                            packets.append(SyncPacket(sync_type=b'S',
+                                                      timestamp=(2**31), io_group=io_group))
                             packets_mc.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
-                    event_start_time_list[itick:] -= 2**31
+                        event_start_time_list[itick:] -= 2**31
+                    else:
+                        break
 
                 event_t0 = event_t0 % (2**31)
                 time_tick = time_tick % (2**31)
