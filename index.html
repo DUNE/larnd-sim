@@ -304,6 +304,13 @@ track.</p></li>
 </dd></dl>
 
 <dl class="attribute">
+<dt id="larndsim.detsim.overlapping_segment">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">overlapping_segment</code><a class="headerlink" href="#larndsim.detsim.overlapping_segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the segment of the track defined by start, end that overlaps
+with a circle centered at x,y</p>
+</dd></dl>
+
+<dl class="attribute">
 <dt id="larndsim.detsim.rho">
 <code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">rho</code><a class="headerlink" href="#larndsim.detsim.rho" title="Permalink to this definition">¶</a></dt>
 <dd><p>Function that returns the amount of charge at a certain point in space</p>
@@ -423,6 +430,28 @@ the number of time ticks. The output is stored here.</p></li>
 the number of track segments, P is the number of pixels and contains the pixel ID number.</p></li>
 <li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
 <li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="larndsim.detsim.tracks_current_mc">
+<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">tracks_current_mc</code><span class="sig-paren">(</span><em class="sig-param">signals</em>, <em class="sig-param">pixels</em>, <em class="sig-param">tracks</em>, <em class="sig-param">response</em>, <em class="sig-param">rng_states</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.detsim.tracks_current_mc" title="Permalink to this definition">¶</a></dt>
+<dd><p>This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
+MC method</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
+where S is the number of track segments, P is the number of pixels, and T is
+the number of time ticks. The output is stored here.</p></li>
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
+the number of track segments, P is the number of pixels and contains the pixel ID number.</p></li>
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
+<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
+<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
+generation</p></li>
 </ul>
 </dd>
 </dl>
@@ -669,7 +698,7 @@ number of pixels in the selected tracks.</p></li>
 
 <dl class="data">
 <dt id="larndsim.fee.BUFFER_RISETIME">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">BUFFER_RISETIME</code><em class="property"> = 0</em><a class="headerlink" href="#larndsim.fee.BUFFER_RISETIME" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">BUFFER_RISETIME</code><em class="property"> = 0.1</em><a class="headerlink" href="#larndsim.fee.BUFFER_RISETIME" title="Permalink to this definition">¶</a></dt>
 <dd><p>Buffer risetime in <span class="math notranslate nohighlight">\(\mu s\)</span> (set &gt;0 to include buffer response simulation)</p>
 </dd></dl>
 
@@ -921,6 +950,12 @@ as global variables</p>
 <dt id="larndsim.consts.detector.PIXEL_PITCH">
 <code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">PIXEL_PITCH</code><em class="property"> = 0.4434</em><a class="headerlink" href="#larndsim.consts.detector.PIXEL_PITCH" title="Permalink to this definition">¶</a></dt>
 <dd><p>Pixel pitch in <span class="math notranslate nohighlight">\(cm\)</span></p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.consts.detector.RESPONSE_BIN_SIZE">
+<code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">RESPONSE_BIN_SIZE</code><em class="property"> = 0.04434</em><a class="headerlink" href="#larndsim.consts.detector.RESPONSE_BIN_SIZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Spatial sampling in the pixel reponse file in <span class="math notranslate nohighlight">\(cm\)</span></p>
 </dd></dl>
 
 <dl class="data">
