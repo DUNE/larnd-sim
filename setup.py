@@ -2,7 +2,7 @@
 
 import setuptools
 
-VER = "0.2.1"
+VER = "0.2.2"
 
 setuptools.setup(
     name="larndsim",
