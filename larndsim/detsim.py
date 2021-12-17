@@ -328,6 +328,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             generation
     """
     itrk, ipix, it = cuda.grid(3)
+    ntrk, _, _ = cuda.gridsize(3)
     
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
@@ -373,19 +374,20 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             
             charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
             total_current = 0
+            rng_state = (rng_states[itrk + ntrk * ipix],)
             for istep in range(nstep):
                 for _ in range(MC_SAMPLE_MULTIPLIER):
                     x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
                     y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
                     z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
                 
-                    z += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[2]
+                    z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
                     t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
                     if not t0 < time_tick < t0 + detector.TIME_WINDOW:
                         continue
                 
-                    x += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[0]
-                    y += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[1]
+                    x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
+                    y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
                     x_dist = abs(x_p - x)
                     y_dist = abs(y_p - y)
                 
