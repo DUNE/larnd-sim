@@ -223,7 +223,7 @@ def run_simulation(input_filename,
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
-    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80):
+    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
         start_tracks_batch = time()
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -299,7 +299,7 @@ def run_simulation(input_filename,
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), seed=ievd, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=ievd, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
