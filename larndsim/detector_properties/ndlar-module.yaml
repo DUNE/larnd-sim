@@ -41,7 +41,7 @@ long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
 drift_length: 50.4 # cm
 response_sampling: 0.05 # us
-response_bin_size: 0.04 # cm
+response_bin_size: 0.038 # cm
 tile_map: 
   - [[19,17,15,13,11,9,7,5,3,1],[20,18,16,14,12,10,8,6,4,2]]
   - [[39,37,35,33,31,29,27,25,23,21],[40,38,36,34,32,30,28,26,24,22]]
