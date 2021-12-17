@@ -34,7 +34,8 @@ tpc_offsets: # cm
   - [306.3, 5.387, 665.2]
   - [306.3, 5.387, 766.62]
   - [306.3, 5.387, 868.04]
-vdrift: 0.159636 # cm / us
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
 lifetime: 2.2e+3 # us
 time_interval: [0, 320.] # us
 long_diff: 4.0e-6 # cm * cm / us

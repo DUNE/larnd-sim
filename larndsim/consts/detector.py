@@ -9,7 +9,10 @@ from collections import defaultdict
 
 MM2CM = 0.1
 CM2MM = 10
+KV2V = 1000
 
+#: Detector temperature in K
+TEMPERATURE = 87.17
 #: Liquid argon density in :math:`g/cm^3`
 LAR_DENSITY = 1.38 # g/cm^3
 #: Electric field magnitude in :math:`kV/cm`
@@ -67,6 +70,35 @@ TILE_CHIP_TO_IO = {}
 #: Association between modules and io groups
 MODULE_TO_IO_GROUPS = {}
 
+ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
+
+
+def electron_mobility(efield, temperature):
+    """
+    Calculation of the electron mobility w.r.t temperature and electric
+    field.
+    References:
+     - https://lar.bnl.gov/properties/trans.html (summary)
+     - https://doi.org/10.1016/j.nima.2016.01.073 (parameterization)
+     
+    Args:
+        efield (float): electric field in kV/cm
+        temperature (float): temperature
+        
+    Returns:
+        float: electron mobility in cm^2/kV/us
+
+    """
+    a0, a1, a2, a3, a4, a5 = ELECTRON_MOBILITY_PARAMS
+
+    num = a0 + a1 * efield + a2 * pow(efield, 1.5) + a3 * pow(efield, 2.5)
+    denom = 1 + (a1 / a0) * efield + a4 * pow(efield, 2) + a5 * pow(efield, 3)
+    temp_corr = pow(temperature / 89, -1.5)
+
+    mu = num / denom * temp_corr / KV2V
+
+    return mu
+
 def set_detector_properties(detprop_file, pixel_file):
     """
     The function loads the detector properties and
@@ -84,6 +116,8 @@ def set_detector_properties(detprop_file, pixel_file):
     global N_PIXELS
     global N_PIXELS_PER_TILE
     global V_DRIFT
+    global E_FIELD
+    global TEMPERATURE
     global ELECTRON_LIFETIME
     global TIME_INTERVAL
     global TIME_TICKS
@@ -117,7 +151,9 @@ def set_detector_properties(detprop_file, pixel_file):
 
     TIME_PADDING = detprop.get('time_padding', TIME_PADDING)
     TIME_WINDOW = detprop.get('time_window', TIME_WINDOW)
-    V_DRIFT = detprop.get('vdrift', V_DRIFT)
+    TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+    E_FIELD = detprop.get('e_field', E_FIELD)
+    V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
     ELECTRON_LIFETIME = detprop.get('lifetime', ELECTRON_LIFETIME)
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)

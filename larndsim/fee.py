@@ -106,8 +106,7 @@ def export_to_hdf5(event_id_list,
         bad_channels (dict): dictionary containing as value a list of bad channels and as
             the chip key
     Returns:
-        tuple: a tuple containing the list of LArPix packets and the list of entries
-            for the `mc_packets_assn` dataset
+        tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
 
     dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
@@ -233,10 +232,10 @@ def digitize(integral_list):
     ADC counts.
 
     Args:
-        integral_list(: obj: `numpy.ndarray`): list of charge collected by each pixel
+        integral_list(:obj:`numpy.ndarray`): list of charge collected by each pixel
 
     Returns:
-        : obj: `numpy.ndarray`: list of ADC values for each pixel
+        :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
     adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / physics.E_CHARGE + V_PEDESTAL - V_CM), 0)
