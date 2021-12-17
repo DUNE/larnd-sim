@@ -280,13 +280,12 @@ def overlapping_segment(x, y, start, end, radius):
     
     """
     dxy = x - start[0], y - start[1]
-    v = end[0] - start[0], end[1] - start[1], end[2] - start[2]
-    l = sqrt(v[0]**2 + v[1]**2 + v[2]**2)
-    v = v[0]/l, v[1]/l, v[2]/l
-    
+    v = end[0] - start[0], end[1] - start[1]
+    l = sqrt(v[0]**2 + v[1]**2)
+    v = v[0]/l, v[1]/l
     s = (dxy[0] * v[0] + dxy[1] * v[1])/l # position of point of closest approach
     
-    r = sqrt(dxy[0]**2 + dxy[1]**2)
+    r = sqrt((dxy[0] - v[0] * s * l)**2 + (dxy[1] - v[1] * s * l)**2)
     if r > radius:
         return start, start # no overlap
     
@@ -305,9 +304,9 @@ def overlapping_segment(x, y, start, end, radius):
     new_start = (start[0] * (1 - s_minus) + end[0] * s_minus,
                  start[1] * (1 - s_minus) + end[1] * s_minus,
                  start[2] * (1 - s_minus) + end[2] * s_minus)
-    new_end = (end[0] * (1 - s_plus) + end[0] * s_plus,
-               end[1] * (1 - s_plus) + end[1] * s_plus,
-               end[2] * (1 - s_plus) + end[2] * s_plus)
+    new_end = (start[0] * (1 - s_plus) + end[0] * s_plus,
+               start[1] * (1 - s_plus) + end[1] * s_plus,
+               start[2] * (1 - s_plus) + end[2] * s_plus)
 
     return new_start, new_end
 
@@ -357,7 +356,6 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
-            step = MIN_STEP_SIZE
             
             impact_factor = sqrt(response.shape[0]**2 + 
                                      response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
@@ -370,16 +368,16 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             if subsegment_length == 0:
                 return
                 
-            nstep = round(subsegment_length / step)
+            nstep = max(round(subsegment_length / MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
             
             charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
             total_current = 0
             for istep in range(nstep):
                 for _ in range(MC_SAMPLE_MULTIPLIER):
-                    x = subsegment_start[0] + step * istep * direction[0]
-                    y = subsegment_start[1] + step * istep * direction[1]
-                    z = subsegment_start[2] + step * istep * direction[2]
+                    x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
+                    y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
+                    z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
                 
                     z += xoroshiro128p_normal_float32(rng_states, cuda.grid(1)) * sigmas[2]
                     t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
