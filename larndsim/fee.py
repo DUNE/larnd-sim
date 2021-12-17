@@ -11,7 +11,7 @@ from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 from math import exp, floor
 
-from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
+from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
 from tqdm import tqdm
