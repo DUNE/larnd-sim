@@ -9,7 +9,7 @@ import yaml
 
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
-from math import exp
+from math import exp, floor
 
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket
 from larpix.packet import PacketCollection
@@ -34,7 +34,7 @@ CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
 GAIN = 4/1e3
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
-BUFFER_RISETIME = 0 # 0.170
+BUFFER_RISETIME = 0.100
 #: Common-mode voltage in :math:`mV`
 V_CM = 288
 #: Reference voltage in :math:`mV`
@@ -293,7 +293,8 @@ def get_adc_values(pixels_signals,
             q = 0
             if ic < curre.shape[0]:
                 if BUFFER_RISETIME > 0:
-                    for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                    conv_start = max(last_reset, floor(ic - 10*detector.TIME_SAMPLING/BUFFER_RISETIME))
+                    for jc in range(conv_start, min(ic+1, curre.shape[0])):
                         w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
                         q += curre[jc] * detector.TIME_SAMPLING * w
 
@@ -325,7 +326,8 @@ def get_adc_values(pixels_signals,
                     q = 0
 
                     if BUFFER_RISETIME > 0:
-                        for jc in range(last_reset, min(ic+1, curre.shape[0])):
+                        conv_start = max(last_reset, floor(ic - 10*detector.TIME_SAMPLING/BUFFER_RISETIME))
+                        for jc in range(conv_start, min(ic+1, curre.shape[0])):
                             w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
                             q += curre[jc] * detector.TIME_SAMPLING * w
 

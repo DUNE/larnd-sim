@@ -43,6 +43,8 @@ TIME_WINDOW = 8.9 # us
 DRIFT_LENGTH = 0
 #: Time sampling in the pixel response file in :math:`\mu s`
 RESPONSE_SAMPLING = 0.1
+#: Spatial sampling in the pixel reponse file in :math:`cm`
+RESPONSE_BIN_SIZE = 0.04434
 #: Borders of each TPC volume in :math:`cm`
 TPC_BORDERS = np.zeros((0, 3, 2))
 #: TPC offsets wrt the origin in :math:`cm`
@@ -130,6 +132,7 @@ def set_detector_properties(detprop_file, pixel_file):
     global DRIFT_LENGTH
     global MODULE_TO_IO_GROUPS
     global RESPONSE_SAMPLING
+    global RESPONSE_BIN_SIZE
     global TPC_OFFSETS
 
     with open(detprop_file) as df:
@@ -155,6 +158,7 @@ def set_detector_properties(detprop_file, pixel_file):
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
     RESPONSE_SAMPLING = detprop.get('response_sampling', RESPONSE_SAMPLING)
+    RESPONSE_BIN_SIZE = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
 
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)

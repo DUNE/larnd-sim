@@ -14,6 +14,7 @@ from cupy.cuda.nvtx import RangePush, RangePop
 import fire
 import h5py
 
+from numba.cuda import device_array
 from numba.cuda.random import create_xoroshiro128p_states
 
 from tqdm import tqdm
@@ -58,6 +59,16 @@ def swap_coordinates(tracks):
     tracks['z'] = x
 
     return tracks
+
+def maybe_create_rng_states(n, seed=0, rng_states=None):
+    if rng_states is None:
+        return create_xoroshiro128p_states(n, seed=seed)
+    elif n > len(rng_states):
+        new_states = device_array(n, dtype=rng_states.dtype)
+        new_states[:len(rng_states)] = rng_states
+        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed)
+        return new_states
+    return rng_states
 
 def run_simulation(input_filename,
                    pixel_layout,
@@ -209,7 +220,10 @@ def run_simulation(input_filename,
     tracks_batch_runtimes = []
     step = 1
     tot_events = 0
-    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80):
+
+    # pre-allocate some random number states
+    rng_states = maybe_create_rng_states(1024*256, seed=0)
+    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
         start_tracks_batch = time()
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -285,10 +299,8 @@ def run_simulation(input_filename,
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            detsim.tracks_current[BPG,TPB](signals,
-                                           neighboring_pixels,
-                                           selected_tracks,
-                                           response)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=ievd, rng_states=rng_states)
+            detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
             RangePush("pixel_index_map")
@@ -334,7 +346,7 @@ def run_simulation(input_filename,
 
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = create_xoroshiro128p_states(TPB * BPG, seed=ievd)
+            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=ievd, rng_states=rng_states)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)

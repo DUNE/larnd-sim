@@ -8,6 +8,7 @@ from math import pi, ceil, sqrt, erf, exp, log
 import numba as nb
 
 from numba import cuda
+from numba.cuda.random import xoroshiro128p_normal_float32
 
 from . import consts
 from .consts.detector import TPC_BORDERS, TIME_INTERVAL
@@ -15,6 +16,8 @@ from .consts import detector, physics
 from .pixels_from_track import id2pixel
 
 MAX_TRACKS_PER_PIXEL = 5
+MIN_STEP_SIZE = 0.001 # cm
+MC_SAMPLE_MULTIPLIER = 1
 
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
@@ -258,7 +261,7 @@ def get_closest_waveform(x, y, t, response):
         float: the value of the induced current at time `t` for a charge at `(x,y)`
     """
     dt = detector.RESPONSE_SAMPLING
-    bin_width = detector.PIXEL_PITCH * consts.MM2CM
+    bin_width = detector.RESPONSE_BIN_SIZE
 
     i = round((x/bin_width) - 0.5)
     j = round((y/bin_width) - 0.5)
@@ -268,6 +271,135 @@ def get_closest_waveform(x, y, t, response):
         return response[i][j][k]
 
     return 0
+
+@nb.njit
+def overlapping_segment(x, y, start, end, radius):
+    """
+    Calculates the segment of the track defined by start, end that overlaps
+    with a circle centered at x,y
+    
+    """
+    dxy = x - start[0], y - start[1]
+    v = end[0] - start[0], end[1] - start[1]
+    l = sqrt(v[0]**2 + v[1]**2)
+    v = v[0]/l, v[1]/l
+    s = (dxy[0] * v[0] + dxy[1] * v[1])/l # position of point of closest approach
+    
+    r = sqrt((dxy[0] - v[0] * s * l)**2 + (dxy[1] - v[1] * s * l)**2)
+    if r > radius:
+        return start, start # no overlap
+    
+    s_plus = s + sqrt(radius**2 - r**2) / l
+    s_minus = s - sqrt(radius**2 - r**2) / l
+    
+    if s_plus > 1:
+        s_plus = 1
+    elif s_plus < 0:
+        s_plus = 0
+    if s_minus > 1:
+        s_minus = 1
+    elif s_minus < 0:
+        s_minus = 0
+        
+    new_start = (start[0] * (1 - s_minus) + end[0] * s_minus,
+                 start[1] * (1 - s_minus) + end[1] * s_minus,
+                 start[2] * (1 - s_minus) + end[2] * s_minus)
+    new_end = (start[0] * (1 - s_plus) + end[0] * s_plus,
+               start[1] * (1 - s_plus) + end[1] * s_plus,
+               start[2] * (1 - s_plus) + end[2] * s_plus)
+
+    return new_start, new_end
+
+@cuda.jit
+def tracks_current_mc(signals, pixels, tracks, response, rng_states):
+    """
+    This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
+    MC method
+
+    Args:
+        signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
+            where S is the number of track segments, P is the number of pixels, and T is
+            the number of time ticks. The output is stored here.
+        pixels (:obj:`numpy.ndarray`): 2D array with dimensions S x P , where S is
+            the number of track segments, P is the number of pixels and contains the pixel ID number.
+        tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
+        response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
+        rng_states (:obj:`numpy.ndarray`): array of random states for noise
+            generation
+    """
+    itrk, ipix, it = cuda.grid(3)
+    ntrk, _, _ = cuda.gridsize(3)
+    
+    if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
+        t = tracks[itrk]
+        pID = pixels[itrk][ipix]
+        pID_x, pID_y, pID_plane = id2pixel(pID)
+
+        if pID_x >= 0 and pID_y >= 0:
+
+            # Pixel coordinates
+            x_p, y_p = get_pixel_coordinates(pID)
+            x_p += detector.PIXEL_PITCH / 2
+            y_p += detector.PIXEL_PITCH / 2
+
+            if t["z_start"] < t["z_end"]:
+                start = (t["x_start"], t["y_start"], t["z_start"])
+                end = (t["x_end"], t["y_end"], t["z_end"])
+            else:
+                end = (t["x_start"], t["y_start"], t["z_start"])
+                start = (t["x_end"], t["y_end"], t["z_end"])
+                
+            t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+            time_tick = t_start + it * detector.TIME_SAMPLING
+
+            segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
+            length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
+
+            direction = (segment[0]/length, segment[1]/length, segment[2]/length)
+            sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
+            
+            impact_factor = sqrt(response.shape[0]**2 + 
+                                     response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
+
+            subsegment_start, subsegment_end = overlapping_segment(x_p, y_p, start, end, impact_factor)
+            subsegment = (subsegment_end[0]-subsegment_start[0], 
+                          subsegment_end[1]-subsegment_start[1], 
+                          subsegment_end[2]-subsegment_start[2])
+            subsegment_length = sqrt(subsegment[0]**2 + subsegment[1]**2 + subsegment[2]**2)
+            if subsegment_length == 0:
+                return
+                
+            nstep = max(round(subsegment_length / MIN_STEP_SIZE), 1)
+            step = subsegment_length / nstep # refine step size
+            
+            charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
+            total_current = 0
+            rng_state = (rng_states[itrk + ntrk * ipix],)
+            for istep in range(nstep):
+                for _ in range(MC_SAMPLE_MULTIPLIER):
+                    x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
+                    y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
+                    z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
+                
+                    z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
+                    t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                    if not t0 < time_tick < t0 + detector.TIME_WINDOW:
+                        continue
+                
+                    x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
+                    y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
+                    x_dist = abs(x_p - x)
+                    y_dist = abs(y_p - y)
+                
+                    if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
+                        continue
+                    if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
+                        continue
+
+                    total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * physics.E_CHARGE
+
+            signals[itrk,ipix,it] = total_current
+
 
 @cuda.jit
 def tracks_current(signals, pixels, tracks, response):
@@ -354,7 +486,7 @@ def tracks_current(signals, pixels, tracks, response):
                         x = x_start + sign(direction[0]) * (ix*x_step - 4*sigmas[0])
                         x_dist = abs(x_p - x)
 
-                        if x_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
+                        if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
                             continue
 
                         for iy in range(detector.SAMPLED_POINTS):
@@ -362,7 +494,7 @@ def tracks_current(signals, pixels, tracks, response):
                             y = y_start + sign(direction[1]) * (iy*y_step - 4*sigmas[1])
                             y_dist = abs(y_p - y)
 
-                            if y_dist > detector.PIXEL_PITCH/2 + detector.PIXEL_PITCH/4:
+                            if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                                 continue
 
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
