@@ -108,11 +108,20 @@ def export_to_hdf5(event_id_list,
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
+    dtype = np.dtype([('track_ids', '(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
 
-    dtype = np.dtype([('track_ids','(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
-    packets = [TimestampPacket()]
-    packets_mc = [[-1]*track_ids.shape[1]]
-    packets_frac = [[0]*current_fractions.shape[2]]
+    io_groups = np.unique([v // 1000 for d in detector.TILE_CHIP_TO_IO.values() for v in d.values()])
+    packets = []
+    packets_mc = []
+    packets_frac = []
+
+    for io_group in io_groups:
+        packets.append(TimestampPacket(io_group=io_group))
+        packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
+        for _ in range(2):
+            packets_mc.append([-1] * track_ids.shape[1])
+            packets_frac.append([0] * current_fractions.shape[2])
+
     packets_mc_ds = []
     last_event = -1
 
@@ -124,7 +133,7 @@ def export_to_hdf5(event_id_list,
     event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
     event_start_time = np.cumsum(event_start_time)
     event_start_time_list = event_start_time[unique_events_inv]
-
+    rollover_count = 0
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...", ncols=80)):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
@@ -142,24 +151,29 @@ def export_to_hdf5(event_id_list,
             if adc > digitize(0):
                 event = event_id_list[itick,iadc]
                 event_t0 = event_start_time_list[itick]
+                time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
 
-                if event_t0 > 2**31-1:
+                if event_t0 > 2**31 - 1 or time_tick > 2**31 - 1:
                     # 31-bit rollover
-                    packets.append(TimestampPacket(timestamp=(2**31) * CLOCK_CYCLE * 1e6))
-                    packets_mc.append([-1]*track_ids.shape[1])
-                    packets_frac.append([0]*current_fractions.shape[2])
+                    rollover_count += 1
+                    for io_group in io_groups:
+                        packets.append(TimestampPacket(io_group=io_group,
+                                                       timestamp=floor(rollover_count * (2**31) * CLOCK_CYCLE * 1e-6)))
+                        packets.append(SyncPacket(sync_type=b'S',
+                                                  timestamp=(2**31), io_group=io_group))
+                        for _ in range(2):
+                            packets_mc.append([-1] * track_ids.shape[1])
+                            packets_frac.append([0] * current_fractions.shape[2])
                     event_start_time_list[itick:] -= 2**31
 
                 event_t0 = event_t0 % (2**31)
-                time_tick = int(np.floor(t/CLOCK_CYCLE + event_t0)) % (2**31)
+                time_tick = time_tick % (2**31)
 
                 if event != last_event:
-                    packets.append(TriggerPacket(io_group=1,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[1])
-                    packets_frac.append([0]*current_fractions.shape[2])
-                    packets.append(TriggerPacket(io_group=2,trigger_type=b'\x02',timestamp=event_t0))
-                    packets_mc.append([-1]*track_ids.shape[1])
-                    packets_frac.append([0]*current_fractions.shape[2])
+                    for io_group in io_groups:
+                        packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=event_t0))
+                        packets_mc.append([-1] * track_ids.shape[1])
+                        packets_frac.append([0] * current_fractions.shape[2])
                     last_event = event
 
                 p = Packet_v2()
@@ -193,6 +207,7 @@ def export_to_hdf5(event_id_list,
 
                 p.chip_key = chip_key
                 p.channel_id = channel
+                p.receipt_timestamp = time_tick
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
