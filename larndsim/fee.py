@@ -26,7 +26,7 @@ DISCRIMINATION_THRESHOLD = 7e3 * physics.E_CHARGE
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
-ADC_BUSY_DELAY = 8
+ADC_BUSY_DELAY = 9
 #: Reset time in clock cycles
 RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
@@ -310,20 +310,19 @@ def get_adc_values(pixels_signals,
                 break
 
             q = 0
-            if ic < curre.shape[0]:
-                if BUFFER_RISETIME > 0:
-                    conv_start = max(last_reset, floor(ic - 10*detector.TIME_SAMPLING/BUFFER_RISETIME))
-                    for jc in range(conv_start, min(ic+1, curre.shape[0])):
-                        w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
-                        q += curre[jc] * detector.TIME_SAMPLING * w
+            if BUFFER_RISETIME > 0:
+                conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
+                for jc in range(conv_start, min(ic+1, curre.shape[0])):
+                    w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                    q += curre[jc] * detector.TIME_SAMPLING * w
 
-                        for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
-
-                else:
-                    q += curre[ic] * detector.TIME_SAMPLING
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+
+            elif ic < curre.shape[0]:
+                q += curre[ic] * detector.TIME_SAMPLING
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
 
             q_sum += q
 
@@ -334,26 +333,24 @@ def get_adc_values(pixels_signals,
                 adc_busy -= 1
 
             if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
-                crossing_time_tick = ic
-
                 interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / detector.TIME_SAMPLING)
                 integrate_end = ic+interval
 
                 ic+=1
 
-                while ic <= integrate_end and ic < curre.shape[0]:
+                while ic <= integrate_end:
                     q = 0
 
                     if BUFFER_RISETIME > 0:
-                        conv_start = max(last_reset, floor(ic - 10*detector.TIME_SAMPLING/BUFFER_RISETIME))
+                        conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
                         for jc in range(conv_start, min(ic+1, curre.shape[0])):
                             w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
                             q += curre[jc] * detector.TIME_SAMPLING * w
 
                             for itrk in range(current_fractions.shape[2]):
-                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING * w
+                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
 
-                    else:
+                    elif ic < curre.shape[0]:
                         q += curre[ic] * detector.TIME_SAMPLING
                         for itrk in range(current_fractions.shape[2]):
                             current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
@@ -365,8 +362,8 @@ def get_adc_values(pixels_signals,
                 disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
 
                 if adc < pixel_thresholds[ip] + disc_noise:
-                    ic += round(CLOCK_CYCLE / detector.TIME_SAMPLING)
-                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
+                    ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
+                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
 
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0
@@ -382,8 +379,11 @@ def get_adc_values(pixels_signals,
 
                 adc_list[ip][iadc] = adc
 
+                crossing_time_tick = min((ic, len(time_ticks)-1))
+                # handle case when tick extends past end of current array
+                post_adc_ticks = max((ic - crossing_time_tick, 0))
                 #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
-                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+2
+                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding-2+post_adc_ticks
 
                 ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
                 last_reset = ic
