@@ -22,7 +22,7 @@ V_DRIFT = 0.1648 # cm / us,
 #: Electron lifetime in :math:`\mu s`
 ELECTRON_LIFETIME = 2.2e3 # us,
 #: Time sampling in :math:`\mu s`
-TIME_SAMPLING = 0.1 # us
+TIME_SAMPLING = 0.5 # us
 #: Drift time window in :math:`\mu s`
 TIME_INTERVAL = (0, 200.) # us
 #: Signal time window padding in :math:`\mu s`
@@ -191,6 +191,7 @@ def set_detector_properties(detprop_file, pixel_file):
 
     TPC_BORDERS = np.empty((TPC_OFFSETS.shape[0] * tpc_ids.shape[0], 3, 2))
 
+    print(anodes)
     for it, tpc_offset in enumerate(TPC_OFFSETS):
         for ia, anode in enumerate(anodes):
             tiles = np.vstack(anodes[anode])

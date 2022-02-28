@@ -400,7 +400,98 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
 
             signals[itrk,ipix,it] = total_current
 
+from numba import prange
+from numpy import random
 
+@nb.njit(fastmath=True)
+def tracks_current_cpu(signals, pixels, tracks, response):
+    """
+    This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
+    MC method
+
+    Args:
+        signals (:obj:`numpy.ndarray`): empty 3D array with dimensions S x P x T,
+            where S is the number of track segments, P is the number of pixels, and T is
+            the number of time ticks. The output is stored here.
+        pixels (:obj:`numpy.ndarray`): 2D array with dimensions S x P , where S is
+            the number of track segments, P is the number of pixels and contains the pixel ID number.
+        tracks (:obj:`numpy.ndarray`): 2D array containing the detector segments.
+        response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
+    """
+    
+    for itrk in prange(signals.shape[0]):
+        for ipix in prange(signals.shape[1]):
+            for it in prange(signals.shape[2]):
+        
+                t = tracks[itrk]
+                pID = pixels[itrk][ipix]
+                pID_x, pID_y, pID_plane = id2pixel(pID)
+
+                if pID_x >= 0 and pID_y >= 0:
+
+                    # Pixel coordinates
+                    x_p, y_p = get_pixel_coordinates(pID)
+                    x_p += detector.PIXEL_PITCH / 2
+                    y_p += detector.PIXEL_PITCH / 2
+
+                    if t["z_start"] < t["z_end"]:
+                        start = (t["x_start"], t["y_start"], t["z_start"])
+                        end = (t["x_end"], t["y_end"], t["z_end"])
+                    else:
+                        end = (t["x_start"], t["y_start"], t["z_start"])
+                        start = (t["x_end"], t["y_end"], t["z_end"])
+
+                    t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+                    time_tick = t_start + it * detector.TIME_SAMPLING
+
+                    segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
+                    length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
+
+                    direction = (segment[0]/length, segment[1]/length, segment[2]/length)
+                    sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
+
+                    impact_factor = sqrt(response.shape[0]**2 + 
+                                             response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
+
+                    subsegment_start, subsegment_end = overlapping_segment(x_p, y_p, start, end, impact_factor)
+                    subsegment = (subsegment_end[0]-subsegment_start[0], 
+                                  subsegment_end[1]-subsegment_start[1], 
+                                  subsegment_end[2]-subsegment_start[2])
+                    subsegment_length = sqrt(subsegment[0]**2 + subsegment[1]**2 + subsegment[2]**2)
+                    if subsegment_length == 0:
+                        return
+
+                    nstep = max(round(subsegment_length / MIN_STEP_SIZE), 1)
+                    step = subsegment_length / nstep # refine step size
+
+                    charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
+                    total_current = 0
+
+                    for istep in range(nstep):
+                        for _ in range(MC_SAMPLE_MULTIPLIER):
+                            x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
+                            y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
+                            z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
+
+                            z += random.normal() * sigmas[2]
+                            t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                            if not t0 < time_tick < t0 + detector.TIME_WINDOW:
+                                continue
+
+                            x += random.normal() * sigmas[0]
+                            y += random.normal() * sigmas[1]
+                            x_dist = abs(x_p - x)
+                            y_dist = abs(y_p - y)
+
+                            if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
+                                continue
+                            if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
+                                continue
+
+                            total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * physics.E_CHARGE
+
+                    signals[itrk,ipix,it] = total_current
+            
 @cuda.jit
 def tracks_current(signals, pixels, tracks, response):
     """
