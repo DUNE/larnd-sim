@@ -12,8 +12,10 @@ from larcv import larcv
 from larndsim import consts, fee
 from larndsim.consts import detector
 
-# Fudge factor for current iteration; comes from the "voxelized geant4"
-TRAINED_MEAN_VOXEL_ENERGY = 0.37  # MeV
+# Fudge factor for current iteration; comes from comparing
+# most probable value of energy deposits from muon tracks in the "voxelized geant4"
+# to the similar peak in the larnd-sim output (which is in 'number of electrons at anode').
+MEV_PER_ELECTRON = 1.139e-05
 #VERBOSE = 0
 
 def get_x_coordinate(io_group_io_channel_to_tile,
@@ -149,11 +151,6 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
         end_packet   = event_dividers[event+1]
         event_packets = packets[start_packet:end_packet]
 
-        charge_scale = TRAINED_MEAN_VOXEL_ENERGY / event_packets['dataword'][event_packets['packet_type']==0].sum() / len(event_packets)
-        if VERBOSE:
-            print('Charge scale for event {}: {}'.format(event, charge_scale))
-
-
     module_ids = []
     print('Processing', num_events, 'events')
     event_packets = np.empty((num_events, 4))
@@ -176,13 +173,11 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
         # Calculate charge scale for this event
         event_adcs = event_packets['dataword'][event_packets['packet_type']==0]
         event_charges = np.array(event_adcs/fee.ADC_COUNTS*(fee.V_REF-fee.V_CM+fee.V_CM-fee.V_PEDESTAL)/fee.GAIN)
-        charge_scale = TRAINED_MEAN_VOXEL_ENERGY / (event_charges.sum() / len(event_packets))
         if VERBOSE:
-            if TRAINED_MEAN_VOXEL_ENERGY:
-                print('Using voxel energy fudge factor: {}'.format(TRAINED_MEAN_VOXEL_ENERGY))
             print('Total charge in this event: {}'.format(event_charges.sum()))
-            print('Average packet charge in this event: {}'.format(event_charges.sum() / len(event_packets)))
-            print('Charge scale for event {}: {}'.format(event, charge_scale))
+            print('Total equivalent estimated energy deposits: {}'.format(event_charges.sum() * MEV_PER_ELECTRON))
+            if MEV_PER_ELECTRON:
+                print('Using voxel energy fudge factor (MeV/electron): {}'.format(MEV_PER_ELECTRON))
 
         # Collect packet charge and xyz information
         event_voxel_set = larcv.VoxelSet()
@@ -229,7 +224,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                 if not voxel_meta.valid():
                     print('Invalid voxel meta for charge ', packet_charge)
 
-                voxel = larcv.Voxel(voxel_id, packet_charge * charge_scale)
+                voxel = larcv.Voxel(voxel_id, packet_charge * MEV_PER_ELECTRON)
                 event_voxel_set.add(voxel)
 
         io.set_id(0, 0, event)  # run numbers
