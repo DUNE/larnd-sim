@@ -377,22 +377,23 @@ def run_simulation(input_filename,
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
             track_pixel_map_tot.append(track_pixel_map)
 
-        event_id_list_batch = np.concatenate(event_id_list, axis=0)
-        adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
-        adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
-        unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
-        current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
-        track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
-        _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
-                                             adc_tot_list_batch,
-                                             adc_tot_ticks_list_batch,
-                                             cp.asnumpy(unique_pix_tot_batch),
-                                             cp.asnumpy(current_fractions_tot_batch),
-                                             cp.asnumpy(track_pixel_map_tot_batch),
-                                             output_filename,
-                                             t0=t0,
-                                             bad_channels=bad_channels)
-        t0 = last_time
+        if event_id_list and adc_tot_list:
+            event_id_list_batch = np.concatenate(event_id_list, axis=0)
+            adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
+            adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
+            unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
+            current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
+            track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
+            _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
+                                                adc_tot_list_batch,
+                                                adc_tot_ticks_list_batch,
+                                                cp.asnumpy(unique_pix_tot_batch),
+                                                cp.asnumpy(current_fractions_tot_batch),
+                                                cp.asnumpy(track_pixel_map_tot_batch),
+                                                output_filename,
+                                                t0=t0,
+                                                bad_channels=bad_channels)
+            t0 = last_time
 
 
     print("*************\nSAVING RESULT\n*************")
