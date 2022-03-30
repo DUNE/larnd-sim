@@ -19,6 +19,8 @@ from .consts import detector, physics
 
 from .pixels_from_track import id2pixel
 
+np.random.seed(1)
+
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
 #: Discrimination threshold
@@ -90,6 +92,7 @@ def export_to_hdf5(event_id_list,
                    current_fractions,
                    track_ids,
                    filename,
+                   t0=0,
                    bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -115,13 +118,14 @@ def export_to_hdf5(event_id_list,
     packets_mc = []
     packets_frac = []
 
-    packets.append(TimestampPacket())
-    packets_mc.append([-1] * track_ids.shape[1])
-    packets_frac.append([0] * current_fractions.shape[2])
-    for io_group in io_groups:
-        packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
+    if t0 == 0:
+        packets.append(TimestampPacket())
         packets_mc.append([-1] * track_ids.shape[1])
         packets_frac.append([0] * current_fractions.shape[2])
+        for io_group in io_groups:
+            packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
+            packets_mc.append([-1] * track_ids.shape[1])
+            packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
     last_event = -1
@@ -133,7 +137,9 @@ def export_to_hdf5(event_id_list,
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
     event_start_time = np.cumsum(event_start_time)
+    event_start_time += t0
     event_start_time_list = event_start_time[unique_events_inv]
+
     rollover_count = 0
     for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...", ncols=80)):
         ts = adc_ticks_list[itick]
@@ -154,7 +160,6 @@ def export_to_hdf5(event_id_list,
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
-
                     if event_t0 > 2**31 - 1 or time_tick > 2**31 - 1:
                         # 31-bit rollover
                         rollover_count += 1
@@ -222,27 +227,27 @@ def export_to_hdf5(event_id_list,
             else:
                 break
 
-    packet_list = PacketCollection(packets, read_id=0, message='')
-
-    hdf5format.to_file(filename, packet_list)
-
     if packets:
+        packet_list = PacketCollection(packets, read_id=0, message='')
+        hdf5format.to_file(filename, packet_list)
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
         packets_mc_ds['track_ids'] = packets_mc
         packets_mc_ds['fraction'] = packets_frac
 
-    with h5py.File(filename, 'a') as f:
-        if "mc_packets_assn" in f.keys():
-            del f['mc_packets_assn']
-        f.create_dataset("mc_packets_assn", data=packets_mc_ds)
+        with h5py.File(filename, 'a') as f:
+            if t0 == 0:
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+            else:
+                f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
+                f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds
 
-        f['configs'].attrs['vdrift'] = detector.V_DRIFT
-        f['configs'].attrs['long_diff'] = detector.LONG_DIFF
-        f['configs'].attrs['tran_diff'] = detector.TRAN_DIFF
-        f['configs'].attrs['lifetime'] = detector.ELECTRON_LIFETIME
-        f['configs'].attrs['drift_length'] = detector.DRIFT_LENGTH
+            f['configs'].attrs['vdrift'] = detector.V_DRIFT
+            f['configs'].attrs['long_diff'] = detector.LONG_DIFF
+            f['configs'].attrs['tran_diff'] = detector.TRAN_DIFF
+            f['configs'].attrs['lifetime'] = detector.ELECTRON_LIFETIME
+            f['configs'].attrs['drift_length'] = detector.DRIFT_LENGTH
 
-    return packets, packets_mc_ds
+    return packets, packets_mc_ds, event_start_time_list[-1]
 
 
 def digitize(integral_list):
