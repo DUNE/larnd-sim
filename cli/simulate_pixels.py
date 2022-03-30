@@ -42,9 +42,9 @@ def swap_coordinates(tracks):
 
     Args:
         tracks (:obj:`numpy.ndarray`): tracks array.
-        
+
     Returns:
-        :obj:`numpy.ndarray`: tracks with swapped axes. 
+        :obj:`numpy.ndarray`: tracks with swapped axes.
     """
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -143,7 +143,7 @@ def run_simulation(input_filename,
             input_has_trajectories = False
 
         try:
-            vertices = np.array(f['eventTruth'])
+            vertices = np.array(f['vertices'])
             input_has_vertices = True
         except KeyError:
             print("Input file does not have true vertices info")
@@ -404,7 +404,7 @@ def run_simulation(input_filename,
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
-            output_file.create_dataset("eventTruth", data=vertices)
+            output_file.create_dataset("vertices", data=vertices)
         output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
