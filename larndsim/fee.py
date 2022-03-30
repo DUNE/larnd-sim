@@ -359,7 +359,7 @@ def get_adc_values(pixels_signals,
                         q += curre[ic] * detector.TIME_SAMPLING
                         for itrk in range(current_fractions.shape[2]):
                             current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
-                            
+
                     q_sum += q
                     ic+=1
 
@@ -393,7 +393,7 @@ def get_adc_values(pixels_signals,
                 ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
                 last_reset = ic
                 adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
-                
+
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
 
                 iadc += 1

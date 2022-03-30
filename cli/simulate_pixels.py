@@ -42,9 +42,9 @@ def swap_coordinates(tracks):
 
     Args:
         tracks (:obj:`numpy.ndarray`): tracks array.
-        
+
     Returns:
-        :obj:`numpy.ndarray`: tracks with swapped axes. 
+        :obj:`numpy.ndarray`: tracks with swapped axes.
     """
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -61,6 +61,7 @@ def swap_coordinates(tracks):
     return tracks
 
 def maybe_create_rng_states(n, seed=0, rng_states=None):
+    """Create or extend random states for CUDA kernel"""
     if rng_states is None:
         return create_xoroshiro128p_states(n, seed=seed)
     elif n > len(rng_states):
@@ -153,7 +154,8 @@ def run_simulation(input_filename,
 
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
+                                 dtype=[('n_photons_det','f4'),('t0_det','f4')])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -180,27 +182,26 @@ def run_simulation(input_filename,
     print("******************\nRUNNING SIMULATION\n******************")
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
-    print("Quenching electrons...",end='')
+    print("Quenching electrons..." , end="")
     start_quenching = time()
     quenching.quench[BPG,TPB](tracks, physics.BIRKS)
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
-    print("Drifting electrons...",end='')
+    print("Drifting electrons...", end="")
     start_drifting = time()
     drifting.drift[BPG,TPB](tracks)
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
 
     if light.LIGHT_SIMULATED:
-        print("Calculating optical responses...",end='')
-        start_lightLUT = time()
+        print("Calculating optical responses...", end="")
+        start_light_time = time()
         lut = cp.load(light_lut_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
-        end_lightLUT = time()
-        print(f" {end_lightLUT-start_lightLUT:.2f} s")
+        print(f" {time()-start_light_time:.2f} s")
 
     # initialize lists to collect results from GPU
 
@@ -212,21 +213,20 @@ def run_simulation(input_filename,
     end_idx = len(tracks['eventID']) - 1 - rev_idx
 
     # We divide the sample in portions that can be processed by the GPU
-    tracks_batch_runtimes = []
     step = 1
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     t0 = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-        
+
         event_id_list = []
         adc_tot_list = []
         adc_tot_ticks_list = []
         track_pixel_map_tot = []
         unique_pix_tot = []
         current_fractions_tot = []
-        
+
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
 
@@ -330,7 +330,9 @@ def run_simulation(input_filename,
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
             pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-            pixels_tracks_signals = cp.zeros((len(unique_pix),len(detector.TIME_TICKS),track_pixel_map.shape[1]))
+            pixels_tracks_signals = cp.zeros((len(unique_pix),
+                                              len(detector.TIME_TICKS),
+                                              track_pixel_map.shape[1]))
             detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                               signals,
                                               track_starts,
@@ -368,13 +370,13 @@ def run_simulation(input_filename,
             RangePop()
 
             event_id_list.append(adc_event_ids)
-            adc_tot_list.append(cp.asnumpy(adc_list))
-            adc_tot_ticks_list.append(cp.asnumpy(adc_ticks_list))
-            unique_pix_tot.append(cp.asnumpy(unique_pix))
-            current_fractions_tot.append(cp.asnumpy(current_fractions))
+            adc_tot_list.append(adc_list)
+            adc_tot_ticks_list.append(adc_ticks_list)
+            unique_pix_tot.append(unique_pix)
+            current_fractions_tot.append(current_fractions)
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
-        
+            track_pixel_map_tot.append(track_pixel_map)
+
         event_id_list_batch = np.concatenate(event_id_list, axis=0)
         adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
         adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
@@ -391,7 +393,7 @@ def run_simulation(input_filename,
                                              t0=t0,
                                              bad_channels=bad_channels)
         t0 = last_time
-            
+
 
     print("*************\nSAVING RESULT\n*************")
 
