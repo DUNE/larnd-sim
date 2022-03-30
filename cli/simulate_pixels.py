@@ -203,12 +203,7 @@ def run_simulation(input_filename,
         print(f" {end_lightLUT-start_lightLUT:.2f} s")
 
     # initialize lists to collect results from GPU
-    event_id_list = []
-    adc_tot_list = []
-    adc_tot_ticks_list = []
-    track_pixel_map_tot = []
-    unique_pix_tot = []
-    current_fractions_tot = []
+
 
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
@@ -219,12 +214,19 @@ def run_simulation(input_filename,
     # We divide the sample in portions that can be processed by the GPU
     tracks_batch_runtimes = []
     step = 1
-    tot_events = 0
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
+    t0 = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-        start_tracks_batch = time()
+        
+        event_id_list = []
+        adc_tot_list = []
+        adc_tot_ticks_list = []
+        track_pixel_map_tot = []
+        unique_pix_tot = []
+        current_fractions_tot = []
+        
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
 
@@ -372,30 +374,26 @@ def run_simulation(input_filename,
             current_fractions_tot.append(cp.asnumpy(current_fractions))
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
             track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
-
-        tot_events += step
-
-        end_tracks_batch = time()
-        tracks_batch_runtimes.append(end_tracks_batch - start_tracks_batch)
+        
+        event_id_list_batch = np.concatenate(event_id_list, axis=0)
+        adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
+        adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
+        unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
+        current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
+        track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
+        _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
+                                             adc_tot_list_batch,
+                                             adc_tot_ticks_list_batch,
+                                             unique_pix_tot_batch,
+                                             current_fractions_tot_batch,
+                                             track_pixel_map_tot_batch,
+                                             output_filename,
+                                             t0=t0,
+                                             bad_channels=bad_channels)
+        t0 = last_time
+            
 
     print("*************\nSAVING RESULT\n*************")
-    RangePush("Exporting to HDF5")
-    # Here we export the result in a HDF5 file.
-    event_id_list = np.concatenate(event_id_list, axis=0)
-    adc_tot_list = np.concatenate(adc_tot_list, axis=0)
-    adc_tot_ticks_list = np.concatenate(adc_tot_ticks_list, axis=0)
-    unique_pix_tot = np.concatenate(unique_pix_tot, axis=0)
-    current_fractions_tot = np.concatenate(current_fractions_tot, axis=0)
-    track_pixel_map_tot = np.concatenate(track_pixel_map_tot, axis=0)
-    fee.export_to_hdf5(event_id_list,
-                       adc_tot_list,
-                       adc_tot_ticks_list,
-                       unique_pix_tot,
-                       current_fractions_tot,
-                       track_pixel_map_tot,
-                       output_filename,
-                       bad_channels=bad_channels)
-    RangePop()
 
     with h5py.File(output_filename, 'a') as output_file:
         output_file.create_dataset("tracks", data=tracks)
