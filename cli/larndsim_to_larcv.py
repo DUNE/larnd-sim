@@ -3,6 +3,7 @@
 from collections import defaultdict
 
 import h5py
+import math
 import numpy as np
 import yaml
 import fire
@@ -10,13 +11,40 @@ import fire
 from tqdm import tqdm
 from larcv import larcv
 from larndsim import consts, fee
-from larndsim.consts import detector
+from larndsim.consts import detector, physics
 
-# Fudge factor for current iteration; comes from comparing
-# most probable value of energy deposits from muon tracks in the "voxelized geant4"
-# to the similar peak in the larnd-sim output (which is in 'number of electrons at anode').
-MEV_PER_ELECTRON = 1.139e-05
 #VERBOSE = 0
+
+def charge_to_MeV(charge_at_anode, drift_distance):
+    """ Estimate the energy deposit that corresponds to the observed charge at anode.
+
+        In simulation, this correction is redundant (we know the true energy deposited anyway).
+        But for real data, and for the initial tests of the reconstruction
+        without pass-through truth info through larnd-sim,
+        it's necessary.
+
+        There are three corrections:
+           * electron lifetime/drift  (electrons at anode -> electrons at interaction point)
+           * recombination            (account for electrons lost at interaction point)
+           * Argon work function      (energy per atomic electron liberated)
+
+        Each is the inverse of a calculation in larnd-sim.
+    """
+
+    drift_time = drift_distance / detector.V_DRIFT
+    charge = charge_at_anode * math.exp(drift_time / detector.ELECTRON_LIFETIME)
+
+    # for the recombination correction we need to know dE/dx,
+    # since the recombination function depends on it.
+    # unfortunately at this stage we don't.
+    # instead we use the most probable dE/dx (minimum-ionizing peak, about 1.9 MeV/cm)
+    # and the recombination factor that arises from it, 0.7056.
+    # (the value of the most probable dE/dx was determined by examining the true dE/dxs
+    #  in "voxelized edep-sim".  the corresponding recombination factor comes from the formula in larndsim/quenching.py.)
+    charge /= 0.7056
+
+    return charge * consts.physics.W_ION
+
 
 def get_x_coordinate(io_group_io_channel_to_tile,
                      io_group, io_channel,
@@ -175,9 +203,6 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
         event_charges = np.array(event_adcs/fee.ADC_COUNTS*(fee.V_REF-fee.V_CM+fee.V_CM-fee.V_PEDESTAL)/fee.GAIN)
         if VERBOSE:
             print('Total charge in this event: {}'.format(event_charges.sum()))
-            print('Total equivalent estimated energy deposits: {}'.format(event_charges.sum() * MEV_PER_ELECTRON))
-            if MEV_PER_ELECTRON:
-                print('Using voxel energy fudge factor (MeV/electron): {}'.format(MEV_PER_ELECTRON))
 
         # Collect packet charge and xyz information
         event_voxel_set = larcv.VoxelSet()
@@ -233,7 +258,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                 if not voxel_meta.valid():
                     print('Invalid voxel meta for charge ', packet_charge)
 
-                voxel = larcv.Voxel(voxel_id, packet_charge * MEV_PER_ELECTRON)
+                voxel = larcv.Voxel(voxel_id, charge_to_MeV(packet_charge, x))
                 event_voxel_set.add(voxel)
 
         event_num = event if eventids is None else int(eventids[0])
