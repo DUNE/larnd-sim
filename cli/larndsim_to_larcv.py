@@ -181,6 +181,15 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
 
         # Collect packet charge and xyz information
         event_voxel_set = larcv.VoxelSet()
+
+        eventids = None
+        if len(mc_packets_assn) > 0 and end_packet > start_packet:
+            packet_indices = np.where(packets[start_packet:end_packet]["packet_type"] == 0)[0] + start_packet
+            track_ids = np.unique(mc_packets_assn[packet_indices]["track_ids"])
+            track_ids = track_ids[track_ids >= 0]  # will have lots of -1s from unfilled slots in the track_ids array
+            eventids = np.unique(tracks[track_ids]["eventID"])
+            assert len(eventids) == 1, "Packets correspond to more than a single true event!  Event numbers: %s" % eventids
+
         for packet in packets[start_packet:end_packet]:
             # Only look at data packets (type 0)
             if packet['packet_type'] == 0:
@@ -227,7 +236,8 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                 voxel = larcv.Voxel(voxel_id, packet_charge * MEV_PER_ELECTRON)
                 event_voxel_set.add(voxel)
 
-        io.set_id(0, 0, event)  # run numbers
+        event_num = event if eventids is None else int(eventids[0])
+        io.set_id(0, 0, event_num)  # run numbers
         prod = io.get_data("sparse3d", "larndsim")
         prod.set(event_voxel_set, voxel_meta)
         io.save_entry()
