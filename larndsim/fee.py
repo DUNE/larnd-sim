@@ -14,7 +14,6 @@ from math import exp, floor
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket
 from larpix.packet import PacketCollection
 from larpix.format import hdf5format
-from tqdm import tqdm
 from .consts import detector, physics
 
 from .pixels_from_track import id2pixel
@@ -141,7 +140,7 @@ def export_to_hdf5(event_id_list,
     event_start_time_list = event_start_time[unique_events_inv]
 
     rollover_count = 0
-    for itick, adcs in enumerate(tqdm(adc_list, desc="Writing to HDF5...", ncols=80)):
+    for itick, adcs in enumerate(adc_list):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
 
