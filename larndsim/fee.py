@@ -148,7 +148,7 @@ def export_to_hdf5(event_id_list,
         module_id = plane_id//2+1
 
         if module_id not in detector.MODULE_TO_IO_GROUPS.keys():
-            logger.warning("Pixel ID not valid %i" % pixel_id)
+            logger.warning("Pixel ID not valid %i" % module_id)
             continue
 
         tile_x = int(pix_x//detector.N_PIXELS_PER_TILE[0])
