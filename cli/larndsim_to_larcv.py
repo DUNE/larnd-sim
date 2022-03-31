@@ -174,12 +174,6 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
         print('{} event dividers'.format(len(event_dividers)))
         print('Event dividers:\n', event_dividers)
 
-
-    for event in range(num_events):
-        start_packet = event_dividers[event]
-        end_packet   = event_dividers[event+1]
-        event_packets = packets[start_packet:end_packet]
-
     module_ids = []
     print('Processing', num_events, 'events')
     event_packets = np.empty((num_events, 4))
