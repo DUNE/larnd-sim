@@ -201,7 +201,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
 
         # Calculate charge scale for this event
         event_adcs = event_packets['dataword'][event_packets['packet_type']==0]
-        event_charges = np.array(event_adcs/fee.ADC_COUNTS*(fee.V_REF-fee.V_CM+fee.V_CM-fee.V_PEDESTAL)/fee.GAIN)
+        event_charges = np.array( (event_adcs/fee.ADC_COUNTS*(fee.V_REF - fee.V_CM) + (fee.V_CM - fee.V_PEDESTAL))/fee.GAIN )
         if VERBOSE:
             print('Total charge in this event: {}'.format(event_charges.sum()))
 
@@ -222,7 +222,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                 io_group, io_channel, chip, channel = packet['io_group'], packet['io_channel'], packet['chip_id'], packet['channel_id']
                 packet_adc = packet['dataword']
                 # Convert ADC to number of electrons
-                packet_charge = packet_adc/fee.ADC_COUNTS*(fee.V_REF-fee.V_CM+fee.V_CM-fee.V_PEDESTAL)/fee.GAIN
+                packet_charge = (packet_adc / fee.ADC_COUNTS * (fee.V_REF-fee.V_CM) + (fee.V_CM-fee.V_PEDESTAL)) / fee.GAIN
                 module_id = (io_group-1)//4
                 if module_id not in module_ids:
                     module_ids.append(module_id)
