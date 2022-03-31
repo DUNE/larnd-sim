@@ -211,7 +211,6 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
-        output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
@@ -402,6 +401,7 @@ def run_simulation(input_filename,
                                                 bad_channels=bad_channels)
             t0 = last_time
 
+    output_file['configs'].attrs['pixel_layout'] = pixel_layout
     print("Output saved in:", output_filename)
 
     RangePop()
