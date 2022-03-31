@@ -65,7 +65,7 @@ def get_x_coordinate(io_group_io_channel_to_tile,
     time = time/10
     return x_anode + time * detector.V_DRIFT * drift_direction
 
-def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity=0):
+def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity=0, calibration=True):
     """Converts larnd-sim file into larcv format"""
 
     VERBOSE = verbosity
@@ -255,7 +255,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                     continue
 
                 voxel_id = voxel_meta.id(point)
-                voxel = larcv.Voxel(voxel_id, charge_to_MeV(packet_charge, x))
+                voxel = larcv.Voxel(voxel_id, charge_to_MeV(packet_charge, x) if calibration else packet_charge)
                 event_voxel_set.add(voxel)
 
         event_num = event if eventids is None else int(eventids[0])
