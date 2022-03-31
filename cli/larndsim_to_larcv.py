@@ -89,6 +89,7 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
     bbox = larcv.BBox3D(*bbox_args)
     voxel_meta = larcv.Voxel3DMeta()
     voxel_meta.set(xmin, ymin, zmin, xmax, ymax, zmax, xnum, ynum, znum)
+    assert voxel_meta.valid(), "Invalid voxel metadata!  Grid (xmin, ymin, zmin, xmax, ymax, zmax, xnum, ynum, znum) = %s" % str((xmin, ymin, zmin, xmax, ymax, zmax, xnum, ynum, znum))
 
     print('Try to open ', input_file)
     with h5py.File(input_file, 'r') as fin:
@@ -254,10 +255,6 @@ def run_conversion(input_file, output_file, pixel_file, detector_file, verbosity
                     continue
 
                 voxel_id = voxel_meta.id(point)
-
-                if not voxel_meta.valid():
-                    print('Invalid voxel meta for charge ', packet_charge)
-
                 voxel = larcv.Voxel(voxel_id, charge_to_MeV(packet_charge, x))
                 event_voxel_set.add(voxel)
 
