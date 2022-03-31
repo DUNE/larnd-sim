@@ -144,7 +144,7 @@ def run_simulation(input_filename,
             input_has_trajectories = False
 
         try:
-            vertices = np.array(f['eventTruth'])
+            vertices = np.array(f['vertices'])
             input_has_vertices = True
         except KeyError:
             print("Input file does not have true vertices info")
@@ -203,8 +203,15 @@ def run_simulation(input_filename,
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
         print(f" {time()-start_light_time:.2f} s")
 
-    # initialize lists to collect results from GPU
-
+    with h5py.File(output_filename, 'a') as output_file:
+        output_file.create_dataset("tracks", data=tracks)
+        if light.LIGHT_SIMULATED:
+            output_file.create_dataset('light_dat', data=light_sim_dat)
+        if input_has_trajectories:
+            output_file.create_dataset("trajectories", data=trajectories)
+        if input_has_vertices:
+            output_file.create_dataset("vertices", data=vertices)
+        output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
@@ -394,19 +401,6 @@ def run_simulation(input_filename,
                                                 t0=t0,
                                                 bad_channels=bad_channels)
             t0 = last_time
-
-
-    print("*************\nSAVING RESULT\n*************")
-
-    with h5py.File(output_filename, 'a') as output_file:
-        output_file.create_dataset("tracks", data=tracks)
-        if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat)
-        if input_has_trajectories:
-            output_file.create_dataset("trajectories", data=trajectories)
-        if input_has_vertices:
-            output_file.create_dataset("eventTruth", data=vertices)
-        output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
 
