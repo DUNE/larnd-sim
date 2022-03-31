@@ -1,0 +1,24 @@
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
+lifetime: 2.2e+3 # us
+time_interval: [0, 200.] # us
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+drift_length: 30.27225 # cm
+response_sampling: 0.1 # us
+reponse_bin_size: 0.04434 # cm
+time_padding: 190 # us
+time_window: 189.1 # us
+tpc_offsets: # cm
+  - [33.5, -21.8236, 33.5]
+  - [33.5, -21.8236, -33.5]
+  - [-33.5, -21.8236, 33.5]
+  - [-33.5, -21.8236, -33.5]
+tile_map:
+  - [[7,5,3,1],[8,6,4,2]]
+  - [[16,14,12,10],[15,13,11,9]]
+module_to_io_groups:
+  1: [1,2,3,4]
+  2: [5,6,7,8]
+  3: [9,10,11,12]
+  4: [13,14,15,16]

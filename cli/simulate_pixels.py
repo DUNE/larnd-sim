@@ -402,6 +402,7 @@ def run_simulation(input_filename,
             t0 = last_time
 
     output_file['configs'].attrs['pixel_layout'] = pixel_layout
+
     print("Output saved in:", output_filename)
 
     RangePop()
