@@ -7,6 +7,8 @@ import yaml
 
 from collections import defaultdict
 
+from .units import mm, cm
+
 MM2CM = 0.1
 CM2MM = 10
 KV2V = 1000
@@ -163,7 +165,7 @@ def set_detector_properties(detprop_file, pixel_file):
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
 
-    PIXEL_PITCH = tile_layout['pixel_pitch'] * MM2CM
+    PIXEL_PITCH = tile_layout['pixel_pitch'] * mm / cm
     chip_channel_to_position = tile_layout['chip_channel_to_position']
     PIXEL_CONNECTION_DICT = {tuple(pix): (chip_channel//1000,chip_channel%1000) for chip_channel, pix in chip_channel_to_position.items()}
     TILE_CHIP_TO_IO = tile_layout['tile_chip_to_io']
@@ -194,7 +196,7 @@ def set_detector_properties(detprop_file, pixel_file):
     for it, tpc_offset in enumerate(TPC_OFFSETS):
         for ia, anode in enumerate(anodes):
             tiles = np.vstack(anodes[anode])
-            tiles *= MM2CM
+            tiles *= mm / cm
             drift_direction = 1 if anode == 1 else -1
             x_border = min(tiles[:,2]) + TILE_BORDERS[0][0] + tpc_offset[0], \
                        max(tiles[:,2]) + TILE_BORDERS[0][1] + tpc_offset[0]

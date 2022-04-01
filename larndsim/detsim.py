@@ -396,7 +396,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                         continue
 
-                    total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * physics.E_CHARGE
+                    total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response)
 
             signals[itrk,ipix,it] = total_current
 
@@ -500,7 +500,7 @@ def tracks_current(signals, pixels, tracks, response):
                             charge = rho((x,y,z), t["n_electrons"], start, sigmas, segment) \
                                      * abs(x_step) * abs(y_step) * abs(z_step)
 
-                            total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * charge * physics.E_CHARGE
+                            total_current += get_closest_waveform(x_dist, y_dist, time_tick-t0, response) * charge
 
                         signals[itrk,ipix,it] = total_current
 
