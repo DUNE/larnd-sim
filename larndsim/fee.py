@@ -18,12 +18,12 @@ from .consts import detector, physics
 
 from .pixels_from_track import id2pixel
 
-np.random.seed(1)
+from .consts.units import mV, e
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
-#: Discrimination threshold
-DISCRIMINATION_THRESHOLD = 7e3 * physics.E_CHARGE
+#: Discrimination threshold in e-
+DISCRIMINATION_THRESHOLD = 7e3 * e
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
@@ -33,23 +33,23 @@ RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
 #: Front-end gain in :math:`mV/ke-`
-GAIN = 4/1e3
+GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
 BUFFER_RISETIME = 0.100
 #: Common-mode voltage in :math:`mV`
-V_CM = 288
+V_CM = 288 * mV
 #: Reference voltage in :math:`mV`
-V_REF = 1300
+V_REF = 1300 * mV
 #: Pedestal voltage in :math:`mV`
-V_PEDESTAL = 580
+V_PEDESTAL = 580 * mV
 #: Number of ADC counts
 ADC_COUNTS = 2**8
 #: Reset noise in e-
-RESET_NOISE_CHARGE = 900
+RESET_NOISE_CHARGE = 900 * e
 #: Uncorrelated noise in e-
-UNCORRELATED_NOISE_CHARGE = 500
+UNCORRELATED_NOISE_CHARGE = 500 * e
 #: Discriminator noise in e-
-DISCRIMINATOR_NOISE = 650
+DISCRIMINATOR_NOISE = 650 * e
 #: Average time between events in clock cycles
 EVENT_RATE = 1000000 # ~10Hz
 
@@ -266,7 +266,7 @@ def digitize(integral_list):
         :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN / physics.E_CHARGE + V_PEDESTAL - V_CM), 0)
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN + V_PEDESTAL - V_CM), 0)
                                 * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
 
     return adcs
@@ -310,7 +310,7 @@ def get_adc_values(pixels_signals,
         iadc = 0
         adc_busy = 0
         last_reset = 0
-        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
+        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
 
         while ic < curre.shape[0] or adc_busy > 0:
 
@@ -335,8 +335,8 @@ def get_adc_values(pixels_signals,
 
             q_sum += q
 
-            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
-            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
+            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
 
             if adc_busy > 0:
                 adc_busy -= 1
@@ -367,12 +367,12 @@ def get_adc_values(pixels_signals,
                     q_sum += q
                     ic+=1
 
-                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE * physics.E_CHARGE
-                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE * physics.E_CHARGE
+                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE 
+                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
 
                 if adc < pixel_thresholds[ip] + disc_noise:
                     ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
-                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
+                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
 
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0
@@ -398,7 +398,7 @@ def get_adc_values(pixels_signals,
                 last_reset = ic
                 adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
 
-                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE * physics.E_CHARGE
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
 
                 iadc += 1
                 continue
