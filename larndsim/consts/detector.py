@@ -7,11 +7,7 @@ import yaml
 
 from collections import defaultdict
 
-from .units import mm, cm
-
-MM2CM = 0.1
-CM2MM = 10
-KV2V = 1000
+from .units import mm, cm, V, kV
 
 #: Detector temperature in K
 TEMPERATURE = 87.17
@@ -97,7 +93,7 @@ def electron_mobility(efield, temperature):
     denom = 1 + (a1 / a0) * efield + a4 * pow(efield, 2) + a5 * pow(efield, 3)
     temp_corr = pow(temperature / 89, -1.5)
 
-    mu = num / denom * temp_corr / KV2V
+    mu = num / denom * temp_corr * V / kV
 
     return mu
 
