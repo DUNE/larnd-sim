@@ -84,6 +84,7 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
+        
         this_border = TPC_BORDERS[int(t["pixel_plane"])]
         start_pixel = (
             int((t["x_start"] - this_border[0][0]) // PIXEL_PITCH),
@@ -127,7 +128,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     err = dx + dy
 
     n = 0
-    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
+    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
         n += 1
 
     while x0 != x1 or y0 != y1:
@@ -141,7 +142,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
             err += dx
             y0 += sy
 
-        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
+        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
             n += 1
 
     return n
@@ -171,7 +172,8 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
     err = dx + dy
 
     i = 0
-    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
+
+    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
         tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
     while x0 != x1 or y0 != y1:
@@ -186,7 +188,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
             err += dx
             y0 += sy
 
-        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
+        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
             tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
 @cuda.jit(device=True)
@@ -221,7 +223,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                 new_x, new_y = active_x + x_r, active_y + y_r
                 is_unique = True
 
-                if 0 <= new_x < N_PIXELS[0] and 0 <= new_y < N_PIXELS[1] and plane_id < TPC_BORDERS.shape[0]:
+                if 0 <= new_x < N_PIXELS[0] and 0 <= new_y < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
                     new_pixel = pixel2id(new_x, new_y, plane_id)
 
                     for ipix in range(neighboring_pixels.shape[0]):
