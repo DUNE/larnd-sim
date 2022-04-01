@@ -3,9 +3,6 @@ Set global variables with detector and physics properties
 """
 from . import detector, light
 
-MM2CM = 0.1
-CM2MM = 10
-
 def load_properties(detprop_file, pixel_file):
     """
     The function loads the detector properties and
