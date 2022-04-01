@@ -401,7 +401,9 @@ def run_simulation(input_filename,
                                                 bad_channels=bad_channels)
             t0 = last_time
 
-    output_file['configs'].attrs['pixel_layout'] = pixel_layout
+    with h5py.File(output_filename, 'a') as output_file:
+        if 'configs' in output_file.keys():
+            output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
 
