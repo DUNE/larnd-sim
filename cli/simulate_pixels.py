@@ -22,6 +22,7 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.cuda_dict import CudaDict
 
+SEED = int(time())
 BATCH_SIZE = 4000
 
 LOGO = """
@@ -42,9 +43,9 @@ def swap_coordinates(tracks):
 
     Args:
         tracks (:obj:`numpy.ndarray`): tracks array.
-        
+
     Returns:
-        :obj:`numpy.ndarray`: tracks with swapped axes. 
+        :obj:`numpy.ndarray`: tracks with swapped axes.
     """
     x_start = np.copy(tracks['x_start'] )
     x_end = np.copy(tracks['x_end'])
@@ -61,6 +62,7 @@ def swap_coordinates(tracks):
     return tracks
 
 def maybe_create_rng_states(n, seed=0, rng_states=None):
+    """Create or extend random states for CUDA kernel"""
     if rng_states is None:
         return create_xoroshiro128p_states(n, seed=seed)
     elif n > len(rng_states):
@@ -107,8 +109,10 @@ def run_simulation(input_filename,
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    print("Random seed:", SEED)
+    print("Batch size:", BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
-    print("Detector propeties file:", detector_properties)
+    print("Detector properties file:", detector_properties)
     print("edep-sim input file:", input_filename)
     print("Response file:", response_file)
     if bad_channels:
@@ -143,7 +147,7 @@ def run_simulation(input_filename,
             input_has_trajectories = False
 
         try:
-            vertices = np.array(f['eventTruth'])
+            vertices = np.array(f['vertices'])
             input_has_vertices = True
         except KeyError:
             print("Input file does not have true vertices info")
@@ -153,7 +157,8 @@ def run_simulation(input_filename,
 
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2], dtype=[('n_photons_det','f4'),('t0_det','f4')])
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
+                                 dtype=[('n_photons_det','f4'),('t0_det','f4')])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -180,35 +185,35 @@ def run_simulation(input_filename,
     print("******************\nRUNNING SIMULATION\n******************")
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
-    print("Quenching electrons...",end='')
+    print("Quenching electrons..." , end="")
     start_quenching = time()
     quenching.quench[BPG,TPB](tracks, physics.BIRKS)
     end_quenching = time()
     print(f" {end_quenching-start_quenching:.2f} s")
 
-    print("Drifting electrons...",end='')
+    print("Drifting electrons...", end="")
     start_drifting = time()
     drifting.drift[BPG,TPB](tracks)
     end_drifting = time()
     print(f" {end_drifting-start_drifting:.2f} s")
 
     if light.LIGHT_SIMULATED:
-        print("Calculating optical responses...",end='')
-        start_lightLUT = time()
+        print("Calculating optical responses...", end="")
+        start_light_time = time()
         lut = cp.load(light_lut_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
-        end_lightLUT = time()
-        print(f" {end_lightLUT-start_lightLUT:.2f} s")
+        print(f" {time()-start_light_time:.2f} s")
 
-    # initialize lists to collect results from GPU
-    event_id_list = []
-    adc_tot_list = []
-    adc_tot_ticks_list = []
-    track_pixel_map_tot = []
-    unique_pix_tot = []
-    current_fractions_tot = []
+    with h5py.File(output_filename, 'a') as output_file:
+        output_file.create_dataset("tracks", data=tracks)
+        if light.LIGHT_SIMULATED:
+            output_file.create_dataset('light_dat', data=light_sim_dat)
+        if input_has_trajectories:
+            output_file.create_dataset("trajectories", data=trajectories)
+        if input_has_vertices:
+            output_file.create_dataset("vertices", data=vertices)
 
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks['eventID'])
@@ -217,14 +222,20 @@ def run_simulation(input_filename,
     end_idx = len(tracks['eventID']) - 1 - rev_idx
 
     # We divide the sample in portions that can be processed by the GPU
-    tracks_batch_runtimes = []
     step = 1
-    tot_events = 0
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
+    t0 = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-        start_tracks_batch = time()
+
+        event_id_list = []
+        adc_tot_list = []
+        adc_tot_ticks_list = []
+        track_pixel_map_tot = []
+        unique_pix_tot = []
+        current_fractions_tot = []
+
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
 
@@ -299,7 +310,7 @@ def run_simulation(input_filename,
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=ievd, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=SEED+ievd+itrk, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
@@ -328,7 +339,9 @@ def run_simulation(input_filename,
             BPG_Z = ceil(signals.shape[2] / TPB[2])
             BPG = (BPG_X, BPG_Y, BPG_Z)
             pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-            pixels_tracks_signals = cp.zeros((len(unique_pix),len(detector.TIME_TICKS),track_pixel_map.shape[1]))
+            pixels_tracks_signals = cp.zeros((len(unique_pix),
+                                              len(detector.TIME_TICKS),
+                                              track_pixel_map.shape[1]))
             detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                               signals,
                                               track_starts,
@@ -346,7 +359,7 @@ def run_simulation(input_filename,
 
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=ievd, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=SEED+ievd+itrk, rng_states=rng_states)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
@@ -366,46 +379,34 @@ def run_simulation(input_filename,
             RangePop()
 
             event_id_list.append(adc_event_ids)
-            adc_tot_list.append(cp.asnumpy(adc_list))
-            adc_tot_ticks_list.append(cp.asnumpy(adc_ticks_list))
-            unique_pix_tot.append(cp.asnumpy(unique_pix))
-            current_fractions_tot.append(cp.asnumpy(current_fractions))
+            adc_tot_list.append(adc_list)
+            adc_tot_ticks_list.append(adc_ticks_list)
+            unique_pix_tot.append(unique_pix)
+            current_fractions_tot.append(current_fractions)
             track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map_tot.append(cp.asnumpy(track_pixel_map))
+            track_pixel_map_tot.append(track_pixel_map)
 
-        tot_events += step
-
-        end_tracks_batch = time()
-        tracks_batch_runtimes.append(end_tracks_batch - start_tracks_batch)
-
-    print("*************\nSAVING RESULT\n*************")
-    RangePush("Exporting to HDF5")
-    # Here we export the result in a HDF5 file.
-    event_id_list = np.concatenate(event_id_list, axis=0)
-    adc_tot_list = np.concatenate(adc_tot_list, axis=0)
-    adc_tot_ticks_list = np.concatenate(adc_tot_ticks_list, axis=0)
-    unique_pix_tot = np.concatenate(unique_pix_tot, axis=0)
-    current_fractions_tot = np.concatenate(current_fractions_tot, axis=0)
-    track_pixel_map_tot = np.concatenate(track_pixel_map_tot, axis=0)
-    fee.export_to_hdf5(event_id_list,
-                       adc_tot_list,
-                       adc_tot_ticks_list,
-                       unique_pix_tot,
-                       current_fractions_tot,
-                       track_pixel_map_tot,
-                       output_filename,
-                       bad_channels=bad_channels)
-    RangePop()
+        if event_id_list and adc_tot_list:
+            event_id_list_batch = np.concatenate(event_id_list, axis=0)
+            adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
+            adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
+            unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
+            current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
+            track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
+            _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
+                                                adc_tot_list_batch,
+                                                adc_tot_ticks_list_batch,
+                                                cp.asnumpy(unique_pix_tot_batch),
+                                                cp.asnumpy(current_fractions_tot_batch),
+                                                cp.asnumpy(track_pixel_map_tot_batch),
+                                                output_filename,
+                                                t0=t0,
+                                                bad_channels=bad_channels)
+            t0 = last_time
 
     with h5py.File(output_filename, 'a') as output_file:
-        output_file.create_dataset("tracks", data=tracks)
-        if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat)
-        if input_has_trajectories:
-            output_file.create_dataset("trajectories", data=trajectories)
-        if input_has_vertices:
-            output_file.create_dataset("eventTruth", data=vertices)
-        output_file['configs'].attrs['pixel_layout'] = pixel_layout
+        if 'configs' in output_file.keys():
+            output_file['configs'].attrs['pixel_layout'] = pixel_layout
 
     print("Output saved in:", output_filename)
 

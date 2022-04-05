@@ -12,6 +12,34 @@ This software aims to simulate a pixelated Liquid Argon Time Projection Chamber.
 
 The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html).
 
+## Installation
+Some binary files required to run `larnd-sim` files are stored using [Git LFS](https://git-lfs.github.com). To be able to install the clone and install 'larnd-sim` you first need to do:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+The package can be installed in this way:
+
+```bash
+git clone https://github.com/DUNE/larnd-sim.git
+cd larnd-sim
+pip install .
+```
+which should take care of installing the required dependencies. If you are a developer you might want to install it in _editable mode_, so you can make changes to the code without having to re-install the package every time:
+
+```bash
+pip install -e .
+```
+
+`larnd-sim` requires a GPU to function properly. To check if the GPU is setup properly and can talk to `larnd-sim` you can run:
+
+```python
+>>> from numba.cuda import is_available
+>>> is_available()
+```
+
 ## How to run a simulation
 
 ### Input dataset
