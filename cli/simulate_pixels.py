@@ -112,7 +112,7 @@ def run_simulation(input_filename,
     print("Random seed:", SEED)
     print("Batch size:", BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
-    print("Detector propeties file:", detector_properties)
+    print("Detector properties file:", detector_properties)
     print("edep-sim input file:", input_filename)
     print("Response file:", response_file)
     if bad_channels:
