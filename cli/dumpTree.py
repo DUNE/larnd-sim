@@ -8,6 +8,7 @@ from math import sqrt
 import numpy as np
 import fire
 import h5py
+from tqdm import tqdm
 
 from ROOT import TG4Event, TFile
 
@@ -106,7 +107,7 @@ def dump(input_file, output_file):
 
     # Get the input tree out of the file.
     inputTree = inputFile.Get("EDepSimEvents")
-    print("Class:", inputTree.ClassName())
+    #print("Class:", inputTree.ClassName())
 
     # Attach a brach to the events.
     event = TG4Event()
@@ -140,18 +141,48 @@ def dump(input_file, output_file):
 
     vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")])
 
+    with h5py.File(output_file, 'w') as f:
+        f.create_dataset('trajectories', (0,), dtype=trajectories_dtype, maxshape=(None,))
+        f.create_dataset('segments', (0,), dtype=segments_dtype, maxshape=(None,))
+        f.create_dataset('vertices', (0,), dtype=vertices_dtype, maxshape=(None,))
+
     segments_list = []
     trajectories_list = []
     vertices_list = []
 
-    for jentry in range(entries):
-        print(jentry)
+    for jentry in tqdm(range(entries+1)):
+        #print(jentry)
         nb = inputTree.GetEntry(jentry)
+
+        # write to file
+        if len(trajectories_list) >= 1000 or nb <= 0:
+            if len(trajectories_list) > 0:
+                trajectories_list = np.concatenate(trajectories_list, axis=0)
+                segments_list = np.concatenate(segments_list, axis=0)
+                vertices_list = np.concatenate(vertices_list, axis=0)
+
+                with h5py.File(output_file, 'a') as f:
+                    ntraj = len(f['trajectories'])
+                    f['trajectories'].resize((ntraj+len(trajectories_list),))
+                    f['trajectories'][ntraj:] = trajectories_list
+
+                    nseg = len(f['segments'])
+                    f['segments'].resize((nseg+len(segments_list),))
+                    f['segments'][nseg:] = segments_list
+
+                    nvert = len(f['vertices'])
+                    f['vertices'].resize((nvert+len(vertices_list),))
+                    f['vertices'][nvert:] = vertices_list
+
+                trajectories_list = list()
+                segments_list = list()
+                vertices_list = list()
+
         if nb <= 0:
             continue
 
-        print("Class: ", event.ClassName())
-        print("Event number:", event.EventId)
+        #print("Class: ", event.ClassName())
+        #print("Event number:", event.EventId)
 
         # Dump the primary vertices
         vertex = np.empty(len(event.Primaries), dtype=vertices_dtype)
@@ -164,7 +195,7 @@ def dump(input_file, output_file):
             vertices_list.append(vertex)
 
         # Dump the trajectories
-        print("Number of trajectories ", len(event.Trajectories))
+        #print("Number of trajectories ", len(event.Trajectories))
         trajectories = np.empty(len(event.Trajectories), dtype=trajectories_dtype)
         for iTraj, trajectory in enumerate(event.Trajectories):
             start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
@@ -175,8 +206,8 @@ def dump(input_file, output_file):
             trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
             trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
             trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
-            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T()
-            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T()
+            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() / 1e3
+            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() / 1e3
             trajectories[iTraj]["start_process"] = start_pt.GetProcess()
             trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
             trajectories[iTraj]["end_process"] = end_pt.GetProcess()
@@ -186,7 +217,7 @@ def dump(input_file, output_file):
         trajectories_list.append(trajectories)
 
         # Dump the segment containers
-        print("Number of segment containers:", event.SegmentDetectors.size())
+        #print("Number of segment containers:", event.SegmentDetectors.size())
 
         for containerName, hitSegments in event.SegmentDetectors:
 
@@ -197,13 +228,12 @@ def dump(input_file, output_file):
                 segment[iHit]["x_start"] = hitSegment.GetStart().X() / 10
                 segment[iHit]["y_start"] = hitSegment.GetStart().Y() / 10
                 segment[iHit]["z_start"] = hitSegment.GetStart().Z() / 10
+                segment[iHit]["t_start"] = hitSegment.GetStart().T() / 1e3
                 segment[iHit]["x_end"] = hitSegment.GetStop().X() / 10
                 segment[iHit]["y_end"] = hitSegment.GetStop().Y() / 10
                 segment[iHit]["z_end"] = hitSegment.GetStop().Z() / 10
+                segment[iHit]["t_end"] = hitSegment.GetStop().T() / 1e3
                 segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
-                segment[iHit]["t"] = 0
-                segment[iHit]["t_start"] = 0
-                segment[iHit]["t_end"] = 0
                 xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
                 yd = segment[iHit]["y_end"] - segment[iHit]["y_start"]
                 zd = segment[iHit]["z_end"] - segment[iHit]["z_start"]
@@ -212,6 +242,7 @@ def dump(input_file, output_file):
                 segment[iHit]["x"] = (segment[iHit]["x_start"] + segment[iHit]["x_end"]) / 2.
                 segment[iHit]["y"] = (segment[iHit]["y_start"] + segment[iHit]["y_end"]) / 2.
                 segment[iHit]["z"] = (segment[iHit]["z_start"] + segment[iHit]["z_end"]) / 2.
+                segment[iHit]["t"] = (segment[iHit]["t_start"] + segment[iHit]["t_end"]) / 2.
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
                 segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
                 segment[iHit]["n_electrons"] = 0
@@ -221,15 +252,6 @@ def dump(input_file, output_file):
                 segment[iHit]["n_photons"] = 0
 
             segments_list.append(segment)
-
-    trajectories_list = np.concatenate(trajectories_list, axis=0)
-    segments_list = np.concatenate(segments_list, axis=0)
-    vertices_list = np.concatenate(vertices_list, axis=0)
-
-    with h5py.File(output_file, "w") as f:
-        f.create_dataset("trajectories", data=trajectories_list)
-        f.create_dataset("segments", data=segments_list)
-        f.create_dataset("vertices", data=vertices_list)
 
 if __name__ == "__main__":
     fire.Fire(dump)
