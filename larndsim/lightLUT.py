@@ -10,6 +10,7 @@ from numba import cuda
 from .consts import light
 from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY
 from .consts.detector import TPC_BORDERS
+import .consts.units as units
 
 @nb.njit
 def get_voxel(pos, itpc):
@@ -95,7 +96,7 @@ def calculate_light_incidence(tracks, lut, light_incidence):
         vis_dat = lut_vox[:,0]
 
         # Calls T1 data for the voxel
-        T1_dat = lut_vox[:,1]
+        T1_dat = (lut_vox[:,1] * units.ns + tracks['t'][itrk] * units.mus) / units.mus
 
         # Assigns the LUT data to the light_incidence array
         for output_i in range(light.N_OP_CHANNEL):
