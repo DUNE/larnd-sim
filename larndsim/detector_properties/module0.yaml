@@ -1,5 +1,3 @@
-tpc_offsets: # cm
-  - [0, -21.8236, 0]
 temperature: 87.17 # K
 e_field: 0.50 # kV/cm
 lifetime: 2.2e+3 # us
@@ -8,12 +6,16 @@ long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
 drift_length: 30.27225 # cm
 response_sampling: 0.1 # us
-response_bin_size: 0.04434 # cm
-tile_map: 
+reponse_bin_size: 0.04434 # cm
+time_padding: 190 # us
+time_window: 189.1 # us
+tpc_offsets: # cm
+  - [0, -21.8236, 0]
+tile_map:
   - [[7,5,3,1],[8,6,4,2]]
   - [[16,14,12,10],[15,13,11,9]]
+module_to_io_groups:
+  1: [1,2,3,4]
 n_op_channel: 48
 op_channel_efficiency: [1, 1, 1, 1, 1, 1, 14.9, 14.9, 14.9, 14.9, 14.9, 14.9, 1, 1, 1, 1, 1, 1, 14.9, 14.9, 14.9, 14.9, 14.9, 14.9, 1, 1, 1, 1, 1, 1, 14.9, 14.9, 14.9, 14.9, 14.9, 14.9, 1, 1, 1, 1, 1, 1, 14.9, 14.9, 14.9, 14.9, 14.9, 14.9]
 lut_vox_div: [14, 26, 8]
-module_to_io_groups:
-  1: [1,2,3,4]
