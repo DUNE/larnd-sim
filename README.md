@@ -63,7 +63,7 @@ simulate_pixels.py \
 --response_file=larndsim/bin/response_38.npy
 ```
 
-The `response_38.npy` is a file containing an array of induced currents for several $(x,y)$ positions on a pixel with a 38 mm pitch. It is calculated externally to `larnd-sim`. Two versions, one with 44 mm pitch and one with 38 mm pitch, are available in the `larndsim` directory.
+The `response_38.npy` is a file containing an array of induced currents for several $(x,y)$ positions on a pixel with a 38 mm pitch. It is calculated externally to `larnd-sim`. Two versions, one with 44 mm pitch and one with 38 mm pitch, are available in the `larndsim/bin` directory.
 
 The output file will contain the datasets described in the [LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html), plus a dataset `tracks` containing the _true_ energy depositions in the detector, and a dataset `mc_packets_assn`, which has a list of indeces corresponding to the true energy deposition associated to each packet.
 
