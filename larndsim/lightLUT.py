@@ -90,20 +90,20 @@ def calculate_light_incidence(tracks, lut, light_incidence):
         voxel = get_voxel(pos, itpc)
 
         # Calls data from voxel
-        lut_vox = lut[voxel[0], voxel[1], voxel[2],:]
+        lut_vox = lut[voxel[0], voxel[1], voxel[2]]
 
         # Calls visibility data for the voxel
         vis_dat = lut_vox['vis']
 
         # Calls T1 data for the voxel
-        T1_dat = (lut_vox['t0'] * units.ns + tracks['t'][itrk] * units.mus) / units.mus
+        T1_dat = lut_vox['t0']
 
         # Assigns the LUT data to the light_incidence array
         for output_i in range(light.N_OP_CHANNEL):
             op_channel_index = output_i + int(itpc*light.N_OP_CHANNEL)
             eff = OP_CHANNEL_EFFICIENCY[output_i]
             vis = vis_dat[output_i]
-            t1 = T1_dat[output_i]
+            t1 = (T1_dat[output_i] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
 
             light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
             light_incidence['t0_det'][itrk,op_channel_index] = t1

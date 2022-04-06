@@ -200,7 +200,7 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
-        lut = cp.load(light_lut_filename)
+        lut = np.load(light_lut_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
