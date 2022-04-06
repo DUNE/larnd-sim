@@ -6,13 +6,14 @@
 
 <img alt="larnd-sim" src="docs/logo.png" height="160" />
 
-This software aims to simulate a pixelated Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the CUDA architecture.
+This software aims to simulate a pixelated Liquid Argon Time Projection Chamber using [LArPix](https://arxiv.org/abs/1808.02969). It consists of a set of highly-parallelized algorithms implemented on the [CUDA architecture](https://developer.nvidia.com/cuda-toolkit).
 
 ## Overview
 
-The software takes as input an array containing the necessary truth iformation for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html).
+The software takes as input an array containing the necessary truth information for each simulated segment of deposited energy in the detector (e.g. starting point, amount of energy) and produces a list of packets with an ADC count and timestamp in the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html).
 
 ## Installation
+
 Some binary files required to run `larnd-sim` files are stored using [Git LFS](https://git-lfs.github.com). To be able to install the clone and install 'larnd-sim` you first need to do:
 
 ```bash
@@ -27,6 +28,7 @@ git clone https://github.com/DUNE/larnd-sim.git
 cd larnd-sim
 pip install .
 ```
+
 which should take care of installing the required dependencies. If you are a developer you might want to install it in _editable mode_, so you can make changes to the code without having to re-install the package every time:
 
 ```bash
@@ -54,14 +56,14 @@ We provide a command-line interface available at `cli/simulate_pixels.py`, which
 
 ```bash
 simulate_pixels.py \
---input_filename=lbnfSpillLAr.edep.h5 \
+--input_filename=examples/lbnfSpillLAr.edep.h5 \
 --detector_properties=larndsim/detector_properties/ndlar-module.yaml \
 --pixel_layout=larndsim/pixel_layouts/multi_tile_layout-3.0.40.yaml \
 --output_filename=lbnfSpillLAr.larndsim.h5 \
---response=larndsim/response_38.npy
+--response_file=larndsim/bin/response_38.npy
 ```
 
-The `response_38.npy` is a file containing an array of induced currents for several $(x,y)$ positions on the pixel, with a 38 mm pitch. It is calculated externally to `larnd-sim`. A version with 44 mm pitch is available in the `larndsim` directory.
+The `response_38.npy` is a file containing an array of induced currents for several $(x,y)$ positions on a pixel with a 38 mm pitch. It is calculated externally to `larnd-sim`. Two versions, one with 44 mm pitch and one with 38 mm pitch, are available in the `larndsim` directory.
 
 The output file will contain the datasets described in the [LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html), plus a dataset `tracks` containing the _true_ energy depositions in the detector, and a dataset `mc_packets_assn`, which has a list of indeces corresponding to the true energy deposition associated to each packet.
 
@@ -109,7 +111,8 @@ from larndsim import detsim
 detsim.tracks_current[BPG,TPB](signals,
                                neighboring_pixels,
                                input_tracks,
-                               response)
+                               response,
+                               rng_states)
 ```
 
 Here, `response` is a Numpy array containing a look-up table with a pre-calculated field response. The file valid for Module0 and SingleCube LArPix tiles is availabe at `larndsim/response-44.npy`. For ND-LAr the file is `larndsim/response_38.npy`.
@@ -152,22 +155,26 @@ fee.get_adc_values[BPG,TPB](pixels_signals,
                             time_ticks,
                             integral_list,
                             adc_ticks_list,
-                            consts.time_interval[1]*3*tot_events,
+                            0,
                             rng_states,
-                            current_fractions)
+                            current_fractions,
+                            pixel_thresholds)
 ```
 
 where the random states `rng_states` are needed for the noise simulation.
 
 ### Export
 
-The final output is then exported to the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html):
+The final output is then exported to the [LArPix HDF5 format](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html) after each event in the input file:
 
 ```python
-fee.export_to_hdf5(cp.asnumpy(adc_tot_list),
-                   cp.asnumpy(adc_tot_ticks_list),
-                   cp.asnumpy(unique_pix_tot),
-                   cp.asnumpy(current_fractions_tot),
-                   cp.asnumpy(track_pixel_map_tot),
-                   "example.h5")
+fee.export_to_hdf5(event_id_list_batch,
+                   adc_tot_list_batch,
+                   adc_tot_ticks_list_batch,
+                   cp.asnumpy(unique_pix_tot_batch),
+                   cp.asnumpy(current_fractions_tot_batch),
+                   cp.asnumpy(track_pixel_map_tot_batch),
+                   output_filename,
+                   t0=t0,
+                   bad_channels=bad_channels)
 ```
