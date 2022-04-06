@@ -394,14 +394,14 @@ def run_simulation(input_filename,
             current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
             track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
             _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
-                                                adc_tot_list_batch,
-                                                adc_tot_ticks_list_batch,
-                                                cp.asnumpy(unique_pix_tot_batch),
-                                                cp.asnumpy(current_fractions_tot_batch),
-                                                cp.asnumpy(track_pixel_map_tot_batch),
-                                                output_filename,
-                                                t0=t0,
-                                                bad_channels=bad_channels)
+                                                 adc_tot_list_batch,
+                                                 adc_tot_ticks_list_batch,
+                                                 cp.asnumpy(unique_pix_tot_batch),
+                                                 cp.asnumpy(current_fractions_tot_batch),
+                                                 cp.asnumpy(track_pixel_map_tot_batch),
+                                                 output_filename,
+                                                 t0=t0,
+                                                 bad_channels=bad_channels)
             t0 = last_time
 
     with h5py.File(output_filename, 'a') as output_file:
