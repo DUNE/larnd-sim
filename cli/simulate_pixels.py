@@ -125,7 +125,8 @@ def run_simulation(input_filename,
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
-    from larndsim import quenching, drifting, detsim, pixels_from_track, fee, lightLUT
+    from larndsim import (quenching, drifting, detsim, pixels_from_track, fee,
+        lightLUT, light_sim)
     RangePop()
 
     RangePush("load_pixel_thresholds")
@@ -158,7 +159,7 @@ def run_simulation(input_filename,
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
         light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
-                                 dtype=[('n_photons_det','f4'),('t0_det','f4')])
+                                 dtype=[('n_photons_det','f4'),('t0_det','f4'),('voxel_idx','i2',(3,))])
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -377,6 +378,22 @@ def run_simulation(input_filename,
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
+
+            # ~~~ Light detector response simulation ~~~
+            if light.LIGHT_SIMULATED:
+                RangePush("sum_light_signals")
+                light_inc = light_sim_dat[itrk:itrk+BATCH_SIZE]
+                n_light_ticks, light_t_start = light_sim.get_nticks(light_incidence)
+
+                n_light_det = light_inc.shape[-1]
+                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                print('light_sample_inc', light_sample_inc.shape)
+                TPB = (8,8)
+                BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
+                    ceil(light_sample_inc.shape[1] / TPB[1]))
+                light_sim.sum_light_signals[BPG, TPB](selected_tracks, light_inc, lut, light_t_start, light_sample_inc)
+                RangePop()
+
 
             event_id_list.append(adc_event_ids)
             adc_tot_list.append(adc_list)
