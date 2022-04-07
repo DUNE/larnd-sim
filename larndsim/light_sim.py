@@ -8,11 +8,13 @@ import numba as nb
 from numba import cuda
 
 import numpy as np
+from math import ceil, exp
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
+
 
 def get_nticks(light_incidence):
     """
@@ -29,6 +31,7 @@ def get_nticks(light_incidence):
     start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
     end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
     return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
+
 
 @cuda.jit
 def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light_sample_inc):
@@ -73,3 +76,40 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
                         if profile_time < end_tick_time and profile_time > start_tick_time:
                             light_sample_inc[idet,itick] += light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm
 
+
+@nb.njit
+def scintillation_model(time_tick):
+    """
+    Calculates the fraction of scintillation photons emitted 
+    during time interval `time_tick` to `time_tick + 1`
+    
+    Args:
+        time_tick(int): time tick relative to t0
+    
+    Returns:
+        float: fraction of scintillation photons
+    """
+    p1 = SINGLET_FRACTION * exp(-time_tick * LIGHT_TICK_SIZE / TAU_S) * (1 - exp(-LIGHT_TICK_SIZE / TAU_S))
+    p3 = (1 - SINGLET_FRACTION) * exp(-time_tick * LIGHT_TICK_SIZE / TAU_T) * (1 - exp(-LIGHT_TICK_SIZE / TAU_T))
+    return (p1 + p3) * (time_tick >= 0)
+
+
+@cuda.jit
+def calc_scintillation_effect(light_sample_inc, light_sample_inc_scint):
+    """
+    Applies a smearing effect due to the liquid argon scintillation time profile using
+    a two decay component scintillation model.
+    
+    Args:
+        light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
+        light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
+    """
+    idet,itick = cuda.grid(2)
+
+    if idet < light_sample_inc.shape[0]:
+        if itick < light_sample_inc.shape[1]:
+            conv_ticks = ceil((LIGHT_WINDOW[1] - LIGHT_WINDOW[0])/LIGHT_TICK_SIZE)
+            
+            for jtick in range(max(itick - conv_ticks, 0), itick+1):
+                light_sample_inc_scint[idet,itick] += scintillation_model(itick-jtick) * light_sample_inc[idet,jtick]
+    

@@ -394,6 +394,11 @@ def run_simulation(input_filename,
                     ceil(light_sample_inc.shape[1] / TPB[1]))
                 light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
                 RangePop()
+                
+                RangePush("sim_scintillation")
+                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
+                light_sim.calc_scintillation_effect[BPG, TPB](light_sample_inc, light_sample_inc_scint)
+                RangePop()
 
 
             event_id_list.append(adc_event_ids)
