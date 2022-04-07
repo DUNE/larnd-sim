@@ -8,10 +8,10 @@ import numba as nb
 from numba import cuda
 
 import numpy as np
-from math import ceil, exp
+from math import ceil, exp, sqrt, sin
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -112,4 +112,86 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_scint):
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 light_sample_inc_scint[idet,itick] += scintillation_model(itick-jtick) * light_sample_inc[idet,jtick]
+
+
+@nb.njit
+def xoroshiro128p_poisson_int32(mean, states, index):
+    """
+    Return poisson distributed int32 and advance `states[index]`
     
+    Args:
+        mean(float): mean of poisson distribution
+        states(array): array of RNG states
+        index(int): offset in states to update
+    """
+    if mean < 100: # poisson statistics are important
+        u = cuda.random.xoroshiro128p_uniform_float32(states, index)
+        x = 0
+        p = exp(-mean)
+        s = p
+        while u > s:
+            x += 1
+            p = p * mean / x
+            s = s + p
+        return x
+    return max(int(cuda.random.xoroshiro128p_normal_float32(states, index) * sqrt(mean) + mean),0)
+    
+                
+@cuda.jit
+def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
+    """
+    Simulates Poisson fluctuations in the number of PE per time tick.
+    
+    Args:
+        light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
+        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, number PE in each time interval
+        rng_states(array): shape `(>ndet*ntick,)`, random number states
+    """
+    idet,itick = cuda.grid(2)
+
+    if idet < light_sample_inc.shape[0]:
+        if itick < light_sample_inc.shape[1]:
+            if light_sample_inc[idet,itick] > 0:
+                light_sample_inc_disc[idet,itick] = 1. * xoroshiro128p_poisson_int32(
+                    light_sample_inc[idet,itick], rng_states, idet*light_sample_inc.shape[1] + itick)
+            else:
+                light_sample_inc_disc[idet,itick] = 0.
+                
+
+@nb.njit
+def sipm_response_model(idet, time_tick):
+    """
+    Calculates the SiPM response from a PE at `time_tick` relative to the PE time
+    
+    Args:
+        idet(int): SiPM index
+        time_tick(int): time tick relative to t0
+    
+    Returns:
+        float: response
+    """
+    t = time_tick * LIGHT_TICK_SIZE
+    impulse = (t>=0) * exp(-t/LIGHT_RESPONSE_TIME) * sin(t/LIGHT_OSCILLATION_PERIOD)
+    # normalize to 1
+    impulse /= LIGHT_OSCILLATION_PERIOD * LIGHT_RESPONSE_TIME**2
+    impulse *= LIGHT_OSCILLATION_PERIOD**2 + LIGHT_RESPONSE_TIME**2
+    return impulse * LIGHT_TICK_SIZE
+            
+
+@cuda.jit
+def calc_light_detector_response(light_sample_inc, light_response):
+    """
+    Simulates the SiPM reponse and digitization
+    
+    Args:
+        light_sample_inc(array): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
+        light_response(array): shape `(ndet, ntick)`, ADC value at each time tick
+    """
+    idet,itick = cuda.grid(2)
+
+    if idet < light_sample_inc.shape[0]:
+        if itick < light_sample_inc.shape[1]:
+            conv_ticks = ceil((LIGHT_WINDOW[1] - LIGHT_WINDOW[0])/LIGHT_TICK_SIZE)
+            
+            for jtick in range(max(itick - conv_ticks, 0), itick+1):
+                light_response[idet,itick] += LIGHT_GAIN[idet] * sipm_response_model(idet, itick-jtick) * light_sample_inc[idet,jtick]
