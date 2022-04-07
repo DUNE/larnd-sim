@@ -18,6 +18,13 @@ LIGHT_TICK_SIZE = 0.01 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (0,10) # us
 
+#: Fraction of total light emitted from singlet state
+SINGLET_FRACTION = 0.3
+#: Singlet decay time [microseconds]
+TAU_S = 0.005 # us
+#: Triplet decay time [microseconds]
+TAU_T = 1.530
+
 def set_light_properties(detprop_file):
     """
     The function loads the detector properties YAML file
@@ -34,6 +41,10 @@ def set_light_properties(detprop_file):
 
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
+    
+    global SINGLET_FRACTION
+    global TAU_S
+    global TAU_T
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -45,5 +56,9 @@ def set_light_properties(detprop_file):
 
         LIGHT_TICK_SIZE = detprop.get('light_tick_size', LIGHT_TICK_SIZE)
         LIGHT_WINDOW = detprop.get('light_window', LIGHT_WINDOW)
+        
+        SINGLET_FRACTION = detprop.get('singlet_fraction', SINGLET_FRACTION)
+        TAU_S = detprop.get('tau_s', TAU_S)
+        TAU_T = detprop.get('tau_t', TAU_T)
     except KeyError:
         LIGHT_SIMULATED = False
