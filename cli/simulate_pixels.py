@@ -159,7 +159,8 @@ def run_simulation(input_filename,
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
         light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
-                                 dtype=[('n_photons_det','f4'),('t0_det','f4'),('voxel_idx','i2',(3,))])
+                                 dtype=[('n_photons_det','f4'),('t0_det','f4')])
+        track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -204,7 +205,7 @@ def run_simulation(input_filename,
         lut = np.load(light_lut_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
-        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
+        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
     with h5py.File(output_filename, 'a') as output_file:
@@ -383,15 +384,15 @@ def run_simulation(input_filename,
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
                 light_inc = light_sim_dat[itrk:itrk+BATCH_SIZE]
-                n_light_ticks, light_t_start = light_sim.get_nticks(light_incidence)
+                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
 
                 n_light_det = light_inc.shape[-1]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                print('light_sample_inc', light_sample_inc.shape)
-                TPB = (8,8)
+
+                TPB = (1,64)
                 BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
                     ceil(light_sample_inc.shape[1] / TPB[1]))
-                light_sim.sum_light_signals[BPG, TPB](selected_tracks, light_inc, lut, light_t_start, light_sample_inc)
+                light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
                 RangePop()
 
 

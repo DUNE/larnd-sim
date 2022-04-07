@@ -58,7 +58,7 @@ def get_voxel(pos, itpc):
     return i, j, k
 
 @cuda.jit
-def calculate_light_incidence(tracks, lut, light_incidence):
+def calculate_light_incidence(tracks, lut, light_incidence, voxel):
     """
     Simulates the number of photons read by each optical channel depending on
         where the edep occurs as well as the time it takes for a photon to reach the
@@ -72,6 +72,7 @@ def calculate_light_incidence(tracks, lut, light_incidence):
             is a structure of type (n_photons_det (float32), t0_det (float32)).
             These correspond to the number detected in each channel (n_photons_edep*visibility),
             and the time of earliest arrival at that channel.
+        voxel (:obj:`numpy.ndarray`): to contain the voxel for each track, dimension (n_tracks, 3)
     """
     itrk = cuda.grid(1)
 
@@ -87,10 +88,13 @@ def calculate_light_incidence(tracks, lut, light_incidence):
         itpc = tracks["pixel_plane"][itrk]
 
         # Voxel containing LUT position
-        voxel = get_voxel(pos, itpc)
+        i_voxel = get_voxel(pos, itpc)
+        voxel[itrk,0] = i_voxel[0]
+        voxel[itrk,1] = i_voxel[1]
+        voxel[itrk,2] = i_voxel[2]
 
         # Calls data from voxel
-        lut_vox = lut[voxel[0], voxel[1], voxel[2]]
+        lut_vox = lut[i_voxel[0], i_voxel[1], i_voxel[2]]
 
         # Calls visibility data for the voxel
         vis_dat = lut_vox['vis']
@@ -107,4 +111,3 @@ def calculate_light_incidence(tracks, lut, light_incidence):
 
             light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
             light_incidence['t0_det'][itrk,op_channel_index] = t1
-            light_incidence['voxel_idx'][itrk,op_channel_index,:] = voxel
