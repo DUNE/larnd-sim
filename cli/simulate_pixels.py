@@ -158,7 +158,7 @@ def run_simulation(input_filename,
 
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
                                  dtype=[('n_photons_det','f4'),('t0_det','f4')])
         track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
@@ -398,6 +398,16 @@ def run_simulation(input_filename,
                 RangePush("sim_scintillation")
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
                 light_sim.calc_scintillation_effect[BPG, TPB](light_sample_inc, light_sample_inc_scint)
+                
+                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), 
+                                                     seed=SEED+ievd+itrk, rng_states=rng_states)
+                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                RangePop()
+                
+                RangePush("sim_light_det_response")
+                light_response = cp.zeros_like(light_sample_inc)
+                light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
                 RangePop()
 
 

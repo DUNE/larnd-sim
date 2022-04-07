@@ -8,7 +8,7 @@ import numba as nb
 from numba import cuda
 
 from .consts import light
-from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY
+from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -104,10 +104,11 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
 
         # Assigns the LUT data to the light_incidence array
         for output_i in range(light.N_OP_CHANNEL):
-            op_channel_index = output_i + int(itpc*light.N_OP_CHANNEL)
+            op_channel_index = output_i
+            
             eff = OP_CHANNEL_EFFICIENCY[output_i]
-            vis = vis_dat[output_i]
+            vis = vis_dat[output_i] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
             t1 = (T1_dat[output_i] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
 
-            light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
+            light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons
             light_incidence['t0_det'][itrk,op_channel_index] = t1
