@@ -8,14 +8,12 @@ import numba as nb
 from numba import cuda
 
 import numpy as np
-import math
 
 from .consts import light
 from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
-@nb.jit(nopython=True)
 def get_nticks(light_incidence):
     """
     Calculates the number of time ticks needed to simulate light signals of the
@@ -27,17 +25,19 @@ def get_nticks(light_incidence):
     Returns:
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
-    start_time = np.min(light_incidence['t0_det']) - LIGHT_WINDOW[0]
-    end_time = np.max(light_incidence['t0_det']) + LIGHT_WINDOW[1]
-    return math.ceil((end_time - start_time)/LIGHT_TICK_SIZE), start_time
+    mask = light_incidence['n_photons_det'] > 0
+    start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
+    end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
+    return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
 
 @cuda.jit
-def sum_light_signals(segments, light_inc, lut, start_time, light_sample_inc):
+def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light_sample_inc):
     """
     Sums the number of photons observed by each light detector at each time tick
 
     Args:
         segments(array): shape `(ntracks,)`, edep-sim tracks to simulate
+        segment_voxel(array): shape `(ntracks, 3)`, LUT voxel for eack edep-sim track
         light_inc(array): shape `(ntracks, ndet)`, number of photons incident on each detector and voxel id
         lut(array): shape `(nx,ny,nz)`, light look up table
         start_time(float): start time of light simulation in microseconds
@@ -54,15 +54,15 @@ def sum_light_signals(segments, light_inc, lut, start_time, light_sample_inc):
             # find tracks that contribute light to this time tick
             for itrk in range(segments.shape[0]):
                 if light_inc[itrk,idet]['n_photons_det'] > 0:
-                    track_time = segments['t0']
-                    track_end_time = track_time + lut['time'].shape[-1] * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                    voxel = segment_voxel[itrk]
+                    time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time_dist']
+                    track_time = segments[itrk]['t0']
+                    track_end_time = track_time + time_profile.shape[0] * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
 
                     if track_end_time < start_tick_time or track_time > end_tick_time:
                         continue
 
-                    # look up propogation delay time profile
-                    voxel = light_inc[itrk,idet]['voxel_idx']
-                    time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time']
+                    # normalize propogation delay time profile
                     norm = 0
                     for iprof in range(time_profile.shape[0]):
                         norm += time_profile[iprof]
