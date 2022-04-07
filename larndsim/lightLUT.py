@@ -107,3 +107,4 @@ def calculate_light_incidence(tracks, lut, light_incidence):
 
             light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
             light_incidence['t0_det'][itrk,op_channel_index] = t1
+            light_incidence['voxel_idx'][itrk,op_channel_index,:] = voxel
