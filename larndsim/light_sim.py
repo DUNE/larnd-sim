@@ -11,7 +11,7 @@ import numpy as np
 from math import ceil, exp, sqrt, sin
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -195,3 +195,18 @@ def calc_light_detector_response(light_sample_inc, light_response):
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 light_response[idet,itick] += LIGHT_GAIN[idet] * sipm_response_model(idet, itick-jtick) * light_sample_inc[idet,jtick]
+                
+
+def gen_light_detector_noise(shape, light_det_noise):
+    noise_freq = np.fft.rfftfreq((light_det_noise.shape[-1]-1)*2, d=LIGHT_DET_NOISE_SAMPLE_SPACING)
+    desired_freq = np.fft.rfftfreq(shape[-1], d=LIGHT_TICK_SIZE)
+    
+    bin_size = np.diff(desired_freq).mean()
+    noise_spectrum = np.zeros((shape[0], desired_freq.shape[0]))
+    for idet in range(shape[0]):
+        noise_spectrum[idet] = np.interp(desired_freq, noise_freq, light_det_noise[idet] * np.diff(noise_freq).mean(), left=0, right=0) / (bin_size)
+    
+    noise = np.fft.irfft(noise_spectrum * np.exp(1j * np.random.uniform(size=noise_spectrum.shape) * 2* np.pi), axis=-1)
+    if noise.shape != shape:
+        noise = np.concatenate([noise,np.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
+    return noise
