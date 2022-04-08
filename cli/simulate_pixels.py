@@ -78,6 +78,7 @@ def run_simulation(input_filename,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npy',
+                   light_det_noise_filename='../larndsim/bin/light_noise.npy',
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None):
@@ -125,7 +126,8 @@ def run_simulation(input_filename,
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
-    from larndsim import quenching, drifting, detsim, pixels_from_track, fee, lightLUT
+    from larndsim import (quenching, drifting, detsim, pixels_from_track, fee,
+        lightLUT, light_sim)
     RangePop()
 
     RangePush("load_pixel_thresholds")
@@ -157,8 +159,9 @@ def run_simulation(input_filename,
 
     # Makes an empty array to store data from lightlut
     if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL*2],
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
                                  dtype=[('n_photons_det','f4'),('t0_det','f4')])
+        track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -200,10 +203,11 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
-        lut = cp.load(light_lut_filename)
+        lut = np.load(light_lut_filename)
+        light_noise = np.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
-        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat)
+        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
     with h5py.File(output_filename, 'a') as output_file:
@@ -377,6 +381,37 @@ def run_simulation(input_filename,
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
+
+            # ~~~ Light detector response simulation ~~~
+            if light.LIGHT_SIMULATED:
+                RangePush("sum_light_signals")
+                light_inc = light_sim_dat[itrk:itrk+BATCH_SIZE]
+                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
+
+                n_light_det = light_inc.shape[-1]
+                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+
+                TPB = (1,64)
+                BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
+                    ceil(light_sample_inc.shape[1] / TPB[1]))
+                light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
+                RangePop()
+                
+                RangePush("sim_scintillation")
+                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
+                light_sim.calc_scintillation_effect[BPG, TPB](light_sample_inc, light_sample_inc_scint)
+                
+                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), 
+                                                     seed=SEED+ievd+itrk, rng_states=rng_states)
+                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                RangePop()
+                
+                RangePush("sim_light_det_response")
+                light_response = cp.zeros_like(light_sample_inc)
+                light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
+                light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
+                RangePop()
 
             event_id_list.append(adc_event_ids)
             adc_tot_list.append(adc_list)

@@ -228,11 +228,13 @@ def dump(input_file, output_file):
                 segment[iHit]["x_start"] = hitSegment.GetStart().X() / 10
                 segment[iHit]["y_start"] = hitSegment.GetStart().Y() / 10
                 segment[iHit]["z_start"] = hitSegment.GetStart().Z() / 10
-                segment[iHit]["t_start"] = hitSegment.GetStart().T() / 1e3
+                segment[iHit]["t0_start"] = hitSegment.GetStart().T() / 1e3
+                segment[iHit]["t_start"] = 0
                 segment[iHit]["x_end"] = hitSegment.GetStop().X() / 10
                 segment[iHit]["y_end"] = hitSegment.GetStop().Y() / 10
                 segment[iHit]["z_end"] = hitSegment.GetStop().Z() / 10
-                segment[iHit]["t_end"] = hitSegment.GetStop().T() / 1e3
+                segment[iHit]["t0_end"] = hitSegment.GetStop().T() / 1e3
+                segment[iHit]["t_end"] = 0
                 segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
                 xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
                 yd = segment[iHit]["y_end"] - segment[iHit]["y_start"]
@@ -242,7 +244,8 @@ def dump(input_file, output_file):
                 segment[iHit]["x"] = (segment[iHit]["x_start"] + segment[iHit]["x_end"]) / 2.
                 segment[iHit]["y"] = (segment[iHit]["y_start"] + segment[iHit]["y_end"]) / 2.
                 segment[iHit]["z"] = (segment[iHit]["z_start"] + segment[iHit]["z_end"]) / 2.
-                segment[iHit]["t"] = (segment[iHit]["t_start"] + segment[iHit]["t_end"]) / 2.
+                segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
+                segment[iHit]["t"] = 0
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
                 segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
                 segment[iHit]["n_electrons"] = 0
