@@ -32,6 +32,8 @@ LIGHT_GAIN = 80 # ADC/PE
 LIGHT_RESPONSE_TIME = 0.055
 #: Reponse oscillation period [microseconds]
 LIGHT_OSCILLATION_PERIOD = 0.095
+LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
+
 
 def set_light_properties(detprop_file):
     """
@@ -56,6 +58,7 @@ def set_light_properties(detprop_file):
     global TAU_T
     
     global LIGHT_GAIN
+    global LIGHT_DET_NOISE_SAMPLE_SPACING
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -80,5 +83,6 @@ def set_light_properties(detprop_file):
         TAU_T = detprop.get('tau_t', TAU_T)
         
         LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
+        LIGHT_DET_NOISE_SAMPLE_SPACING = detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING)
     except KeyError:
         LIGHT_SIMULATED = False

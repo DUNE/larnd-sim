@@ -78,6 +78,7 @@ def run_simulation(input_filename,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npy',
+                   light_det_noise_filename='../larndsim/bin/light_noise.npy',
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None):
@@ -203,6 +204,7 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)
+        light_noise = np.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
@@ -408,8 +410,8 @@ def run_simulation(input_filename,
                 RangePush("sim_light_det_response")
                 light_response = cp.zeros_like(light_sample_inc)
                 light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
+                light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
                 RangePop()
-
 
             event_id_list.append(adc_event_ids)
             adc_tot_list.append(adc_list)
