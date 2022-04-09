@@ -204,7 +204,7 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)
-        light_noise = np.load(light_det_noise_filename)
+        light_noise = cp.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
@@ -381,6 +381,14 @@ def run_simulation(input_filename,
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
+            
+            event_id_list.append(adc_event_ids)
+            adc_tot_list.append(adc_list)
+            adc_tot_ticks_list.append(adc_ticks_list)
+            unique_pix_tot.append(unique_pix)
+            current_fractions_tot.append(current_fractions)
+            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+            track_pixel_map_tot.append(track_pixel_map)
 
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
@@ -412,14 +420,16 @@ def run_simulation(input_filename,
                 light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
                 light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
                 RangePop()
-
-            event_id_list.append(adc_event_ids)
-            adc_tot_list.append(adc_list)
-            adc_tot_ticks_list.append(adc_ticks_list)
-            unique_pix_tot.append(unique_pix)
-            current_fractions_tot.append(current_fractions)
-            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map_tot.append(track_pixel_map)
+                
+                RangePush("sim_light_triggers")
+                trigger_idx = light_sim.get_triggers(light_response)
+                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                TPB = (1,1,64)
+                BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
+                       ceil(light_response.shape[0] / TPB[1]),
+                       ceil(digit_samples / TPB[2]))
+                light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, digit_samples, light_noise)
+                RangePop()
 
         if event_id_list and adc_tot_list:
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
