@@ -17,7 +17,7 @@ W_PH = 19.5e-6 # MeV
 #: Step size for light simulation [microseconds]
 LIGHT_TICK_SIZE = 0.005 # us
 #: Pre- and post-window for light simulation [microseconds]
-LIGHT_WINDOW = (0.1,10) # us
+LIGHT_WINDOW = (1,10) # us
 
 #: Fraction of total light emitted from singlet state
 SINGLET_FRACTION = 0.3
@@ -34,6 +34,9 @@ LIGHT_RESPONSE_TIME = 0.055
 LIGHT_OSCILLATION_PERIOD = 0.095
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
 
+LIGHT_TRIG_THRESHOLD = 2000
+LIGHT_TRIG_WINDOW = (1,1.56) # us
+LIGHT_DIGIT_SAMPLE_SPACING = 0.01 # us
 
 def set_light_properties(detprop_file):
     """
