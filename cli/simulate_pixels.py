@@ -230,15 +230,21 @@ def run_simulation(input_filename,
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
-    t0 = 0
+    last_time = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-
+        # charge simulation
         event_id_list = []
         adc_tot_list = []
         adc_tot_ticks_list = []
         track_pixel_map_tot = []
         unique_pix_tot = []
         current_fractions_tot = []
+        
+        # light simulation
+        light_event_id_list = []
+        light_start_time_list = []
+        light_trigger_idx_list = []
+        light_waveforms_list = []
 
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -430,6 +436,11 @@ def run_simulation(input_filename,
                        ceil(digit_samples / TPB[2]))
                 light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, digit_samples, light_noise)
                 RangePop()
+                
+                light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
+                light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
+                light_trigger_idx_list.append(trigger_idx)
+                light_waveforms_list.append(light_digit_signal)
 
         if event_id_list and adc_tot_list:
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
@@ -438,16 +449,35 @@ def run_simulation(input_filename,
             unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
             current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
             track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
-            _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
+            
+            if light.LIGHT_SIMULATED:
+                light_event_id_list_batch = np.concatenate(light_event_id_list, axis=0)
+                light_start_time_list_batch = np.concatenate(light_start_time_list, axis=0)
+                light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
+                light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
+                    
+            event_times = fee.gen_event_times(unique_eventIDs.shape[0], last_time)
+            
+            fee.export_to_hdf5(event_id_list_batch,
                                                 adc_tot_list_batch,
                                                 adc_tot_ticks_list_batch,
                                                 cp.asnumpy(unique_pix_tot_batch),
                                                 cp.asnumpy(current_fractions_tot_batch),
                                                 cp.asnumpy(track_pixel_map_tot_batch),
                                                 output_filename,
-                                                t0=t0,
+                                                event_times,
+                                                is_first_event=last_time==0,
                                                 bad_channels=bad_channels)
-            t0 = last_time
+            
+            if light.LIGHT_SIMULATED:
+                light_sim.export_to_hdf5(light_event_id_list_batch,
+                                         light_start_time_list_batch,
+                                         light_trigger_idx_list_batch,
+                                         light_waveforms_list_batch,
+                                         output_filename,
+                                         event_times)
+            
+            last_time = event_times[-1]
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():

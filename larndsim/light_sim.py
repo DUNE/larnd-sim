@@ -11,10 +11,14 @@ import numpy as np
 import cupy as cp
 from math import ceil, floor, exp, sqrt, sin
 
+import h5py
+
 from .consts import light
 from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
+
+from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES
 
 
 def get_nticks(light_incidence):
@@ -317,6 +321,38 @@ def sim_triggers(bpg, tpb, signal, trigger_idx, digit_samples, light_det_noise):
     digitize_signal[bpg,tpb](signal, trigger_idx, digit_signal)
     
     return digit_signal
-    
 
+
+def export_to_hdf5(event_id, start_times, trigger_idx, waveforms, output_filename, event_times):
+    """
+    Saves waveforms to output file
     
+    Args:
+        event_id(array): shape `(ntrigs,)`, event id for each trigger
+        start_times(array): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
+        trigger_idx(array): shape `(ntrigs,)`, simulation time tick of each trigger
+        waveforms(array): shape `(ntrigs, ndet, nsamples)`, simulated waveforms to save
+        output_filename(str): output hdf5 file path
+        event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
+    
+    """
+    unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
+    event_start_times = event_times[unique_events_inv]
+    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
+    
+    with h5py.File(output_filename, 'a') as f:
+            if 'light_wvfm' not in f:
+                f.create_dataset('light_wvfm', data=waveforms.get(), maxshape=(None,None,None))
+                trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('ts_s','f8'), ('ts_sync','u8')]))
+                trig_data['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s).get()
+                trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE + event_sync_times) / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES).get()
+                f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
+            else:
+                f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
+                f['light_wvfm'][-waveforms.shape[0]:] = waveforms.get()
+                
+                f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
+                f['light_trig'][-trigger_idx.shape[0]:]['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s).get()
+                f['light_trig'][-trigger_idx.shape[0]:]['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE + event_sync_times) / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES).get()
+
+            
