@@ -19,6 +19,7 @@ from .consts import detector, physics
 from .pixels_from_track import id2pixel
 
 from .consts.units import mV, e
+from .consts import units
 
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 10
@@ -32,6 +33,8 @@ ADC_BUSY_DELAY = 9
 RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
+#: Clock rollover / reset time in larpix clock ticks
+ROLLOVER_CYCLES = 2**31
 #: Front-end gain in :math:`mV/ke-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
@@ -50,8 +53,8 @@ RESET_NOISE_CHARGE = 900 * e
 UNCORRELATED_NOISE_CHARGE = 500 * e
 #: Discriminator noise in e-
 DISCRIMINATOR_NOISE = 650 * e
-#: Average time between events in clock cycles
-EVENT_RATE = 1000000 # ~10Hz
+#: Average time between events in microseconds
+EVENT_RATE = 100000 # 10Hz
 
 import logging
 logging.basicConfig()
@@ -84,6 +87,25 @@ def rotate_tile(pixel_id, tile_id):
 
     return pix_x, pix_y
 
+
+def gen_event_times(nevents, t0):
+    """
+    Generate sequential event times assuming events are uncorrelated
+    
+    Args:
+        nevents(int): number of event times to generate
+        t0(int): offset to apply [microseconds]
+        
+    Returns:
+        array: shape `(nevents,)`, sequential event times [microseconds]
+    """
+    event_start_time = cp.random.exponential(scale=EVENT_RATE, size=nevents)
+    event_start_time = cp.cumsum(event_start_time)
+    event_start_time += t0
+    
+    return event_start_time
+
+
 def export_to_hdf5(event_id_list,
                    adc_list,
                    adc_ticks_list,
@@ -91,7 +113,8 @@ def export_to_hdf5(event_id_list,
                    current_fractions,
                    track_ids,
                    filename,
-                   t0=0,
+                   event_start_times,
+                   is_first_event,
                    bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -105,6 +128,8 @@ def export_to_hdf5(event_id_list,
         track_ids (:obj:`numpy.ndarray`): 2D array containing the track IDs associated
             to each pixel
         filename (str): filename of HDF5 output file
+        event_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
+        is_first_event (bool): `True` if this is the first event to save to the file
         bad_channels (dict): dictionary containing as value a list of bad channels and as
             the chip key
     Returns:
@@ -116,8 +141,8 @@ def export_to_hdf5(event_id_list,
     packets = []
     packets_mc = []
     packets_frac = []
-
-    if t0 == 0:
+    
+    if is_first_event:
         packets.append(TimestampPacket())
         packets_mc.append([-1] * track_ids.shape[1])
         packets_frac.append([0] * current_fractions.shape[2])
@@ -134,10 +159,7 @@ def export_to_hdf5(event_id_list,
             bad_channels_list = yaml.load(bad_channels_file, Loader=yaml.FullLoader)
 
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
-    event_start_time = np.random.exponential(scale=EVENT_RATE, size=unique_events.shape).astype(int)
-    event_start_time = np.cumsum(event_start_time)
-    event_start_time += t0
-    event_start_time_list = event_start_time[unique_events_inv]
+    event_start_time_list = (event_start_times[unique_events_inv] / CLOCK_CYCLE).astype(int)
 
     rollover_count = 0
     for itick, adcs in enumerate(adc_list):
@@ -164,26 +186,28 @@ def export_to_hdf5(event_id_list,
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
-                    if event_t0 > 2**31 - 1 or time_tick > 2**31 - 1:
+                    
+                    if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:
                         # 31-bit rollover
                         rollover_count += 1
-                        packets.append(TimestampPacket(timestamp=floor(rollover_count * (2**31) * CLOCK_CYCLE * 1e-6)))
-                        packets_mc.append([-1] * track_ids.shape[1])
-                        packets_frac.append([0] * current_fractions.shape[2])
                         for io_group in io_groups:
                             packets.append(SyncPacket(sync_type=b'S',
-                                                      timestamp=(2**31), io_group=io_group))
+                                                      timestamp=ROLLOVER_CYCLES-1, io_group=io_group))
                             packets_mc.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
-                        event_start_time_list[itick:] -= 2**31
+                        event_start_time_list[itick:] -= ROLLOVER_CYCLES
                     else:
                         break
 
-                event_t0 = event_t0 % (2**31)
-                time_tick = time_tick % (2**31)
+                event_t0 = event_t0 % ROLLOVER_CYCLES
+                time_tick = time_tick % ROLLOVER_CYCLES
 
                 if event != last_event:
                     for io_group in io_groups:
+                        packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
+                        packets_mc.append([-1] * track_ids.shape[1])
+                        packets_frac.append([0] * current_fractions.shape[2])
+                        
                         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=event_t0))
                         packets_mc.append([-1] * track_ids.shape[1])
                         packets_frac.append([0] * current_fractions.shape[2])
@@ -239,7 +263,7 @@ def export_to_hdf5(event_id_list,
         packets_mc_ds['fraction'] = packets_frac
 
         with h5py.File(filename, 'a') as f:
-            if t0 == 0:
+            if is_first_event:
                 f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
@@ -251,7 +275,7 @@ def export_to_hdf5(event_id_list,
             f['configs'].attrs['lifetime'] = detector.ELECTRON_LIFETIME
             f['configs'].attrs['drift_length'] = detector.DRIFT_LENGTH
 
-    return packets, packets_mc_ds, event_start_time_list[-1]
+    return packets, packets_mc_ds
 
 
 def digitize(integral_list):
