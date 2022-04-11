@@ -11,8 +11,8 @@ from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 from math import exp, floor
 
-from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket
-from larpix.packet import PacketCollection
+from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
+from larpix.key import Key
 from larpix.format import hdf5format
 from .consts import detector, physics
 
@@ -143,10 +143,12 @@ def export_to_hdf5(event_id_list,
     packets_frac = []
     
     if is_first_event:
-        packets.append(TimestampPacket())
-        packets_mc.append([-1] * track_ids.shape[1])
-        packets_frac.append([0] * current_fractions.shape[2])
         for io_group in io_groups:
+            packets.append(TimestampPacket(timestamp=0))
+            packets[-1].chip_key = Key(io_group,0,0)
+            packets_mc.append([-1] * track_ids.shape[1])
+            packets_frac.append([0] * current_fractions.shape[2])
+            
             packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
             packets_mc.append([-1] * track_ids.shape[1])
             packets_frac.append([0] * current_fractions.shape[2])
@@ -205,6 +207,7 @@ def export_to_hdf5(event_id_list,
                 if event != last_event:
                     for io_group in io_groups:
                         packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
+                        packets[-1].chip_key = Key(io_group,0,0)                        
                         packets_mc.append([-1] * track_ids.shape[1])
                         packets_frac.append([0] * current_fractions.shape[2])
                         

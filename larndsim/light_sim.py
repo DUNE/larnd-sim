@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -238,7 +238,7 @@ def get_triggers(signal):
         array: tick indices at each trigger (shape `(ntrigs,)`)
     """
     signal_sum = signal.sum(axis=0)
-    sample_above_thresh = signal_sum > LIGHT_TRIG_THRESHOLD
+    sample_above_thresh = signal_sum < LIGHT_TRIG_THRESHOLD
     digit_ticks = ceil((LIGHT_TRIG_WINDOW[1] + LIGHT_TRIG_WINDOW[0])/LIGHT_TICK_SIZE)
     
     trigger_idx = []
@@ -299,12 +299,12 @@ def sim_triggers(bpg, tpb, signal, trigger_idx, digit_samples, light_det_noise):
         array: shape `(ntrigs, ndet, digit_samples)`, digitized waveform on each channel for each trigger
     """
     # exit if no triggers
-    digit_signal = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples))
+    digit_signal = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples), dtype='f8')
     if digit_signal.shape[0] == 0:
         return digit_signal
     
     padded_trigger_idx = trigger_idx.copy()
-    
+
     # pad front of simulation with noise, if trigger close to start of simulation window
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx[0] - pre_digit_ticks < 0:
@@ -318,7 +318,10 @@ def sim_triggers(bpg, tpb, signal, trigger_idx, digit_samples, light_det_noise):
         pad_shape = (signal.shape[0], signal.shape[1] - (post_digit_ticks + trigger_idx[-1]))
         signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise)], axis=-1)
         
-    digitize_signal[bpg,tpb](signal, trigger_idx, digit_signal)
+    digitize_signal[bpg,tpb](signal, padded_trigger_idx, digit_signal)
+
+    # truncate to correct number of bits
+    digit_signal = cp.round(digit_signal / 2**(16-LIGHT_NBIT)) * 2**(16-LIGHT_NBIT)
     
     return digit_signal
 
