@@ -122,7 +122,12 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_scint):
 @nb.njit
 def xoroshiro128p_poisson_int32(mean, states, index):
     """
-    Return poisson distributed int32 and advance `states[index]`
+    Return poisson distributed int32 and advance `states[index]`. For efficiency, 
+    if `mean > 100`, returns a gaussian distributed int32 with `mean == mean`
+    and `std = sqrt(mean)` truncated at 0 (approximately equivalent to a poisson-
+    distributed number)
+
+    [DOI:10.1007/978-1-4613-8643-8_10]
     
     Args:
         mean(float): mean of poisson distribution
