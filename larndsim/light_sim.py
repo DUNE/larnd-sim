@@ -344,6 +344,9 @@ def export_to_hdf5(event_id, start_times, trigger_idx, waveforms, output_filenam
         event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
     
     """
+    if event_id.shape[0] == 0:
+        return
+    
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
     event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
