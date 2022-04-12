@@ -115,6 +115,8 @@ def export_to_hdf5(event_id_list,
                    filename,
                    event_start_times,
                    is_first_event,
+                   light_trigger_times=None,
+                   light_trigger_event_id=None,
                    bad_channels=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
@@ -130,6 +132,8 @@ def export_to_hdf5(event_id_list,
         filename (str): filename of HDF5 output file
         event_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
         is_first_event (bool): `True` if this is the first event to save to the file
+        light_trigger_times (array): 1D array of light trigger timestamps (relative to event t0) [in microseconds]
+        light_trigger_event_id (array): 1D array of event id for each light trigger
         bad_channels (dict): dictionary containing as value a list of bad channels and as
             the chip key
     Returns:
@@ -162,6 +166,9 @@ def export_to_hdf5(event_id_list,
 
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time_list = (event_start_times[unique_events_inv] / CLOCK_CYCLE).astype(int)
+
+    light_trigger_times = np.empty((0,)) if light_trigger_times is None else light_trigger_times
+    light_trigger_event_id = np.empty((0,), dtype=int) if light_trigger_event_id is None else light_trigger_event_id
 
     rollover_count = 0
     for itick, adcs in enumerate(adc_list):
@@ -204,16 +211,22 @@ def export_to_hdf5(event_id_list,
                 event_t0 = event_t0 % ROLLOVER_CYCLES
                 time_tick = time_tick % ROLLOVER_CYCLES
 
+                # new event, insert light triggers and timestamp flag
                 if event != last_event:
                     for io_group in io_groups:
                         packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
                         packets[-1].chip_key = Key(io_group,0,0)                        
                         packets_mc.append([-1] * track_ids.shape[1])
                         packets_frac.append([0] * current_fractions.shape[2])
-                        
-                        packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=event_t0))
-                        packets_mc.append([-1] * track_ids.shape[1])
-                        packets_frac.append([0] * current_fractions.shape[2])
+
+                    trig_mask = light_trigger_event_id == event
+                    if any(trig_mask):
+                        for t_trig, event_id_trig in zip(light_trigger_times[trig_mask], light_trigger_event_id[trig_mask]):
+                            t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
+                            for io_group in io_groups:
+                                packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+                                packets_mc.append([-1] * track_ids.shape[1])
+                                packets_frac.append([0] * current_fractions.shape[2])
                     last_event = event
 
                 p = Packet_v2()

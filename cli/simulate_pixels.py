@@ -459,15 +459,17 @@ def run_simulation(input_filename,
             event_times = fee.gen_event_times(unique_eventIDs.shape[0], last_time)
             
             fee.export_to_hdf5(event_id_list_batch,
-                                                adc_tot_list_batch,
-                                                adc_tot_ticks_list_batch,
-                                                cp.asnumpy(unique_pix_tot_batch),
-                                                cp.asnumpy(current_fractions_tot_batch),
-                                                cp.asnumpy(track_pixel_map_tot_batch),
-                                                output_filename,
-                                                event_times,
-                                                is_first_event=last_time==0,
-                                                bad_channels=bad_channels)
+                               adc_tot_list_batch,
+                               adc_tot_ticks_list_batch,
+                               cp.asnumpy(unique_pix_tot_batch),
+                               cp.asnumpy(current_fractions_tot_batch),
+                               cp.asnumpy(track_pixel_map_tot_batch),
+                               output_filename,
+                               event_times,
+                               is_first_event=last_time==0,
+                               light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + trigger_idx * light.LIGHT_TICK_SIZE,
+                               light_trigger_event_id=None if not light.LIGHT_SIMULATED else light_event_id_list_batch,
+                               bad_channels=bad_channels)
             
             if light.LIGHT_SIMULATED:
                 light_sim.export_to_hdf5(light_event_id_list_batch,
