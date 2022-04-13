@@ -228,24 +228,25 @@ def run_simulation(input_filename,
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
+    
+    # charge simulation
+    event_id_list = []
+    adc_tot_list = []
+    adc_tot_ticks_list = []
+    track_pixel_map_tot = []
+    unique_pix_tot = []
+    current_fractions_tot = []
+
+    # light simulation
+    light_event_id_list = []
+    light_start_time_list = []
+    light_trigger_idx_list = []
+    light_waveforms_list = []
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-        # charge simulation
-        event_id_list = []
-        adc_tot_list = []
-        adc_tot_ticks_list = []
-        track_pixel_map_tot = []
-        unique_pix_tot = []
-        current_fractions_tot = []
-        
-        # light simulation
-        light_event_id_list = []
-        light_start_time_list = []
-        light_trigger_idx_list = []
-        light_waveforms_list = []
 
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -457,7 +458,7 @@ def run_simulation(input_filename,
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                     
-            event_times = fee.gen_event_times(unique_eventIDs.shape[0], last_time)
+            event_times = fee.gen_event_times(np.unique(event_id_list_batch).shape[0], last_time)
             
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
@@ -468,9 +469,16 @@ def run_simulation(input_filename,
                                output_filename,
                                event_times,
                                is_first_event=last_time==0,
-                               light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + trigger_idx * light.LIGHT_TICK_SIZE,
+                               light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
                                light_trigger_event_id=None if not light.LIGHT_SIMULATED else light_event_id_list_batch,
                                bad_channels=bad_channels)
+            
+            event_id_list = []
+            adc_tot_list = []
+            adc_tot_ticks_list = []
+            unique_pix_tot = []
+            current_fractions_tot = []
+            track_pixel_map_tot = []
             
             if light.LIGHT_SIMULATED:
                 light_sim.export_to_hdf5(light_event_id_list_batch,
@@ -479,6 +487,11 @@ def run_simulation(input_filename,
                                          light_waveforms_list_batch,
                                          output_filename,
                                          event_times)
+                
+                light_event_id_list = []
+                light_start_time_list = []
+                light_trigger_idx_list = []
+                light_waveforms_list = []
             
             last_time = event_times[-1]
 
