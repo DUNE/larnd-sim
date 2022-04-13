@@ -24,6 +24,7 @@ from larndsim.cuda_dict import CudaDict
 
 SEED = int(time())
 BATCH_SIZE = 4000
+EVENT_BATCH_SIZE = 100
 
 LOGO = """
   _                      _            _
@@ -343,7 +344,7 @@ def run_simulation(input_filename,
 
             RangePush("sum_pixels_signals")
             # Here we combine the induced current on the same pixels by different tracks
-            TPB = (8,8,8)
+            TPB = (1,1,64)
             BPG_X = ceil(signals.shape[0] / TPB[0])
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
@@ -442,7 +443,7 @@ def run_simulation(input_filename,
                 light_trigger_idx_list.append(trigger_idx)
                 light_waveforms_list.append(light_digit_signal)
 
-        if event_id_list and adc_tot_list:
+        if event_id_list and adc_tot_list and len(event_id_list) > EVENT_BATCH_SIZE:
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
             adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
             adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
