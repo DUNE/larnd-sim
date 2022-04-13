@@ -134,15 +134,21 @@ def xoroshiro128p_poisson_int32(mean, states, index):
         states(array): array of RNG states
         index(int): offset in states to update
     """
+    if mean <= 0:
+        return 0
     if mean < 100: # poisson statistics are important
         u = cuda.random.xoroshiro128p_uniform_float32(states, index)
         x = 0
         p = exp(-mean)
         s = p
+        prev_s = s
         while u > s:
             x += 1
             p = p * mean / x
+            prev_s = s
             s = s + p
+            if s == prev_s: # break if machine precision reached
+                break
         return x
     return max(int(cuda.random.xoroshiro128p_normal_float32(states, index) * sqrt(mean) + mean),0)
     
@@ -226,9 +232,12 @@ def gen_light_detector_noise(shape, light_det_noise):
     for idet in range(shape[0]):
         noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet] * cp.diff(noise_freq).mean(), left=0, right=0) / (bin_size)
     
-    noise = cp.fft.irfft(noise_spectrum * cp.exp(1j * cp.random.uniform(size=noise_spectrum.shape) * 2* cp.pi), axis=-1)
-    if noise.shape != shape:
-        noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
+    if shape[0]:
+        noise = cp.fft.irfft(noise_spectrum * cp.exp(1j * cp.random.uniform(size=noise_spectrum.shape) * 2* cp.pi), axis=-1)
+        if noise.shape != shape:
+            noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
+    else:
+        noise = cp.empty(shape)
     return noise
 
 
