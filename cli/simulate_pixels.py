@@ -177,6 +177,10 @@ def run_simulation(input_filename,
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
+    # add the t0 key for charge dep time tag
+    t0 = np.zeros(tracks.shape[0], dtype=[('t0', 'f4')])
+    tracks = rfn.merge_arrays((tracks, t0), flatten=True)
+
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
     tracks = swap_coordinates(tracks)
