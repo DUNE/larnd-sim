@@ -24,6 +24,7 @@ from larndsim.cuda_dict import CudaDict
 
 SEED = int(time())
 BATCH_SIZE = 4000
+EVENT_BATCH_SIZE = 100
 
 LOGO = """
   _                      _            _
@@ -204,7 +205,7 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)
-        light_noise = np.load(light_det_noise_filename)
+        light_noise = cp.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
@@ -227,18 +228,25 @@ def run_simulation(input_filename,
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
+    
+    # charge simulation
+    event_id_list = []
+    adc_tot_list = []
+    adc_tot_ticks_list = []
+    track_pixel_map_tot = []
+    unique_pix_tot = []
+    current_fractions_tot = []
+
+    # light simulation
+    light_event_id_list = []
+    light_start_time_list = []
+    light_trigger_idx_list = []
+    light_waveforms_list = []
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
-    t0 = 0
+    last_time = 0
     for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
-
-        event_id_list = []
-        adc_tot_list = []
-        adc_tot_ticks_list = []
-        track_pixel_map_tot = []
-        unique_pix_tot = []
-        current_fractions_tot = []
 
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -337,7 +345,7 @@ def run_simulation(input_filename,
 
             RangePush("sum_pixels_signals")
             # Here we combine the induced current on the same pixels by different tracks
-            TPB = (8,8,8)
+            TPB = (1,1,64)
             BPG_X = ceil(signals.shape[0] / TPB[0])
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
@@ -381,6 +389,14 @@ def run_simulation(input_filename,
             adc_list = fee.digitize(integral_list)
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
+            
+            event_id_list.append(adc_event_ids)
+            adc_tot_list.append(adc_list)
+            adc_tot_ticks_list.append(adc_ticks_list)
+            unique_pix_tot.append(unique_pix)
+            current_fractions_tot.append(current_fractions)
+            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+            track_pixel_map_tot.append(track_pixel_map)
 
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
@@ -412,32 +428,72 @@ def run_simulation(input_filename,
                 light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
                 light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
                 RangePop()
+                
+                RangePush("sim_light_triggers")
+                trigger_idx = light_sim.get_triggers(light_response)
+                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                TPB = (1,1,64)
+                BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
+                       ceil(light_response.shape[0] / TPB[1]),
+                       ceil(digit_samples / TPB[2]))
+                light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, digit_samples, light_noise)
+                RangePop()
+                
+                light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
+                light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
+                light_trigger_idx_list.append(trigger_idx)
+                light_waveforms_list.append(light_digit_signal)
 
-            event_id_list.append(adc_event_ids)
-            adc_tot_list.append(adc_list)
-            adc_tot_ticks_list.append(adc_ticks_list)
-            unique_pix_tot.append(unique_pix)
-            current_fractions_tot.append(current_fractions)
-            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map_tot.append(track_pixel_map)
-
-        if event_id_list and adc_tot_list:
+        if event_id_list and adc_tot_list and len(event_id_list) > EVENT_BATCH_SIZE:
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
             adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
             adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
             unique_pix_tot_batch = np.concatenate(unique_pix_tot, axis=0)
             current_fractions_tot_batch = np.concatenate(current_fractions_tot, axis=0)
             track_pixel_map_tot_batch = np.concatenate(track_pixel_map_tot, axis=0)
-            _, _, last_time = fee.export_to_hdf5(event_id_list_batch,
-                                                adc_tot_list_batch,
-                                                adc_tot_ticks_list_batch,
-                                                cp.asnumpy(unique_pix_tot_batch),
-                                                cp.asnumpy(current_fractions_tot_batch),
-                                                cp.asnumpy(track_pixel_map_tot_batch),
-                                                output_filename,
-                                                t0=t0,
-                                                bad_channels=bad_channels)
-            t0 = last_time
+            
+            if light.LIGHT_SIMULATED:
+                light_event_id_list_batch = np.concatenate(light_event_id_list, axis=0)
+                light_start_time_list_batch = np.concatenate(light_start_time_list, axis=0)
+                light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
+                light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
+                    
+            event_times = fee.gen_event_times(np.unique(event_id_list_batch).shape[0], last_time)
+            
+            fee.export_to_hdf5(event_id_list_batch,
+                               adc_tot_list_batch,
+                               adc_tot_ticks_list_batch,
+                               cp.asnumpy(unique_pix_tot_batch),
+                               cp.asnumpy(current_fractions_tot_batch),
+                               cp.asnumpy(track_pixel_map_tot_batch),
+                               output_filename,
+                               event_times,
+                               is_first_event=last_time==0,
+                               light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
+                               light_trigger_event_id=None if not light.LIGHT_SIMULATED else light_event_id_list_batch,
+                               bad_channels=bad_channels)
+            
+            event_id_list = []
+            adc_tot_list = []
+            adc_tot_ticks_list = []
+            unique_pix_tot = []
+            current_fractions_tot = []
+            track_pixel_map_tot = []
+            
+            if light.LIGHT_SIMULATED:
+                light_sim.export_to_hdf5(light_event_id_list_batch,
+                                         light_start_time_list_batch,
+                                         light_trigger_idx_list_batch,
+                                         light_waveforms_list_batch,
+                                         output_filename,
+                                         event_times)
+                
+                light_event_id_list = []
+                light_start_time_list = []
+                light_trigger_idx_list = []
+                light_waveforms_list = []
+            
+            last_time = event_times[-1]
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():
