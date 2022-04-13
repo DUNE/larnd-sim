@@ -176,6 +176,9 @@ def run_simulation(input_filename,
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
+        
+    t0 = np.zeros(tracks.shape[0], dtype=[('t0', 'f4')])
+    tracks = rfn.merge_arrays((tracks, t0), flatten=True)
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
