@@ -177,10 +177,19 @@ def run_simulation(input_filename,
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
-    # add the t0 key for charge dep time tag
-    t0 = np.zeros(tracks.shape[0], dtype=[('t0', 'f4')])
-    tracks = rfn.merge_arrays((tracks, t0), flatten=True)
+    # the t0 key refers to the time of energy deposition
+    # in the input files, it is called 't'
+    t0 = np.array(tracks['t'].copy(), dtype=[('t0', 'f4')])
+    t0_start = np.array(tracks['t_start'].copy(), dtype=[('t0_start', 'f4')])
+    t0_end = np.array(tracks['t_end'].copy(), dtype=[('t0_end', 'f4')])
+    tracks = rfn.merge_arrays((tracks, t0, t0_start, t0_end), flatten=True)
 
+    # then, re-initialize the t key to zero
+    # in larnd-sim, this key is the time at the anode
+    tracks['t'] = np.zeros(tracks.shape[0], dtype=[('t', 'f4')])
+    tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
+    tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
+    
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
     tracks = swap_coordinates(tracks)
