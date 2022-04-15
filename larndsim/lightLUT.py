@@ -10,7 +10,7 @@ from numba import cuda
 from .consts import light
 from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
-from .consts import units as units
+from .consts import units, detector
 
 @nb.njit
 def get_voxel(pos, itpc):
