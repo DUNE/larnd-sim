@@ -87,28 +87,32 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
         # Identifies which tpc event takes place in
         itpc = tracks["pixel_plane"][itrk]
 
-        # Voxel containing LUT position
-        i_voxel = get_voxel(pos, itpc)
-        voxel[itrk,0] = i_voxel[0]
-        voxel[itrk,1] = i_voxel[1]
-        voxel[itrk,2] = i_voxel[2]
+        # ignore any edeps with the default itpc value,
+        # they are outside any tpc
+        if itpc != detector.DEFAULT_PLANE_INDEX:
 
-        # Calls data from voxel
-        lut_vox = lut[i_voxel[0], i_voxel[1], i_voxel[2]]
+            # Voxel containing LUT position
+            i_voxel = get_voxel(pos, itpc)
+            voxel[itrk,0] = i_voxel[0]
+            voxel[itrk,1] = i_voxel[1]
+            voxel[itrk,2] = i_voxel[2]
 
-        # Calls visibility data for the voxel
-        vis_dat = lut_vox['vis']
-
-        # Calls T1 data for the voxel
-        T1_dat = lut_vox['t0']
-
-        # Assigns the LUT data to the light_incidence array
-        for output_i in range(light.N_OP_CHANNEL):
-            op_channel_index = output_i
+            # Calls data from voxel
+            lut_vox = lut[i_voxel[0], i_voxel[1], i_voxel[2]]
             
-            eff = OP_CHANNEL_EFFICIENCY[output_i]
-            vis = vis_dat[output_i] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
-            t1 = (T1_dat[output_i] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
+            # Calls visibility data for the voxel
+            vis_dat = lut_vox['vis']
 
-            light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons
-            light_incidence['t0_det'][itrk,op_channel_index] = t1
+            # Calls T1 data for the voxel
+            T1_dat = lut_vox['t0']
+
+            # Assigns the LUT data to the light_incidence array
+            for output_i in range(light.N_OP_CHANNEL):
+                op_channel_index = output_i
+            
+                eff = OP_CHANNEL_EFFICIENCY[output_i]
+                vis = vis_dat[output_i] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
+                t1 = (T1_dat[output_i] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
+
+                light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons
+                light_incidence['t0_det'][itrk,op_channel_index] = t1
