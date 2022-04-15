@@ -49,6 +49,8 @@ TPC_BORDERS = np.zeros((0, 3, 2))
 TPC_OFFSETS = np.zeros((0, 3, 2))
 #: Pixel tile borders in :math:`cm`
 TILE_BORDERS = np.zeros((2,2))
+#: Default value for pixel_plane, to indicate out-of-bounds edep
+DEFAULT_PLANE_INDEX = 0xDEADBEEF
 #: Total number of pixels
 N_PIXELS = 0, 0
 #: Number of pixels in each tile
