@@ -61,6 +61,9 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
 
             # find tracks that contribute light to this time tick
             for itrk in range(segments.shape[0]):
+                if OP_CHANNEL_TO_TPC[idet] != segments[itrk]['pixel_plane']:
+                    continue
+                
                 if light_inc[itrk,idet]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time_dist']
