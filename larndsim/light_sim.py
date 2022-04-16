@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -61,10 +61,7 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
 
             # find tracks that contribute light to this time tick
             for itrk in range(segments.shape[0]):
-                if OP_CHANNEL_TO_TPC[idet] != segments[itrk]['pixel_plane']:
-                    continue
-                
-                if light_inc[itrk,idet]['n_photons_det'] > 0:
+                if (light_inc[itrk,idet]['n_photons_det'] > 0):
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time_dist']
                     track_time = segments[itrk]['t0']
@@ -236,7 +233,11 @@ def gen_light_detector_noise(shape, light_det_noise):
         noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet] * cp.diff(noise_freq).mean(), left=0, right=0) / (bin_size)
     
     if shape[0]:
-        noise = cp.fft.irfft(noise_spectrum * cp.exp(1j * cp.random.uniform(size=noise_spectrum.shape) * 2* cp.pi), axis=-1)
+        noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
+        if shape[0] < 2:
+            noise = cp.real(noise)
+        else:
+            noise = cp.fft.irfft(noise, axis=-1)
         if noise.shape != shape:
             noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
     else:
@@ -325,14 +326,14 @@ def sim_triggers(bpg, tpb, signal, trigger_idx, digit_samples, light_det_noise):
     # pad front of simulation with noise, if trigger close to start of simulation window
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx[0] - pre_digit_ticks < 0:
-        pad_shape = (signal.shape[0], pre_digit_ticks - trigger_idx[0])
+        pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx[0]))
         signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise), signal], axis=-1)
         padded_trigger_idx += pad_shape[1]
     
     # pad end of simulation with noise, if trigger close to end of simulation window
     post_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[1]/LIGHT_TICK_SIZE))
     if post_digit_ticks + trigger_idx[-1] > signal.shape[-1]:
-        pad_shape = (signal.shape[0], signal.shape[1] - (post_digit_ticks + trigger_idx[-1]))
+        pad_shape = (signal.shape[0], int(signal.shape[1] - (post_digit_ticks + trigger_idx[-1])))
         signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise)], axis=-1)
         
     digitize_signal[bpg,tpb](signal, padded_trigger_idx, digit_signal)
