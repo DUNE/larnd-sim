@@ -227,6 +227,9 @@ def gen_light_detector_noise(shape, light_det_noise):
     Returns:
         array: shape `(shape[0], shape[1])`, randomly generated sample noise
     """
+    if not shape[0]:
+        return cp.empty(shape)
+    
     noise_freq = cp.fft.rfftfreq((light_det_noise.shape[-1]-1)*2, d=LIGHT_DET_NOISE_SAMPLE_SPACING)
     desired_freq = cp.fft.rfftfreq(shape[-1], d=LIGHT_TICK_SIZE)
     
@@ -234,19 +237,23 @@ def gen_light_detector_noise(shape, light_det_noise):
     noise_spectrum = cp.zeros((shape[0], desired_freq.shape[0]))
     for idet in range(shape[0]):
         noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet], left=0, right=0)
+    # rescale noise spectrum to have constant noise power with digitizer sample spacing
     noise_spectrum *= cp.sqrt(cp.diff(noise_freq, axis=-1).mean()/bin_size) * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE
     
-    
-    if shape[0]:
-        noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
-        if shape[0] < 2:
-            noise = cp.real(noise)
-        else:
-            noise = cp.fft.irfft(noise, axis=-1)
-        if noise.shape != shape:
-            noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
+
+    # generate an FFT with the same frequency power, but with random phase
+    noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
+    if shape[0] < 2:
+        # special case where inverse FFT does not exist - just generate one sample
+        noise = cp.real(noise)
     else:
-        noise = cp.empty(shape)
+        # invert FFT to create a noise waveform
+        noise = cp.fft.irfft(noise, axis=-1)
+
+    if noise.shape != shape:
+        # FFT must have even samples, so append 0 if an odd number of samples is requested
+        noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
+
     return noise
 
 
