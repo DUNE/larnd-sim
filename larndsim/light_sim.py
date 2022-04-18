@@ -82,7 +82,7 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
                     for iprof in range(time_profile.shape[0]):
                         profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
                         if profile_time < end_tick_time and profile_time > start_tick_time:
-                            light_sample_inc[idet,itick] += light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm
+                            light_sample_inc[idet,itick] += light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
 
 
 @nb.njit
@@ -233,7 +233,9 @@ def gen_light_detector_noise(shape, light_det_noise):
     bin_size = cp.diff(desired_freq).mean()
     noise_spectrum = cp.zeros((shape[0], desired_freq.shape[0]))
     for idet in range(shape[0]):
-        noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet] * cp.diff(noise_freq).mean(), left=0, right=0) / (bin_size)
+        noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet], left=0, right=0)
+    noise_spectrum *= cp.sqrt(cp.diff(noise_freq, axis=-1).mean()/bin_size) * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE
+    
     
     if shape[0]:
         noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
