@@ -26,8 +26,8 @@ TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
 TAU_T = 1.530
 
-#: Conversion from PE to ADC
-LIGHT_GAIN = -80 # ADC/PE
+#: Conversion from PE/microsecond to ADC
+LIGHT_GAIN = -2.30 # ADC * us/PE
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
 #: Reponse oscillation period [microseconds]
@@ -36,9 +36,9 @@ LIGHT_OSCILLATION_PERIOD = 0.095
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
 
 #: Total detector light threshold [ADC]
-LIGHT_TRIG_THRESHOLD = -2000
+LIGHT_TRIG_THRESHOLD = -10000
 #: Light digitization window [microseconds]
-LIGHT_TRIG_WINDOW = (1,1.56) # us
+LIGHT_TRIG_WINDOW = (0.9,1.66) # us
 #: Light waveform sample rate [microseconds]
 LIGHT_DIGIT_SAMPLE_SPACING = 0.01 # us
 #: Light digitizer bits
