@@ -33,9 +33,12 @@ def get_nticks(light_incidence):
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
     mask = light_incidence['n_photons_det'] > 0
-    start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
-    end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
-    return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
+    if np.any(mask):
+        start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
+        end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
+        return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
+    return int((LIGHT_WINDOW[1] + LIGHT_WINDOW[0])/LIGHT_TICK_SIZE), 0
+    
 
 
 @cuda.jit
