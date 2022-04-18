@@ -17,7 +17,7 @@ W_PH = 19.5e-6 # MeV
 #: Step size for light simulation [microseconds]
 LIGHT_TICK_SIZE = 0.005 # us
 #: Pre- and post-window for light simulation [microseconds]
-LIGHT_WINDOW = (1,10) # us
+LIGHT_WINDOW = (1, 10) # us
 
 #: Fraction of total light emitted from singlet state
 SINGLET_FRACTION = 0.3
@@ -38,7 +38,7 @@ LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
 #: Total detector light threshold [ADC]
 LIGHT_TRIG_THRESHOLD = -10000
 #: Light digitization window [microseconds]
-LIGHT_TRIG_WINDOW = (0.9,1.66) # us
+LIGHT_TRIG_WINDOW = (0.9, 1.66) # us
 #: Light waveform sample rate [microseconds]
 LIGHT_DIGIT_SAMPLE_SPACING = 0.01 # us
 #: Light digitizer bits
@@ -67,7 +67,14 @@ def set_light_properties(detprop_file):
     global TAU_T
     
     global LIGHT_GAIN
+    global LIGHT_RESPONSE_TIME
+    global LIGHT_OSCILLATION_PERIOD
     global LIGHT_DET_NOISE_SAMPLE_SPACING
+
+    global LIGHT_TRIG_THRESHOLD
+    global LIGHT_TRIG_WINDOW
+    global LIGHT_DIGIT_SAMPLE_SPACING
+    global LIGHT_NBIT
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -84,14 +91,25 @@ def set_light_properties(detprop_file):
                 if idet in tpc_to_op_channel[itpc]:
                     OP_CHANNEL_TO_TPC[idet] = itpc
 
-        LIGHT_TICK_SIZE = detprop.get('light_tick_size', LIGHT_TICK_SIZE)
-        LIGHT_WINDOW = detprop.get('light_window', LIGHT_WINDOW)
+        LIGHT_TICK_SIZE = float(detprop.get('light_tick_size', LIGHT_TICK_SIZE))
+        LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
+        assert len(LIGHT_WINDOW) == 2
         
-        SINGLET_FRACTION = detprop.get('singlet_fraction', SINGLET_FRACTION)
-        TAU_S = detprop.get('tau_s', TAU_S)
-        TAU_T = detprop.get('tau_t', TAU_T)
+        SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
+        TAU_S = float(detprop.get('tau_s', TAU_S))
+        TAU_T = float(detprop.get('tau_t', TAU_T))
         
         LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
-        LIGHT_DET_NOISE_SAMPLE_SPACING = detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING)
+        assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
+        LIGHT_DET_NOISE_SAMPLE_SPACING = float(detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING))
+        LIGHT_RESPONSE_TIME = float(detprop.get('light_response_time', LIGHT_RESPONSE_TIME))
+        LIGHT_OSCILLATION_PERIOD = float(detprop.get('light_oscillation_period', LIGHT_OSCILLATION_PERIOD))
+
+        LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
+        LIGHT_TRIG_WINDOW = tuple(detprop.get('light_trig_window', LIGHT_TRIG_WINDOW))
+        assert len(LIGHT_TRIG_WINDOW) == 2
+        LIGHT_DIGIT_SAMPLE_SPACING = float(detprop.get('light_digit_sample_spacing', LIGHT_DIGIT_SAMPLE_SPACING))
+        LIGHT_NBIT = int(detprop.get('light_nbit', LIGHT_NBIT))
+
     except KeyError:
         LIGHT_SIMULATED = False
