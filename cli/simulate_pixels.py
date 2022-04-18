@@ -463,8 +463,6 @@ def run_simulation(input_filename,
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                     
-            #event_times = fee.gen_event_times(np.unique(event_id_list_batch).shape[0], last_time)
-            
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
                                adc_tot_ticks_list_batch,
