@@ -158,22 +158,25 @@ def dump(input_file, output_file):
         # write to file
         if len(trajectories_list) >= 1000 or nb <= 0:
             if len(trajectories_list) > 0:
-                trajectories_list = np.concatenate(trajectories_list, axis=0)
-                segments_list = np.concatenate(segments_list, axis=0)
-                vertices_list = np.concatenate(vertices_list, axis=0)
+                trajectories_list = np.concatenate(trajectories_list, axis=0) if trajectories_list else list()
+                segments_list = np.concatenate(segments_list, axis=0) if segments_list else list()
+                vertices_list = np.concatenate(vertices_list, axis=0) if vertices_list else list()
 
                 with h5py.File(output_file, 'a') as f:
-                    ntraj = len(f['trajectories'])
-                    f['trajectories'].resize((ntraj+len(trajectories_list),))
-                    f['trajectories'][ntraj:] = trajectories_list
+                    if len(trajectories_list):
+                        ntraj = len(f['trajectories'])
+                        f['trajectories'].resize((ntraj+len(trajectories_list),))
+                        f['trajectories'][ntraj:] = trajectories_list
 
-                    nseg = len(f['segments'])
-                    f['segments'].resize((nseg+len(segments_list),))
-                    f['segments'][nseg:] = segments_list
+                    if len(segments_list):
+                        nseg = len(f['segments'])
+                        f['segments'].resize((nseg+len(segments_list),))
+                        f['segments'][nseg:] = segments_list
 
-                    nvert = len(f['vertices'])
-                    f['vertices'].resize((nvert+len(vertices_list),))
-                    f['vertices'][nvert:] = vertices_list
+                    if len(vertices_list):
+                        nvert = len(f['vertices'])
+                        f['vertices'].resize((nvert+len(vertices_list),))
+                        f['vertices'][nvert:] = vertices_list
 
                 trajectories_list = list()
                 segments_list = list()
