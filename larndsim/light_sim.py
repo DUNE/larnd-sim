@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -33,9 +33,12 @@ def get_nticks(light_incidence):
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
     mask = light_incidence['n_photons_det'] > 0
-    start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
-    end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
-    return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
+    if np.any(mask):
+        start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
+        end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
+        return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
+    return int((LIGHT_WINDOW[1] + LIGHT_WINDOW[0])/LIGHT_TICK_SIZE), 0
+    
 
 
 @cuda.jit
@@ -61,7 +64,7 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
 
             # find tracks that contribute light to this time tick
             for itrk in range(segments.shape[0]):
-                if light_inc[itrk,idet]['n_photons_det'] > 0:
+                if (light_inc[itrk,idet]['n_photons_det'] > 0):
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time_dist']
                     track_time = segments[itrk]['t0']
@@ -79,7 +82,7 @@ def sum_light_signals(segments, segment_voxel, light_inc, lut, start_time, light
                     for iprof in range(time_profile.shape[0]):
                         profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
                         if profile_time < end_tick_time and profile_time > start_tick_time:
-                            light_sample_inc[idet,itick] += light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm
+                            light_sample_inc[idet,itick] += light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
 
 
 @nb.njit
@@ -230,10 +233,16 @@ def gen_light_detector_noise(shape, light_det_noise):
     bin_size = cp.diff(desired_freq).mean()
     noise_spectrum = cp.zeros((shape[0], desired_freq.shape[0]))
     for idet in range(shape[0]):
-        noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet] * cp.diff(noise_freq).mean(), left=0, right=0) / (bin_size)
+        noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet], left=0, right=0)
+    noise_spectrum *= cp.sqrt(cp.diff(noise_freq, axis=-1).mean()/bin_size) * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE
+    
     
     if shape[0]:
-        noise = cp.fft.irfft(noise_spectrum * cp.exp(1j * cp.random.uniform(size=noise_spectrum.shape) * 2* cp.pi), axis=-1)
+        noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
+        if shape[0] < 2:
+            noise = cp.real(noise)
+        else:
+            noise = cp.fft.irfft(noise, axis=-1)
         if noise.shape != shape:
             noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
     else:
@@ -322,14 +331,14 @@ def sim_triggers(bpg, tpb, signal, trigger_idx, digit_samples, light_det_noise):
     # pad front of simulation with noise, if trigger close to start of simulation window
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx[0] - pre_digit_ticks < 0:
-        pad_shape = (signal.shape[0], pre_digit_ticks - trigger_idx[0])
+        pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx[0]))
         signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise), signal], axis=-1)
         padded_trigger_idx += pad_shape[1]
     
     # pad end of simulation with noise, if trigger close to end of simulation window
     post_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[1]/LIGHT_TICK_SIZE))
     if post_digit_ticks + trigger_idx[-1] > signal.shape[-1]:
-        pad_shape = (signal.shape[0], signal.shape[1] - (post_digit_ticks + trigger_idx[-1]))
+        pad_shape = (signal.shape[0], int(signal.shape[1] - (post_digit_ticks + trigger_idx[-1])))
         signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise)], axis=-1)
         
     digitize_signal[bpg,tpb](signal, padded_trigger_idx, digit_signal)

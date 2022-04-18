@@ -239,6 +239,9 @@ def run_simulation(input_filename,
     _, _, rev_idx = np.intersect1d(tot_evids, tracks['eventID'][::-1], return_indices=True)
     end_idx = len(tracks['eventID']) - 1 - rev_idx
 
+    # create a lookup table for event timestamps
+    event_times = fee.gen_event_times(tot_evids.max()+1, 0)
+
     # We divide the sample in portions that can be processed by the GPU
     step = 1
     
@@ -268,8 +271,10 @@ def run_simulation(input_filename,
             last_event += 1
 
         # load a subset of segments from the file and process those that are from the current event
-        track_subset = tracks[min(start_idx[ievd:ievd + step]):max(end_idx[ievd:ievd + step])+1]
-        evt_tracks = track_subset[(track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)]
+        track_slice = slice(min(start_idx[ievd:ievd + step]), max(end_idx[ievd:ievd + step])+1)
+        track_subset = tracks[track_slice]
+        event_mask = (track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)
+        evt_tracks = track_subset[event_mask]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
         for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE), desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
@@ -414,7 +419,7 @@ def run_simulation(input_filename,
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
-                light_inc = light_sim_dat[itrk:itrk+BATCH_SIZE]
+                light_inc = light_sim_dat[track_slice][event_mask][itrk:itrk+BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
 
                 n_light_det = light_inc.shape[-1]
@@ -423,7 +428,7 @@ def run_simulation(input_filename,
                 TPB = (1,64)
                 BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
                     ceil(light_sample_inc.shape[1] / TPB[1]))
-                light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
+                light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[track_slice][event_mask][itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
                 RangePop()
                 
                 RangePush("sim_scintillation")
@@ -471,8 +476,6 @@ def run_simulation(input_filename,
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                     
-            event_times = fee.gen_event_times(np.unique(event_id_list_batch).shape[0], last_time)
-            
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
                                adc_tot_ticks_list_batch,
@@ -480,7 +483,7 @@ def run_simulation(input_filename,
                                cp.asnumpy(current_fractions_tot_batch),
                                cp.asnumpy(track_pixel_map_tot_batch),
                                output_filename,
-                               event_times,
+                               event_times[np.unique(event_id_list_batch)],
                                is_first_event=last_time==0,
                                light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
                                light_trigger_event_id=None if not light.LIGHT_SIMULATED else light_event_id_list_batch,
@@ -499,7 +502,7 @@ def run_simulation(input_filename,
                                          light_trigger_idx_list_batch,
                                          light_waveforms_list_batch,
                                          output_filename,
-                                         event_times)
+                                         event_times[np.unique(light_event_id_list_batch)])
                 
                 light_event_id_list = []
                 light_start_time_list = []
