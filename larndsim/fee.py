@@ -273,7 +273,7 @@ def export_to_hdf5(event_id_list,
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list)
+        hdf5format.to_file(filename, packet_list, workers=1)
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
         packets_mc_ds['track_ids'] = packets_mc
         packets_mc_ds['fraction'] = packets_frac
