@@ -99,7 +99,7 @@ def gen_event_times(nevents, t0):
     Returns:
         array: shape `(nevents,)`, sequential event times [microseconds]
     """
-    event_start_time = cp.random.exponential(scale=EVENT_RATE, size=nevents)
+    event_start_time = cp.random.exponential(scale=EVENT_RATE, size=int(nevents))
     event_start_time = cp.cumsum(event_start_time)
     event_start_time += t0
     
