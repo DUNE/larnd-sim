@@ -26,8 +26,8 @@ TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
 TAU_T = 1.530
 
-#: Conversion from PE to ADC
-LIGHT_GAIN = -460 # ADC/PE
+#: Conversion from PE/microsecond to ADC
+LIGHT_GAIN = -2.30 # ADC * us/PE
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
 #: Reponse oscillation period [microseconds]
