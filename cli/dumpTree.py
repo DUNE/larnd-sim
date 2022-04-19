@@ -12,6 +12,33 @@ from tqdm import tqdm
 
 from ROOT import TG4Event, TFile
 
+# Output array datatypes
+segments_dtype = np.dtype([("eventID", "u4"), ("z_end", "f4"),
+                           ("trackID", "u4"), ("tran_diff", "f4"),
+                           ("z_start", "f4"), ("x_end", "f4"),
+                           ("y_end", "f4"), ("n_electrons", "u4"),
+                           ("pdgId", "i4"), ("x_start", "f4"),
+                           ("y_start", "f4"), ("t_start", "f4"),
+                           ("t0_start", "f8"), ("t0_end", "f8"), ("t0", "f8"),
+                           ("dx", "f4"), ("long_diff", "f4"),
+                           ("pixel_plane", "i4"), ("t_end", "f4"),
+                           ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
+                           ("y", "f4"), ("x", "f4"), ("z", "f4"),
+                           ("n_photons","f4")])
+
+trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
+                               ("parentID", "i4"),
+                               ("pxyz_start", "f4", (3,)),
+                               ("xyz_start", "f4", (3,)), ("t_start", "f4"),
+                               ("pxyz_end", "f4", (3,)),
+                               ("xyz_end", "f4", (3,)), ("t_end", "f4"),
+                               ("pdgId", "i4"), ("start_process", "u4"),
+                               ("start_subprocess", "u4"),
+                               ("end_process", "u4"),
+                               ("end_subprocess", "u4")])
+
+vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")])
+
 # Convert from EDepSim default units (mm, ns)
 edep2cm = 0.1   # convert to cm
 edep2us = 0.001 # convert to microseconds
@@ -103,6 +130,32 @@ def printSegmentContainer(depth, containerName, hitSegments):
     depth = depth + ".."
     for hitSegment in hitSegments: printHitSegment(depth, hitSegment)
 
+# Prep HDF5 file for writing
+def initHDF5File(output_file):
+    with h5py.File(output_file, 'w') as f:
+        f.create_dataset('trajectories', (0,), dtype=trajectories_dtype, maxshape=(None,))
+        f.create_dataset('segments', (0,), dtype=segments_dtype, maxshape=(None,))
+        f.create_dataset('vertices', (0,), dtype=vertices_dtype, maxshape=(None,))
+
+# Resize HDF5 file and save output arrays
+def updateHDF5File(output_file, trajectories, segments, vertices):
+    if any([len(trajectories), len(segments), len(vertices)]):
+        with h5py.File(output_file, 'a') as f:
+            if len(trajectories_list):
+                ntraj = len(f['trajectories'])
+                f['trajectories'].resize((ntraj+len(trajectories_list),))
+                f['trajectories'][ntraj:] = trajectories
+
+            if len(segments_list):
+                nseg = len(f['segments'])
+                f['segments'].resize((nseg+len(segments_list),))
+                f['segments'][nseg:] = segments
+
+            if len(vertices_list):
+                nvert = len(f['vertices'])
+                f['vertices'].resize((nvert+len(vertices_list),))
+                f['vertices'][nvert:] = vertices
+
 # Read a file and dump it.
 def dump(input_file, output_file):
 
@@ -120,67 +173,24 @@ def dump(input_file, output_file):
     # Read all of the events.
     entries = inputTree.GetEntriesFast()
 
-    segments_dtype = np.dtype([("eventID", "u4"), ("z_end", "f4"),
-                               ("trackID", "u4"), ("tran_diff", "f4"),
-                               ("z_start", "f4"), ("x_end", "f4"),
-                               ("y_end", "f4"), ("n_electrons", "u4"),
-                               ("pdgId", "i4"), ("x_start", "f4"),
-                               ("y_start", "f4"), ("t_start", "f4"),
-                               ("t0_start", "f8"), ("t0_end", "f8"), ("t0", "f8"),
-                               ("dx", "f4"), ("long_diff", "f4"),
-                               ("pixel_plane", "i4"), ("t_end", "f4"),
-                               ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
-                               ("y", "f4"), ("x", "f4"), ("z", "f4"),
-                               ("n_photons","f4")])
-
-    trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
-                                   ("parentID", "i4"),
-                                   ("pxyz_start", "f4", (3,)),
-                                   ("xyz_start", "f4", (3,)), ("t_start", "f4"),
-                                   ("pxyz_end", "f4", (3,)),
-                                   ("xyz_end", "f4", (3,)), ("t_end", "f4"),
-                                   ("pdgId", "i4"), ("start_process", "u4"),
-                                   ("start_subprocess", "u4"),
-                                   ("end_process", "u4"),
-                                   ("end_subprocess", "u4")])
-
-    vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")])
-
-    with h5py.File(output_file, 'w') as f:
-        f.create_dataset('trajectories', (0,), dtype=trajectories_dtype, maxshape=(None,))
-        f.create_dataset('segments', (0,), dtype=segments_dtype, maxshape=(None,))
-        f.create_dataset('vertices', (0,), dtype=vertices_dtype, maxshape=(None,))
+    # Prep output file
+    initHDF5File(output_file)
 
     segments_list = []
     trajectories_list = []
     vertices_list = []
 
-    for jentry in tqdm(range(entries+1)):
+    for jentry in tqdm(range(entries)):
         #print(jentry)
         nb = inputTree.GetEntry(jentry)
 
         # write to file
         if len(trajectories_list) >= 1000 or nb <= 0:
-            if len(trajectories_list) > 0:
-                trajectories_list = np.concatenate(trajectories_list, axis=0) if trajectories_list else list()
-                segments_list = np.concatenate(segments_list, axis=0) if segments_list else list()
-                vertices_list = np.concatenate(vertices_list, axis=0) if vertices_list else list()
-
-                with h5py.File(output_file, 'a') as f:
-                    if len(trajectories_list):
-                        ntraj = len(f['trajectories'])
-                        f['trajectories'].resize((ntraj+len(trajectories_list),))
-                        f['trajectories'][ntraj:] = trajectories_list
-
-                    if len(segments_list):
-                        nseg = len(f['segments'])
-                        f['segments'].resize((nseg+len(segments_list),))
-                        f['segments'][nseg:] = segments_list
-
-                    if len(vertices_list):
-                        nvert = len(f['vertices'])
-                        f['vertices'].resize((nvert+len(vertices_list),))
-                        f['vertices'][nvert:] = vertices_list
+            updateHDF5File(
+                output_file,
+                np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
+                np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
+                np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
 
                 trajectories_list = list()
                 segments_list = list()
@@ -263,6 +273,13 @@ def dump(input_file, output_file):
                 segment[iHit]["n_photons"] = 0
 
             segments_list.append(segment)
+
+    # save any lingering data not written to file
+    updateHDF5File(
+        output_file,
+        np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
+        np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
+        np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
 
 if __name__ == "__main__":
     fire.Fire(dump)
