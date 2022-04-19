@@ -15,7 +15,7 @@ SCINT_PRESCALE = 1
 W_PH = 19.5e-6 # MeV
 
 #: Step size for light simulation [microseconds]
-LIGHT_TICK_SIZE = 0.005 # us
+LIGHT_TICK_SIZE = 0.001 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (1, 10) # us
 
@@ -100,6 +100,8 @@ def set_light_properties(detprop_file):
         TAU_T = float(detprop.get('tau_t', TAU_T))
         
         LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
+        if LIGHT_GAIN.size == 1:
+            LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
         assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
         LIGHT_DET_NOISE_SAMPLE_SPACING = float(detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING))
         LIGHT_RESPONSE_TIME = float(detprop.get('light_response_time', LIGHT_RESPONSE_TIME))

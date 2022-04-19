@@ -15,10 +15,10 @@ from larndsim import drifting, quenching, pixels_from_track
 from math import ceil
 
 class TestTrackCurrent:
-    tracks = np.zeros((10, 23))
+    tracks = np.zeros((10, 26))
     tracks = np.core.records.fromarrays(tracks.transpose(), 
-                                        names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, n_photons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane",
-                                        formats = "i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, i8")
+                                        names="eventID, dEdx, x_start, dE, t_start, z_end, trackID, x_end, y_end, n_electrons, n_photons, t, dx, pdgId, y, x, long_diff, z, z_start, y_start, tran_diff, t_end, pixel_plane, t0, t0_start, t0_end",
+                                        formats = "i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8, i8, f8, f8, f8")
     tracks["z_start"] = np.random.uniform(detector.TPC_BORDERS[0][2][0], detector.TPC_BORDERS[0][2][1], 10)
     tracks["z_end"] = np.random.uniform(detector.TPC_BORDERS[0][2][0], detector.TPC_BORDERS[0][2][0]+2, 10)
     tracks["z"] = (tracks["z_end"]+tracks["z_start"])/2.
@@ -33,6 +33,9 @@ class TestTrackCurrent:
     tracks["dE"] = tracks["dEdx"]*tracks["dx"]
     tracks["tran_diff"] = [1e-1]*10
     tracks["long_diff"] = [1e-1]*10
+    tracks["t0"] = 0
+    tracks["t0_start"] = 0
+    tracks["t0_end"] = 0
 
     def test_current_model(self):
 
@@ -63,7 +66,7 @@ class TestTrackCurrent:
         blockspergrid_y = ceil(signals.shape[1] / threadsperblock[1])
         blockspergrid_z = ceil(signals.shape[2] / threadsperblock[2])
         blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-        response = np.load('larndsim/response_44.npy')
+        response = np.load('larndsim/bin/response_44.npy')
         detsim.tracks_current[blockspergrid,threadsperblock](signals,
                                                              neighboring_pixels,
                                                              tracks,
