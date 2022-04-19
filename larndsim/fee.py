@@ -14,7 +14,7 @@ from math import exp, floor
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
 from larpix.format import hdf5format
-from .consts import detector, physics
+from .consts import detector
 
 from .pixels_from_track import id2pixel
 
@@ -407,7 +407,7 @@ def get_adc_values(pixels_signals,
                     q_sum += q
                     ic+=1
 
-                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE 
+                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
                 disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
 
                 if adc < pixel_thresholds[ip] + disc_noise:
