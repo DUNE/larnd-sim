@@ -12,6 +12,10 @@ from tqdm import tqdm
 
 from ROOT import TG4Event, TFile
 
+# Convert from EDepSim default units (mm, ns)
+edep2cm = 0.1   # convert to cm
+edep2us = 0.001 # convert to microseconds
+
 # Print the fields in a TG4PrimaryParticle object
 def printPrimaryParticle(depth, primaryParticle):
     print(depth,"Class: ", primaryParticle.ClassName())
@@ -210,8 +214,8 @@ def dump(input_file, output_file):
             trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
             trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
             trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
-            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() / 1e3
-            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() / 1e3
+            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() * edep2us
+            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() * edep2us
             trajectories[iTraj]["start_process"] = start_pt.GetProcess()
             trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
             trajectories[iTraj]["end_process"] = end_pt.GetProcess()
@@ -229,15 +233,15 @@ def dump(input_file, output_file):
             for iHit, hitSegment in enumerate(hitSegments):
                 segment[iHit]["eventID"] = event.EventId
                 segment[iHit]["trackID"] = trajectories[hitSegment.Contrib[0]]["trackID"]
-                segment[iHit]["x_start"] = hitSegment.GetStart().X() / 10
-                segment[iHit]["y_start"] = hitSegment.GetStart().Y() / 10
-                segment[iHit]["z_start"] = hitSegment.GetStart().Z() / 10
-                segment[iHit]["t0_start"] = hitSegment.GetStart().T() / 1e3
+                segment[iHit]["x_start"] = hitSegment.GetStart().X() * edep2cm
+                segment[iHit]["y_start"] = hitSegment.GetStart().Y() * edep2cm
+                segment[iHit]["z_start"] = hitSegment.GetStart().Z() * edep2cm
+                segment[iHit]["t0_start"] = hitSegment.GetStart().T() * edep2us 
                 segment[iHit]["t_start"] = 0
-                segment[iHit]["x_end"] = hitSegment.GetStop().X() / 10
-                segment[iHit]["y_end"] = hitSegment.GetStop().Y() / 10
-                segment[iHit]["z_end"] = hitSegment.GetStop().Z() / 10
-                segment[iHit]["t0_end"] = hitSegment.GetStop().T() / 1e3
+                segment[iHit]["x_end"] = hitSegment.GetStop().X() * edep2cm
+                segment[iHit]["y_end"] = hitSegment.GetStop().Y() * edep2cm
+                segment[iHit]["z_end"] = hitSegment.GetStop().Z() * edep2cm
+                segment[iHit]["t0_end"] = hitSegment.GetStop().T() * edep2us
                 segment[iHit]["t_end"] = 0
                 segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
                 xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
