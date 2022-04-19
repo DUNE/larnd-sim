@@ -1,14 +1,22 @@
+# Argon properties
 temperature: 87.17 # K
 e_field: 0.50 # kV/cm
 lifetime: 2.2e+3 # us
-time_interval: [0, 200.] # us
 long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
+singlet_fraction: 0.3
+tau_s: 0.001 # us
+tau_t: 1.530 # us
+
+# Charge simulation parameters
 drift_length: 30.27225 # cm
+time_interval: [0, 200.] # us
 response_sampling: 0.1 # us
 reponse_bin_size: 0.04434 # cm
 time_padding: 190 # us
 time_window: 189.1 # us
+
+# Charge geometry parameters
 tpc_offsets: # cm
   - [0, -21.8236, 0]
 tile_map:
@@ -16,7 +24,13 @@ tile_map:
   - [[16,14,12,10],[15,13,11,9]]
 module_to_io_groups:
   1: [1,2,3,4]
-n_op_channel: 96
+
+# Light simulation parameters
+light_gain: -2.30 # ADC us / PE
+light_det_noise_sample_spacing: 0.01 # us
+light_trig_threshold: -10000 # ADC
+light_trig_window: [0.9, 1.66] # us
+light_nbit: 10
 op_channel_efficiency: [
     1, 1, 1, 1, 1, 1,
     14.9, 14.9, 14.9, 14.9, 14.9, 14.9, 
@@ -34,6 +48,9 @@ op_channel_efficiency: [
     14.9, 14.9, 14.9, 14.9, 14.9, 14.9, 
     1, 1, 1, 1, 1, 1, 
     14.9, 14.9, 14.9, 14.9, 14.9, 14.9]
+
+# Light geometry parameters
+n_op_channel: 96
 tpc_to_op_channel:
     - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
     - [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95] 
