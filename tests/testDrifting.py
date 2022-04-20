@@ -17,10 +17,10 @@ class TestDrifting:
     """
     Drifting module testing
     """
-    tracks = np.zeros((1, 22))
+    tracks = np.zeros((1, 25))
     tracks = np.core.records.fromarrays(tracks.transpose(), 
-                                        names="eventID, z_end, trackID, tran_diff, z_start, x_end, y_end, n_electrons, pdgId, x_start, y_start, t_start, dx, long_diff, pixel_plane, t_end, dEdx, dE, t, y, x, z",
-                                        formats = "i8, f8, i8, f8, f8, f8, f8, i8, i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8")
+                                        names="eventID, z_end, trackID, tran_diff, z_start, x_end, y_end, n_electrons, pdgId, x_start, y_start, t_start, dx, long_diff, pixel_plane, t_end, dEdx, dE, t, y, x, z, t0_start, t0_end, t0",
+                                        formats = "i8, f8, i8, f8, f8, f8, f8, i8, i8, f8, f8, f8, f8, f8, i8, f8, f8, f8, f8, f8, f8, f8, f8, f8, f8")
     tracks["z"] = np.random.uniform(detector.TPC_BORDERS[0][2][0], detector.TPC_BORDERS[0][2][1], 1)
     tracks["x"] = np.random.uniform(detector.TPC_BORDERS[0][0][0], detector.TPC_BORDERS[0][0][1], 1)
     tracks["y"] = np.random.uniform(detector.TPC_BORDERS[0][1][0], detector.TPC_BORDERS[0][1][1], 1)
