@@ -8,8 +8,9 @@ import numba as nb
 from numba import cuda
 
 from .consts import light
-from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY
+from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
+from .consts import units, detector
 
 @nb.njit
 def get_voxel(pos, itpc):
@@ -57,7 +58,7 @@ def get_voxel(pos, itpc):
     return i, j, k
 
 @cuda.jit
-def calculate_light_incidence(tracks, lut, light_incidence):
+def calculate_light_incidence(tracks, lut, light_incidence, voxel):
     """
     Simulates the number of photons read by each optical channel depending on
         where the edep occurs as well as the time it takes for a photon to reach the
@@ -71,6 +72,7 @@ def calculate_light_incidence(tracks, lut, light_incidence):
             is a structure of type (n_photons_det (float32), t0_det (float32)).
             These correspond to the number detected in each channel (n_photons_edep*visibility),
             and the time of earliest arrival at that channel.
+        voxel (:obj:`numpy.ndarray`): to contain the voxel for each track, dimension (n_tracks, 3)
     """
     itrk = cuda.grid(1)
 
@@ -85,24 +87,32 @@ def calculate_light_incidence(tracks, lut, light_incidence):
         # Identifies which tpc event takes place in
         itpc = tracks["pixel_plane"][itrk]
 
-        # Voxel containing LUT position
-        voxel = get_voxel(pos, itpc)
+        # ignore any edeps with the default itpc value,
+        # they are outside any tpc
+        if itpc != detector.DEFAULT_PLANE_INDEX:
 
-        # Calls data from voxel
-        lut_vox = lut[voxel[0], voxel[1], voxel[2],:,:]
+            # Voxel containing LUT position
+            i_voxel = get_voxel(pos, itpc)
+            voxel[itrk,0] = i_voxel[0]
+            voxel[itrk,1] = i_voxel[1]
+            voxel[itrk,2] = i_voxel[2]
 
-        # Calls visibility data for the voxel
-        vis_dat = lut_vox[:,0]
+            # Calls data from voxel
+            lut_vox = lut[i_voxel[0], i_voxel[1], i_voxel[2]]
+            
+            # Calls visibility data for the voxel
+            vis_dat = lut_vox['vis']
 
-        # Calls T1 data for the voxel
-        T1_dat = lut_vox[:,1]
+            # Calls T1 data for the voxel
+            T1_dat = lut_vox['t0']
 
-        # Assigns the LUT data to the light_incidence array
-        for output_i in range(light.N_OP_CHANNEL):
-            op_channel_index = output_i + int(itpc*light.N_OP_CHANNEL)
-            eff = OP_CHANNEL_EFFICIENCY[output_i]
-            vis = vis_dat[output_i]
-            t1 = T1_dat[output_i]
+            # Assigns the LUT data to the light_incidence array
+            for output_i in range(light.N_OP_CHANNEL):
+                op_channel_index = output_i
+            
+                eff = OP_CHANNEL_EFFICIENCY[output_i]
+                vis = vis_dat[output_i] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
+                t1 = (T1_dat[output_i] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
 
-            light_incidence['n_photons_det'][itrk,op_channel_index] = eff*vis*n_photons
-            light_incidence['t0_det'][itrk,op_channel_index] = t1
+                light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons
+                light_incidence['t0_det'][itrk,op_channel_index] = t1

@@ -29,7 +29,7 @@ def drift(tracks):
 
         track = tracks[itrk]
 
-        pixel_plane = -1
+        pixel_plane = detector.DEFAULT_PLANE_INDEX
 
         for ip, plane in enumerate(TPC_BORDERS):
             if plane[0][0]-2e-2 <= track["x"] <= plane[0][1]+2e-2 and \
@@ -40,7 +40,7 @@ def drift(tracks):
 
         track["pixel_plane"] = pixel_plane
 
-        if pixel_plane >= 0:
+        if pixel_plane != detector.DEFAULT_PLANE_INDEX:
             z_anode = TPC_BORDERS[pixel_plane][2][0]
             drift_distance = abs(track["z"] - z_anode)
             drift_start = abs(min(track["z_start"],track["z_end"]) - z_anode)
@@ -52,6 +52,6 @@ def drift(tracks):
 
             track["long_diff"] = sqrt(drift_time * 2 * detector.LONG_DIFF)
             track["tran_diff"] = sqrt(drift_time * 2 * detector.TRAN_DIFF)
-            track["t"] += drift_time
-            track["t_start"] += min(drift_start, drift_end) / detector.V_DRIFT
-            track["t_end"] += max(drift_start, drift_end) / detector.V_DRIFT
+            track["t"] += drift_time + track["t0"]
+            track["t_start"] += min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
+            track["t_end"] += max(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
