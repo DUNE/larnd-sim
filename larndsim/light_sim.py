@@ -14,7 +14,8 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL
+
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
 
@@ -172,7 +173,7 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
         if itick < light_sample_inc.shape[1]:
             if light_sample_inc[idet,itick] > 0:
                 light_sample_inc_disc[idet,itick] = 1. * xoroshiro128p_poisson_int32(
-                    light_sample_inc[idet,itick], rng_states, idet*light_sample_inc.shape[1] + itick)
+                    light_sample_inc[idet,itick] * LIGHT_TICK_SIZE, rng_states, idet*light_sample_inc.shape[1] + itick) / LIGHT_TICK_SIZE
             else:
                 light_sample_inc_disc[idet,itick] = 0.
                 
@@ -189,12 +190,31 @@ def sipm_response_model(idet, time_tick):
     Returns:
         float: response
     """
-    t = time_tick * LIGHT_TICK_SIZE
-    impulse = (t>=0) * exp(-t/LIGHT_RESPONSE_TIME) * sin(t/LIGHT_OSCILLATION_PERIOD)
-    # normalize to 1
-    impulse /= LIGHT_OSCILLATION_PERIOD * LIGHT_RESPONSE_TIME**2
-    impulse *= LIGHT_OSCILLATION_PERIOD**2 + LIGHT_RESPONSE_TIME**2
-    return impulse * LIGHT_TICK_SIZE
+    # use RLC response model
+    if SIPM_RESPONSE_MODEL == 0:
+        t = time_tick * LIGHT_TICK_SIZE
+        impulse = (t>=0) * exp(-t/LIGHT_RESPONSE_TIME) * sin(t/LIGHT_OSCILLATION_PERIOD)
+        # normalize to 1
+        impulse /= LIGHT_OSCILLATION_PERIOD * LIGHT_RESPONSE_TIME**2
+        impulse *= LIGHT_OSCILLATION_PERIOD**2 + LIGHT_RESPONSE_TIME**2
+        return impulse * LIGHT_TICK_SIZE
+
+    # use measured response model
+    if SIPM_RESPONSE_MODEL == 1:
+        i_model = int(floor((time_tick * LIGHT_TICK_SIZE) / IMPULSE_TICK_SIZE))
+        if i_model > IMPULSE_MODEL.shape[0]-2 or i_model < 0:
+            model0 = 0
+        else:
+            model0 = IMPULSE_MODEL[i_model]
+        if i_model > IMPULSE_MODEL.shape[0]-1 or i_model < -1:
+            model1 = 0
+        else:
+            model1 = IMPULSE_MODEL[i_model+1]
+        # linear interpolation
+        impulse = model0 + (time_tick * LIGHT_TICK_SIZE / IMPULSE_TICK_SIZE - i_model) * (model1 - model0)
+        # normalize to 1
+        impulse /=  IMPULSE_TICK_SIZE/LIGHT_TICK_SIZE
+        return impulse
             
 
 @cuda.jit
@@ -299,16 +319,22 @@ def digitize_signal(signal, trigger_idx, digit_signal):
         if idet < digit_signal.shape[1]:
             if isample < digit_signal.shape[2]:
                 sample_tick = isample * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE - LIGHT_TRIG_WINDOW[0] / LIGHT_TICK_SIZE + trigger_idx[itrig]
-                
+
                 tick0 = int(floor(sample_tick))
                 tick1 = int(ceil(sample_tick))
                 
-                signal0 = signal[idet, tick0]
+                if tick0 < 0 or tick0 >= signal.shape[-1]-1:
+                    signal0 = 0
+                else:
+                    signal0 = signal[idet, tick0]
                 
                 if tick0 == tick1:
                     digit_signal[itrig,idet,isample] = signal0
                 else:
-                    signal1 = signal[idet, tick1]
+                    if tick1 < 1 or tick1 >= signal.shape[-1]:
+                        signal1 = 0
+                    else:
+                        signal1 = signal[idet, tick1]
                     
                     digit_signal[itrig,idet,isample] = signal0 + (signal1 - signal0) * (sample_tick - tick0)
 
