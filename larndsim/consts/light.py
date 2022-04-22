@@ -121,7 +121,12 @@ def set_light_properties(detprop_file):
         impulse_model_filename = str(detprop.get('impulse_model', ''))
         if impulse_model_filename and SIPM_RESPONSE_MODEL == 1:
             print('Light impulse model:', impulse_model_filename)
-            IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
+            try:
+                # first try to load from current directory
+                IMPULSE_MODEL = np.load(impulse_model_filename)
+            except FILENotFoundError:
+                # then try from larnd-sim base directory
+                IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
