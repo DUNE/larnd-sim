@@ -124,7 +124,7 @@ def set_light_properties(detprop_file):
             try:
                 # first try to load from current directory
                 IMPULSE_MODEL = np.load(impulse_model_filename)
-            except FILENotFoundError:
+            except FileNotFoundError:
                 # then try from larnd-sim base directory
                 IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
