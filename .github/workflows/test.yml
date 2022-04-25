@@ -29,6 +29,7 @@ jobs:
         with:
           # Semantic version range syntax or exact version of a Python version
           python-version: '3.8'
+          lfs: true
 
       - name: Install dependencies
         run: |
