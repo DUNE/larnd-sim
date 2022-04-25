@@ -23,13 +23,17 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - name: Checkout github repo (+ download lfs dependencies)
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+      - name: Checkout LFS objects
+        run: git lfs checkout
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
         with:
           # Semantic version range syntax or exact version of a Python version
           python-version: '3.8'
-          lfs: true
 
       - name: Install dependencies
         run: |
