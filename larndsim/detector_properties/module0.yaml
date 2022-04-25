@@ -6,7 +6,7 @@ long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
 singlet_fraction: 0.3
 tau_s: 0.001 # us
-tau_t: 1.530 # us
+tau_t: 0.752 # us
 
 # Charge simulation parameters
 drift_length: 30.27225 # cm
@@ -26,7 +26,10 @@ module_to_io_groups:
   1: [1,2,3,4]
 
 # Light simulation parameters
-light_gain: -2.30 # ADC us / PE
+light_gain: -2.40 # ADC us / PE
+sipm_response_model: 1 # arbitrary impulse
+impulse_model: 'larndsim/bin/sipm_impulse.npy'
+impulse_tick_size: 0.01 # us
 light_det_noise_sample_spacing: 0.01 # us
 light_trig_threshold: -10000 # ADC
 light_trig_window: [0.9, 1.66] # us

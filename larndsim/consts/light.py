@@ -3,6 +3,7 @@ Sets ligth-related constants
 """
 import yaml
 import numpy as np
+import os
 
 LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
@@ -15,7 +16,7 @@ SCINT_PRESCALE = 1
 W_PH = 19.5e-6 # MeV
 
 #: Step size for light simulation [microseconds]
-LIGHT_TICK_SIZE = 0.001 # us
+LIGHT_TICK_SIZE = 0.005 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (1, 10) # us
 
@@ -24,16 +25,22 @@ SINGLET_FRACTION = 0.3
 #: Singlet decay time [microseconds]
 TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
-TAU_T = 1.530
+TAU_T = 1.530 # us
 
 #: Conversion from PE/microsecond to ADC
 LIGHT_GAIN = -2.30 # ADC * us/PE
+#: Set response model type (0=RLC response, 1=arbitrary input)
+SIPM_RESPONSE_MODEL = 0
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
 #: Reponse oscillation period [microseconds]
 LIGHT_OSCILLATION_PERIOD = 0.095
 #: Sample rate for input noise spectrum [microseconds]
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
+#: Arbitrary input model (normalized to sum of 1)
+IMPULSE_MODEL = np.array([1,0])
+#: Arbitrary input model tick size [microseconds]
+IMPULSE_TICK_SIZE = 0.001
 
 #: Total detector light threshold [ADC]
 LIGHT_TRIG_THRESHOLD = -10000
@@ -65,11 +72,14 @@ def set_light_properties(detprop_file):
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
-    
+
     global LIGHT_GAIN
+    global SIPM_RESPONSE_MODEL
     global LIGHT_RESPONSE_TIME
     global LIGHT_OSCILLATION_PERIOD
     global LIGHT_DET_NOISE_SAMPLE_SPACING
+    global IMPULSE_MODEL
+    global IMPULSE_TICK_SIZE
 
     global LIGHT_TRIG_THRESHOLD
     global LIGHT_TRIG_WINDOW
@@ -103,9 +113,21 @@ def set_light_properties(detprop_file):
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
         assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
+        SIPM_RESPONSE_MODEL = int(detprop.get('sipm_response_model', SIPM_RESPONSE_MODEL))
+        assert SIPM_RESPONSE_MODEL in (0,1)
         LIGHT_DET_NOISE_SAMPLE_SPACING = float(detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING))
         LIGHT_RESPONSE_TIME = float(detprop.get('light_response_time', LIGHT_RESPONSE_TIME))
         LIGHT_OSCILLATION_PERIOD = float(detprop.get('light_oscillation_period', LIGHT_OSCILLATION_PERIOD))
+        impulse_model_filename = str(detprop.get('impulse_model', ''))
+        if impulse_model_filename and SIPM_RESPONSE_MODEL == 1:
+            print('Light impulse model:', impulse_model_filename)
+            try:
+                # first try to load from current directory
+                IMPULSE_MODEL = np.load(impulse_model_filename)
+            except FileNotFoundError:
+                # then try from larnd-sim base directory
+                IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
+        IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
         LIGHT_TRIG_WINDOW = tuple(detprop.get('light_trig_window', LIGHT_TRIG_WINDOW))
