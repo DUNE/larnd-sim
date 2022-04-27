@@ -8,3 +8,4 @@ __pycache__
 docs/build
 *.pdf
 .vscode
+examples/module0_corsika.h5
