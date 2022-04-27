@@ -9,3 +9,4 @@ docs/build
 *.pdf
 .vscode
 examples/module0_corsika.h5
+test
