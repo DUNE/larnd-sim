@@ -68,7 +68,7 @@ def set_light_properties(detprop_file):
 
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
-    
+
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
@@ -93,7 +93,7 @@ def set_light_properties(detprop_file):
         LUT_VOX_DIV = np.array(detprop['lut_vox_div'])
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
-        
+
         tpc_to_op_channel = detprop['tpc_to_op_channel']
         OP_CHANNEL_TO_TPC = np.zeros((N_OP_CHANNEL,), int)
         for itpc in range(len(tpc_to_op_channel)):
@@ -104,11 +104,11 @@ def set_light_properties(detprop_file):
         LIGHT_TICK_SIZE = float(detprop.get('light_tick_size', LIGHT_TICK_SIZE))
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
-        
+
         SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
-        
+
         LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
@@ -126,7 +126,10 @@ def set_light_properties(detprop_file):
                 IMPULSE_MODEL = np.load(impulse_model_filename)
             except FileNotFoundError:
                 # then try from larnd-sim base directory
-                IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
+                try:
+                    IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
+                except FileNotFoundError:
+                    print("Impulse model file not found:", impulse_model_filename)
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
