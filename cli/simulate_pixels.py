@@ -78,7 +78,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
-                   light_lut_filename='../larndsim/bin/lightLUT.npy',
+                   light_lut_filename='../larndsim/bin/lightLUT.npz',
                    light_det_noise_filename='../larndsim/bin/light_noise.npy',
                    bad_channels=None,
                    n_tracks=None,
@@ -220,7 +220,7 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
-        lut = np.load(light_lut_filename)
+        lut = np.load(light_lut_filename)['arr']
         light_noise = cp.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
