@@ -5,6 +5,9 @@ import yaml
 import numpy as np
 import os
 
+#: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
+MAX_MC_TRUTH_IDS = 0
+
 LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
 LIGHT_SIMULATED = True
