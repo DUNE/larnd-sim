@@ -78,7 +78,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
-                   light_lut_filename='../larndsim/bin/lightLUT.npz',
+                   light_lut_filename='../larndsim/bin/lightLUT.npy',
                    light_det_noise_filename='../larndsim/bin/light_noise.npy',
                    bad_channels=None,
                    n_tracks=None,
@@ -220,7 +220,7 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
-        lut = np.load(light_lut_filename)['arr']
+        lut = np.load(light_lut_filename)
         light_noise = cp.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
@@ -451,18 +451,19 @@ def run_simulation(input_filename,
                 RangePop()
                 
                 RangePush("sim_light_triggers")
-                trigger_idx = light_sim.get_triggers(light_response)
+                trigger_idx, op_channel_idx = light_sim.get_triggers(light_response)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
-                       ceil(light_response.shape[0] / TPB[1]),
+                       ceil(op_channel_idx.shape[1] / TPB[1]),
                        ceil(digit_samples / TPB[2]))
-                light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, digit_samples, light_noise)
+                light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, op_channel_idx, digit_samples, light_noise)
                 RangePop()
                 
                 light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
                 light_trigger_idx_list.append(trigger_idx)
+                light_op_channel_idx_list.append(op_channel_idx)
                 light_waveforms_list.append(light_digit_signal)
 
         if event_id_list and adc_tot_list and len(event_id_list) > EVENT_BATCH_SIZE:
@@ -477,6 +478,7 @@ def run_simulation(input_filename,
                 light_event_id_list_batch = np.concatenate(light_event_id_list, axis=0)
                 light_start_time_list_batch = np.concatenate(light_start_time_list, axis=0)
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
+                light_op_channel_idx_list_batch = np.concatenate(light_op_channel_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                     
             fee.export_to_hdf5(event_id_list_batch,
@@ -503,6 +505,7 @@ def run_simulation(input_filename,
                 light_sim.export_to_hdf5(light_event_id_list_batch,
                                          light_start_time_list_batch,
                                          light_trigger_idx_list_batch,
+                                         light_op_channel_idx_list_batch,
                                          light_waveforms_list_batch,
                                          output_filename,
                                          event_times[np.unique(light_event_id_list_batch)])
@@ -510,6 +513,7 @@ def run_simulation(input_filename,
                 light_event_id_list = []
                 light_start_time_list = []
                 light_trigger_idx_list = []
+                light_op_channel_idx_list = []
                 light_waveforms_list = []
             
             last_time = event_times[-1]

@@ -69,6 +69,8 @@ TILE_MAP = ()
 TILE_CHIP_TO_IO = {}
 #: Association between modules and io groups
 MODULE_TO_IO_GROUPS = {}
+#: Association between modules and tpcs
+MODULE_TO_TPCS = {}
 
 ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
 
@@ -131,6 +133,7 @@ def set_detector_properties(detprop_file, pixel_file):
     global TILE_CHIP_TO_IO
     global DRIFT_LENGTH
     global MODULE_TO_IO_GROUPS
+    global MODULE_TO_TPCS
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
     global TPC_OFFSETS
@@ -212,3 +215,4 @@ def set_detector_properties(detprop_file, pixel_file):
     N_PIXELS = len(np.unique(xs))*ntiles_x, len(np.unique(ys))*ntiles_y
     N_PIXELS_PER_TILE = len(np.unique(xs)), len(np.unique(ys))
     MODULE_TO_IO_GROUPS = detprop['module_to_io_groups']
+    MODULE_TO_TPCS = detprop['module_to_tpcs']
