@@ -26,9 +26,9 @@ jobs:
       - name: Checkout github repo (+ download lfs dependencies)
         uses: actions/checkout@v2
         with:
-          lfs: true
-      - name: Checkout LFS objects
-        run: git lfs checkout
+          lfs: false
+      #- name: Checkout LFS objects
+      #  run: git lfs checkout
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
         with:
