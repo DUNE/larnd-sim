@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD
 
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
@@ -88,14 +88,13 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut,
                             photons = light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
                             light_sample_inc[idet,itick] += photons
 
-                            # get truth information for time tick
-                            for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                if light_sample_true_track_id[idet,itick,itrue] == -1 or light_sample_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                    light_sample_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                    light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                    break
-                            if itrue == light_sample_inc_true_track_id.shape[-1]-1 and light_sample_true_track_id[idet,itick,itrue] != segment_track_id[itrk]:
-                                print('WARNING: Maximum number of truth associations exceeded! Increasing MAX_MC_TRUTH_IDS is suggested')
+                            if photons > MC_TRUTH_THRESHOLD:
+                                # get truth information for time tick
+                                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                    if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                        light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                        light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                        break
 
 
 @nb.njit
@@ -139,6 +138,9 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
                     if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
                         break
+                        
+                    if tick_weight * light_sample_inc_true_photons[idet,jtick,itrue] < MC_TRUTH_THRESHOLD:
+                        continue
 
                     # loop over current tick truth
                     for jtrue in range(light_sample_inc_scint_true_track_id.shape[-1]):
@@ -266,7 +268,7 @@ def sipm_response_model(idet, time_tick):
             
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons light_response, light_response_true_track_id, light_response_true_photons):
+def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
     """
     Simulates the SiPM reponse and digit
     
@@ -283,11 +285,14 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response_model(idet, itick-jtick)
                 light_response[idet,itick] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
-
+                    
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
                     if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
                         break
+                        
+                    if abs(tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]) < MC_TRUTH_THRESHOLD:
+                        continue
 
                     # loop over current tick truth
                     for jtrue in range(light_response_true_track_id.shape[-1]):
@@ -384,30 +389,46 @@ def digitize_signal(signal, trigger_idx, signal_true_track_id, signal_true_photo
 
                 digit_signal[itrig,idet,isample] = interp(sample_tick, signal[idet], 0, 0)
 
-                # loop over truth positions
-                for itrue in range(digit_signal_true_track_id.shape[-1]):
-                    itick0 = int(floor(sample_tick))
-                    itick1 = int(ceil(sample_tick))
+                itick0 = int(floor(sample_tick))
+                itick1 = int(ceil(sample_tick))
+                
+                total_true_photons = 0
+                for itrue in range(signal_true_photons.shape[-1]):
+                    total_true_photons += signal_true_photons[idet,itick0,itrue]
+                
+                itrue = 0
+                # loop over previous tick truth
+                for jtrue in range(signal_true_track_id.shape[-1]):
+                    if itrue >= digit_signal_true_track_id.shape[-1]:
+                        break
+                    if signal_true_track_id[idet,itick0,jtrue] == -1:
+                        break
+                            
                     photons0, photons1 = 0, 0
-                    # loop over previous tick truth
-                    for jtrue in range(signal_true_track_id.shape[-1]):
-                        if signal_true_track_id[idet,itick0,jtrue] == -1:
-                            break
 
-                        # if matches sample track or empty truth slot
-                        if signal_true_track_id[idet,itick0,jtrue] == digit_signal_true_track_id[itrig,idet,isample,itrue] or digit_signal_true_track_id[itrig,idet,isample,itrue] == -1:
-                            # interpolate true photons
-                            photons0 = signal_true_photons[idet,itick0,jtrue]
+                    # if matches the current sample track or we have empty truth slot, add truth info
+                    if signal_true_track_id[idet,itick0,jtrue] == digit_signal_true_track_id[itrig,idet,isample,itrue] or digit_signal_true_track_id[itrig,idet,isample,itrue] == -1:
+                        digit_signal_true_track_id[itrig,idet,isample,itrue] = signal_true_track_id[idet,itick0,jtrue]
+                        itrue += 1
+                        # interpolate true photons
+                        photons0 = signal_true_photons[idet,itick0,jtrue]
+                        
+                        if abs(photons0) < MC_TRUTH_THRESHOLD:
+                            continue
 
-                            # loop over next tick
+                        # loop over next tick
+                        # first try same position (for speed-up)
+                        if signal_true_track_id[idet,itick0,jtrue] == signal_true_track_id[idet,itick1,jtrue]:
+                            photons1 = signal_true_photons[idet,itick1,jtrue]
+                        else:
                             for ktrue in range(signal_true_track_id.shape[-1]):
                                 if signal_true_track_id[idet,itick0,jtrue] == signal_true_track_id[idet,itick1,ktrue]:
                                     photons1 = signal_true_photons[idet,itick1,ktrue]
                                     break
-                            break
+
                     # if a valid truth entry was found, do interpolation
-                    if digit_signal_true_track_id[itrig,idet,isample,itrue] != -1:
-                        digit_signal_true_photons[itrig,idet,isample,itrue] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
+                    if digit_signal_true_track_id[itrig,idet,isample,itrue-1] != -1:
+                        digit_signal_true_photons[itrig,idet,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
 
 
 def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, trigger_idx, digit_samples, light_det_noise):
@@ -429,7 +450,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     """
     # exit if no triggers
     digit_signal = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples), dtype='f8')
-    digit_signal_true_track_id = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples, signal_true_track_id.shape[-1]), dtype=signal_true_track_id.dtype)
+    digit_signal_true_track_id = cp.full((trigger_idx.shape[0], signal.shape[0], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
     digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
     if digit_signal.shape[0] == 0:
         return digit_signal
@@ -453,8 +474,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
         
-    digitize_signal[bpg,tpb](signal, padded_trigger_idx, digit_signal)
-    digit_signal[bpg,tpb](signal, padded_trigger_idx, signal_true_track_id, signal_true_photons,
+    digitize_signal[bpg,tpb](signal, padded_trigger_idx, signal_true_track_id, signal_true_photons,
         digit_signal, digit_signal_true_track_id, digit_signal_true_photons)
 
     # truncate to correct number of bits
@@ -492,10 +512,10 @@ def export_to_hdf5(event_id, start_times, trigger_idx, waveforms, output_filenam
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_ids', 'i8', (waveforms_true_track_ids.shape[-1],)), ('fraction', 'f8', (waveforms_true_photons.shape[-1],))])
+            truth_dtype = np.dtype([('track_ids', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_photons.shape[-1],))])
             truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
             truth_data['track_ids'] = waveforms_true_track_id.get()
-            truth_data['fraction'] = (waveforms_true_photons / waveforms_true_photons.sum(axis=-1, keepdims=True)).get()
+            truth_data['pe_current'] = waveforms_true_photons.get()
         
         if 'light_wvfm' not in f:
             f.create_dataset('light_wvfm', data=waveforms.get(), maxshape=(None,None,None))

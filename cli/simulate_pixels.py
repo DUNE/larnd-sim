@@ -4,6 +4,7 @@ Command-line interface to larnd-sim module.
 """
 from math import ceil
 from time import time
+import warnings
 
 import numpy as np
 import numpy.lib.recfunctions as rfn
@@ -16,6 +17,7 @@ import h5py
 
 from numba.cuda import device_array
 from numba.cuda.random import create_xoroshiro128p_states
+from numba.core.errors import NumbaPerformanceWarning
 
 from tqdm import tqdm
 
@@ -35,6 +37,8 @@ LOGO = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
+
+warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
 
 def swap_coordinates(tracks):
     """
@@ -111,6 +115,7 @@ def run_simulation(input_filename,
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    print("Output file:", output_filename)
     print("Random seed:", SEED)
     print("Batch size:", BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
@@ -261,6 +266,8 @@ def run_simulation(input_filename,
     light_start_time_list = []
     light_trigger_idx_list = []
     light_waveforms_list = []
+    light_waveforms_true_track_id_list = []    
+    light_waveforms_true_photons_list = []    
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
@@ -423,7 +430,7 @@ def run_simulation(input_filename,
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
                 light_inc = light_sim_dat[track_slice][event_mask][itrk:itrk+BATCH_SIZE]
-                selected_track_id = cp.r_[track_slice][event_mask][itrk:itrk+BATCH_SIZE]
+                selected_track_id = cp.arange(track_slice.start, track_slice.stop)[event_mask][itrk:itrk+BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
 
                 n_light_det = light_inc.shape[-1]
@@ -439,6 +446,8 @@ def run_simulation(input_filename,
                     light_inc, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
                 RangePop()
+                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
+                    warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
                 
                 RangePush("sim_scintillation")
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
@@ -483,7 +492,7 @@ def run_simulation(input_filename,
                 light_waveforms_true_track_id_list.append(light_digit_signal_true_track_id)
                 light_waveforms_true_photons_list.append(light_digit_signal_true_photons)
 
-        if event_id_list and adc_tot_list and len(event_id_list) > EVENT_BATCH_SIZE:
+        if event_id_list and adc_tot_list and (len(event_id_list) > EVENT_BATCH_SIZE or ievd == tot_evids.shape[0]-1):
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
             adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
             adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
