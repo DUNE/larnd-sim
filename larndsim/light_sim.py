@@ -453,7 +453,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     digit_signal_true_track_id = cp.full((trigger_idx.shape[0], signal.shape[0], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
     digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], signal.shape[0], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
     if digit_signal.shape[0] == 0:
-        return digit_signal
+        return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
     
     padded_trigger_idx = trigger_idx.copy()
 
