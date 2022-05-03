@@ -4,6 +4,7 @@ Command-line interface to larnd-sim module.
 """
 from math import ceil
 from time import time
+import warnings
 
 import numpy as np
 import numpy.lib.recfunctions as rfn
@@ -16,6 +17,7 @@ import h5py
 
 from numba.cuda import device_array
 from numba.cuda.random import create_xoroshiro128p_states
+from numba.core.errors import NumbaPerformanceWarning
 
 from tqdm import tqdm
 
@@ -35,6 +37,8 @@ LOGO = """
  |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
 
 """
+
+warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
 
 def swap_coordinates(tracks):
     """
@@ -111,6 +115,7 @@ def run_simulation(input_filename,
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    print("Output file:", output_filename)
     print("Random seed:", SEED)
     print("Batch size:", BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
@@ -261,6 +266,8 @@ def run_simulation(input_filename,
     light_start_time_list = []
     light_trigger_idx_list = []
     light_waveforms_list = []
+    light_waveforms_true_track_id_list = []    
+    light_waveforms_true_photons_list = []    
 
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
@@ -423,20 +430,32 @@ def run_simulation(input_filename,
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
                 light_inc = light_sim_dat[track_slice][event_mask][itrk:itrk+BATCH_SIZE]
+                selected_track_id = cp.arange(track_slice.start, track_slice.stop)[event_mask][itrk:itrk+BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
 
                 n_light_det = light_inc.shape[-1]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
 
                 TPB = (1,64)
                 BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
                     ceil(light_sample_inc.shape[1] / TPB[1]))
-                light_sim.sum_light_signals[BPG, TPB](selected_tracks, track_light_voxel[track_slice][event_mask][itrk:itrk+BATCH_SIZE], light_inc, lut, light_t_start, light_sample_inc)
+                light_sim.sum_light_signals[BPG, TPB](
+                    selected_tracks, track_light_voxel[track_slice][event_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
+                    light_inc, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                    light_sample_inc_true_photons)
                 RangePop()
+                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
+                    warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
                 
                 RangePush("sim_scintillation")
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                light_sim.calc_scintillation_effect[BPG, TPB](light_sample_inc, light_sample_inc_scint)
+                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                light_sim.calc_scintillation_effect[BPG, TPB](
+                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
+                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
                 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), 
@@ -446,7 +465,11 @@ def run_simulation(input_filename,
                 
                 RangePush("sim_light_det_response")
                 light_response = cp.zeros_like(light_sample_inc)
-                light_sim.calc_light_detector_response[BPG, TPB](light_sample_inc_disc, light_response)
+                light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                light_sim.calc_light_detector_response[BPG, TPB](
+                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                    light_response, light_response_true_track_id, light_response_true_photons)
                 light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
                 RangePop()
                 
@@ -457,15 +480,19 @@ def run_simulation(input_filename,
                 BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
                        ceil(light_response.shape[0] / TPB[1]),
                        ceil(digit_samples / TPB[2]))
-                light_digit_signal = light_sim.sim_triggers(BPG, TPB, light_response, trigger_idx, digit_samples, light_noise)
+                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+                    BPG, TPB, light_response, light_response_true_track_id, light_response_true_photons, trigger_idx,
+                    digit_samples, light_noise)
                 RangePop()
                 
                 light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
                 light_trigger_idx_list.append(trigger_idx)
                 light_waveforms_list.append(light_digit_signal)
+                light_waveforms_true_track_id_list.append(light_digit_signal_true_track_id)
+                light_waveforms_true_photons_list.append(light_digit_signal_true_photons)
 
-        if event_id_list and adc_tot_list and len(event_id_list) > EVENT_BATCH_SIZE:
+        if event_id_list and adc_tot_list and (len(event_id_list) > EVENT_BATCH_SIZE or ievd == tot_evids.shape[0]-1):
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
             adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
             adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)
@@ -478,6 +505,8 @@ def run_simulation(input_filename,
                 light_start_time_list_batch = np.concatenate(light_start_time_list, axis=0)
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
+                light_waveforms_true_track_id_list_batch = np.concatenate(light_waveforms_true_track_id_list, axis=0)
+                light_waveforms_true_photons_list_batch = np.concatenate(light_waveforms_true_photons_list, axis=0)
                     
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
@@ -505,12 +534,16 @@ def run_simulation(input_filename,
                                          light_trigger_idx_list_batch,
                                          light_waveforms_list_batch,
                                          output_filename,
-                                         event_times[np.unique(light_event_id_list_batch)])
+                                         event_times[np.unique(light_event_id_list_batch)],
+                                         light_waveforms_true_track_id_list_batch,
+                                         light_waveforms_true_photons_list_batch)
                 
                 light_event_id_list = []
                 light_start_time_list = []
                 light_trigger_idx_list = []
                 light_waveforms_list = []
+                light_waveforms_true_track_id_list_batch = []
+                light_waveforms_true_photons_list_batch = []
             
             last_time = event_times[-1]
 

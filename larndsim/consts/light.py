@@ -5,6 +5,11 @@ import yaml
 import numpy as np
 import os
 
+#: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
+MAX_MC_TRUTH_IDS = 0 #256
+#: Threshold for propogating truth information on a given SiPM
+MC_TRUTH_THRESHOLD = 0.1 # pe/us
+
 LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
 LIGHT_SIMULATED = True
