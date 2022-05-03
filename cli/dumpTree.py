@@ -141,19 +141,19 @@ def initHDF5File(output_file):
 def updateHDF5File(output_file, trajectories, segments, vertices):
     if any([len(trajectories), len(segments), len(vertices)]):
         with h5py.File(output_file, 'a') as f:
-            if len(trajectories_list):
+            if len(trajectories):
                 ntraj = len(f['trajectories'])
-                f['trajectories'].resize((ntraj+len(trajectories_list),))
+                f['trajectories'].resize((ntraj+len(trajectories),))
                 f['trajectories'][ntraj:] = trajectories
 
-            if len(segments_list):
+            if len(segments):
                 nseg = len(f['segments'])
-                f['segments'].resize((nseg+len(segments_list),))
+                f['segments'].resize((nseg+len(segments),))
                 f['segments'][nseg:] = segments
 
-            if len(vertices_list):
+            if len(vertices):
                 nvert = len(f['vertices'])
-                f['vertices'].resize((nvert+len(vertices_list),))
+                f['vertices'].resize((nvert+len(vertices),))
                 f['vertices'][nvert:] = vertices
 
 # Read a file and dump it.
@@ -176,9 +176,9 @@ def dump(input_file, output_file):
     # Prep output file
     initHDF5File(output_file)
 
-    segments_list = []
-    trajectories_list = []
-    vertices_list = []
+    segments_list = list()
+    trajectories_list = list()
+    vertices_list = list()
 
     for jentry in tqdm(range(entries)):
         #print(jentry)
@@ -192,9 +192,10 @@ def dump(input_file, output_file):
                 np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
                 np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
 
-                trajectories_list = list()
-                segments_list = list()
-                vertices_list = list()
+            trajectories_list = list()
+            segments_list = list()
+            vertices_list = list()
+
 
         if nb <= 0:
             continue
