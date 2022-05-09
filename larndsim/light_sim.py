@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
 from .consts.detector import TPC_BORDERS
 from .consts import units as units
@@ -76,18 +76,42 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut,
                     if track_end_time < start_tick_time or track_time > end_tick_time:
                         continue
 
-                    # normalize propogation delay time profile
-                    norm = 0
-                    for iprof in range(time_profile.shape[0]):
-                        norm += time_profile[iprof]
+                    # use LUT time smearing
+                    if ENABLE_LUT_SMEARING:
+                        # normalize propogation delay time profile
+                        norm = 0
+                        for iprof in range(time_profile.shape[0]):
+                            norm += time_profile[iprof]
 
-                    # add photons to time tick
-                    for iprof in range(time_profile.shape[0]):
-                        profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                        # add photons to time tick
+                        for iprof in range(time_profile.shape[0]):
+                            profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                            if profile_time < end_tick_time and profile_time > start_tick_time:
+                                photons = light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
+                                light_sample_inc[idet,itick] += photons
+
+                                if photons > MC_TRUTH_THRESHOLD:
+                                    # get truth information for time tick
+                                    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                        if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                            light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                            light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                            break
+                    # use average time only
+                    else:
+                        # calculate average delay time
+                        avg = 0
+                        norm = 0
+                        for iprof in range(time_profile.shape[0]):
+                            avg += iprof * units.ns / units.mus * time_profile[iprof]
+                            norm += time_profile[iprof]
+                        avg = avg / norm
+
+                        # add photons to time tick
+                        profile_time = track_time + avg
                         if profile_time < end_tick_time and profile_time > start_tick_time:
-                            photons = light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
+                            photons = light_inc['n_photons_det'][itrk,idet] / LIGHT_TICK_SIZE
                             light_sample_inc[idet,itick] += photons
-
                             if photons > MC_TRUTH_THRESHOLD:
                                 # get truth information for time tick
                                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):

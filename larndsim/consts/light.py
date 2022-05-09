@@ -9,6 +9,7 @@ import os
 MAX_MC_TRUTH_IDS = 0 #256
 #: Threshold for propogating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 0.1 # pe/us
+ENABLE_LUT_SMEARING = False
 
 LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
@@ -71,6 +72,7 @@ def set_light_properties(detprop_file):
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
 
+    global ENABLE_LUT_SMEARING
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
 
@@ -106,6 +108,7 @@ def set_light_properties(detprop_file):
                 if idet in tpc_to_op_channel[itpc]:
                     OP_CHANNEL_TO_TPC[idet] = itpc
 
+        ENABLE_LUT_SMEARING = bool(detprop.get('enable_lut_smearing', ENABLE_LUT_SMEARING))
         LIGHT_TICK_SIZE = float(detprop.get('light_tick_size', LIGHT_TICK_SIZE))
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
