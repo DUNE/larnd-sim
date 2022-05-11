@@ -3,6 +3,7 @@ Sets ligth-related constants
 """
 import yaml
 import numpy as np
+import os
 
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
 MAX_MC_TRUTH_IDS = 0 #256
@@ -36,12 +37,18 @@ TAU_T = 1.530
 
 #: Conversion from PE/microsecond to ADC
 LIGHT_GAIN = -2.30 # ADC * us/PE
+#: Set response model type (0=RLC response, 1=arbitrary input)
+SIPM_RESPONSE_MODEL = 0
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
 #: Reponse oscillation period [microseconds]
 LIGHT_OSCILLATION_PERIOD = 0.095
 #: Sample rate for input noise spectrum [microseconds]
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
+#: Arbitrary input model (normalized to sum of 1)
+IMPULSE_MODEL = np.array([1,0])
+#: Arbitrary input model tick size [microseconds]
+IMPULSE_TICK_SIZE = 0.001
 
 #: Number of SiPMs per detector (used by trigger)
 OP_CHANNEL_PER_TRIG = 6
@@ -79,9 +86,12 @@ def set_light_properties(detprop_file):
     global TAU_T
     
     global LIGHT_GAIN
+    global SIPM_RESPONSE_MODEL
     global LIGHT_RESPONSE_TIME
     global LIGHT_OSCILLATION_PERIOD
     global LIGHT_DET_NOISE_SAMPLE_SPACING
+    global IMPULSE_MODEL
+    global IMPULSE_TICK_SIZE
 
     global OP_CHANNEL_PER_TRIG
     global LIGHT_TRIG_THRESHOLD
@@ -118,9 +128,24 @@ def set_light_properties(detprop_file):
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
         assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
+        SIPM_RESPONSE_MODEL = int(detprop.get('sipm_response_model', SIPM_RESPONSE_MODEL))
+        assert SIPM_RESPONSE_MODEL in (0,1)
         LIGHT_DET_NOISE_SAMPLE_SPACING = float(detprop.get('light_det_noise_sample_spacing', LIGHT_DET_NOISE_SAMPLE_SPACING))
         LIGHT_RESPONSE_TIME = float(detprop.get('light_response_time', LIGHT_RESPONSE_TIME))
         LIGHT_OSCILLATION_PERIOD = float(detprop.get('light_oscillation_period', LIGHT_OSCILLATION_PERIOD))
+        impulse_model_filename = str(detprop.get('impulse_model', ''))
+        if impulse_model_filename and SIPM_RESPONSE_MODEL == 1:
+            print('Light impulse model:', impulse_model_filename)
+            try:
+                # first try to load from current directory
+                IMPULSE_MODEL = np.load(impulse_model_filename)
+            except FileNotFoundError:
+                # then try from larnd-sim base directory
+                try:
+                    IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
+                except FileNotFoundError:
+                    print("Impulse model file not found:", impulse_model_filename)
+        IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         OP_CHANNEL_PER_TRIG = int(detprop.get('op_channel_per_det', OP_CHANNEL_PER_TRIG))
         LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
@@ -128,6 +153,8 @@ def set_light_properties(detprop_file):
         assert len(LIGHT_TRIG_WINDOW) == 2
         LIGHT_DIGIT_SAMPLE_SPACING = float(detprop.get('light_digit_sample_spacing', LIGHT_DIGIT_SAMPLE_SPACING))
         LIGHT_NBIT = int(detprop.get('light_nbit', LIGHT_NBIT))
+
+        
 
     except KeyError:
         LIGHT_SIMULATED = False

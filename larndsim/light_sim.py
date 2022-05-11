@@ -14,9 +14,9 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_DET, TPC_TO_OP_CHANNELS, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
-from .consts.detector import TPC_BORDERS
+from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS
 from .consts import units as units
 
 from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES
@@ -354,18 +354,18 @@ def gen_light_detector_noise(shape, light_det_noise):
 
     # generate an FFT with the same frequency power, but with random phase
     noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
-    if shape[0] < 2:
+    if shape[1] < 2:
         # special case where inverse FFT does not exist - just generate one sample
         noise = cp.real(noise)
     else:
         # invert FFT to create a noise waveform
         noise = cp.fft.irfft(noise, axis=-1)
 
-    if noise.shape != shape:
+    if noise.shape[1] < shape[1]:
         # FFT must have even samples, so append 0 if an odd number of samples is requested
         noise = cp.concatenate([noise, cp.zeros((noise.shape[0],shape[1]-noise.shape[1]))],axis=-1)
 
-    return noise
+    return noise[:,:shape[1]]
 
 
 def get_triggers(signal):
@@ -379,9 +379,9 @@ def get_triggers(signal):
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
     """
     # sum over all signals on a single detector
-    signal_sum = signal.reshape(signal.shape[0]//OP_CHANNEL_PER_DET, OP_CHANNEL_PER_DET, signal.shape[-1]).sum(axis=1, keepdims=True)
+    signal_sum = signal.reshape(signal.shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, signal.shape[-1]).sum(axis=1, keepdims=True)
     # apply trigger threshold
-    sample_above_thresh = cp.broadcast_to(signal_sum < LIGHT_TRIG_THRESHOLD, (signal.shape[0]//OP_CHANNEL_PER_DET, OP_CHANNEL_PER_DET, signal.shape[-1]))
+    sample_above_thresh = cp.broadcast_to(signal_sum < LIGHT_TRIG_THRESHOLD, (signal.shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, signal.shape[-1]))
     # cast back into the original signal array
     sample_above_thresh = sample_above_thresh.reshape(signal.shape)
 
@@ -393,20 +393,23 @@ def get_triggers(signal):
     # treat each module independently
     for mod_id, tpc_ids in MODULE_TO_TPCS.items():
         # get active channels for the module
-        op_channels = TPC_TO_OP_CHANNELS[tpc_ids].ravel()
-        module_above_thresh = np.any(sample_above_thresh[op_channels], axis=0)
+        op_channels = TPC_TO_OP_CHANNEL[tpc_ids].ravel()
+        module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
 
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
-            next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger + digit_ticks if last_trigger == 0 else 0)
+            next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
             # keep track of trigger time
             trigger_idx.append(next_idx)
             op_channel_idx.append(op_channels)
             # ignore samples during digitization window
             module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
-        
-    return cp.array(trigger_idx), cp.array(op_channel_idx)
+            last_trigger = next_idx + digit_ticks
+
+    if len(trigger_idx):
+        return cp.array(trigger_idx), cp.array(op_channel_idx)
+    return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int)
 
 
 @cuda.jit
@@ -426,7 +429,7 @@ def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, s
         if idet_module < digit_signal.shape[1]:
             if isample < digit_signal.shape[2]:
                 sample_tick = isample * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE - LIGHT_TRIG_WINDOW[0] / LIGHT_TICK_SIZE + trigger_idx[itrig]
-                idet = op_channel_idx[idet_module]
+                idet = op_channel_idx[itrig, idet_module]
                 digit_signal[itrig,idet_module,isample] = interp(sample_tick, signal[idet], 0, 0)
 
                 itick0 = int(floor(sample_tick))
@@ -498,6 +501,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx.min() - pre_digit_ticks < 0:
         pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx.min()))
+        print('pretrigger', pad_shape, trigger_idx.min(), pre_digit_ticks, signal.shape)
         signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise), signal], axis=-1)
         signal_true_track_id = cp.concatenate([cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype), signal_true_track_id], axis=-2)
         signal_true_photons = cp.concatenate([cp.zeros(pad_shape + signal_true_photons.shape[-1:], signal_true_photons.dtype), signal_true_photons], axis=-2)
@@ -505,8 +509,9 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     
     # pad end of simulation with noise, if trigger close to end of simulation window
     post_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[1]/LIGHT_TICK_SIZE))
-    if post_digit_ticks + trigger_idx.max() > signal.shape[-1]:
-        pad_shape = (signal.shape[0], int(signal.shape[1] - (post_digit_ticks + trigger_idx.max())))
+    if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
+        pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))
+        print('posttrigger', pad_shape, padded_trigger_idx.min(), post_digit_ticks, signal.shape)        
         signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise)], axis=-1)
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
@@ -521,7 +526,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
 
-def export_to_hdf5(event_id, start_times, trigger_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons):
+def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons):
     """
     Saves waveforms to output file
     
@@ -546,7 +551,7 @@ def export_to_hdf5(event_id, start_times, trigger_idx, waveforms, output_filenam
     
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
-        trig_data['op_channel'] = op_channel_idx
+        trig_data['op_channel'] = op_channel_idx.get()
         trig_data['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s).get()
         trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES).get()
 

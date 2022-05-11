@@ -26,7 +26,7 @@ from larndsim.cuda_dict import CudaDict
 
 SEED = int(time())
 BATCH_SIZE = 4000
-EVENT_BATCH_SIZE = 100
+EVENT_BATCH_SIZE = 10
 
 LOGO = """
   _                      _            _
@@ -225,7 +225,7 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
-        lut = np.load(light_lut_filename)
+        lut = np.load(light_lut_filename)['arr']
         light_noise = cp.load(light_det_noise_filename)
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
@@ -265,6 +265,7 @@ def run_simulation(input_filename,
     light_event_id_list = []
     light_start_time_list = []
     light_trigger_idx_list = []
+    light_op_channel_idx_list = []
     light_waveforms_list = []
     light_waveforms_true_track_id_list = []    
     light_waveforms_true_photons_list = []    
@@ -510,6 +511,8 @@ def run_simulation(input_filename,
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                 light_waveforms_true_track_id_list_batch = np.concatenate(light_waveforms_true_track_id_list, axis=0)
                 light_waveforms_true_photons_list_batch = np.concatenate(light_waveforms_true_photons_list, axis=0)
+
+                light_trigger_modules = cp.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[light_op_channel_idx_list_batch.get()][:,0]])
                     
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
@@ -522,6 +525,7 @@ def run_simulation(input_filename,
                                is_first_event=last_time==0,
                                light_trigger_times=None if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
                                light_trigger_event_id=None if not light.LIGHT_SIMULATED else light_event_id_list_batch,
+                               light_trigger_modules=None if not light.LIGHT_SIMULATED else light_trigger_modules,
                                bad_channels=bad_channels)
             
             event_id_list = []
