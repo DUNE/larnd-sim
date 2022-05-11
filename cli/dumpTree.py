@@ -176,9 +176,9 @@ def dump(input_file, output_file):
     # Prep output file
     initHDF5File(output_file)
 
-    segments_list = []
-    trajectories_list = []
-    vertices_list = []
+    segments_list = list()
+    trajectories_list = list()
+    vertices_list = list()
 
     for jentry in tqdm(range(entries)):
         #print(jentry)
