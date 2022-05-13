@@ -26,7 +26,7 @@ from larndsim.cuda_dict import CudaDict
 
 SEED = int(time())
 BATCH_SIZE = 4000
-EVENT_BATCH_SIZE = 100
+EVENT_BATCH_SIZE = 10
 
 LOGO = """
   _                      _            _
@@ -82,7 +82,7 @@ def run_simulation(input_filename,
                    detector_properties,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
-                   light_lut_filename='../larndsim/bin/lightLUT.npz',
+                   light_lut_filename='../larndsim/bin/lightLUT.npy',
                    light_det_noise_filename='../larndsim/bin/light_noise.npy',
                    bad_channels=None,
                    n_tracks=None,
@@ -265,6 +265,7 @@ def run_simulation(input_filename,
     light_event_id_list = []
     light_start_time_list = []
     light_trigger_idx_list = []
+    light_op_channel_idx_list = []
     light_waveforms_list = []
     light_waveforms_true_track_id_list = []
     light_waveforms_true_photons_list = []
@@ -474,20 +475,22 @@ def run_simulation(input_filename,
                 RangePop()
 
                 RangePush("sim_light_triggers")
-                trigger_idx = light_sim.get_triggers(light_response)
+                trigger_idx, op_channel_idx = light_sim.get_triggers(light_response)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
-                       ceil(light_response.shape[0] / TPB[1]),
+                       ceil(op_channel_idx.shape[1] / TPB[1]),
                        ceil(digit_samples / TPB[2]))
+
                 light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                    BPG, TPB, light_response, light_response_true_track_id, light_response_true_photons, trigger_idx,
+                    BPG, TPB, light_response, light_response_true_track_id, light_response_true_photons, trigger_idx, op_channel_idx,
                     digit_samples, light_noise)
                 RangePop()
 
                 light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
                 light_trigger_idx_list.append(trigger_idx)
+                light_op_channel_idx_list.append(op_channel_idx)
                 light_waveforms_list.append(light_digit_signal)
                 light_waveforms_true_track_id_list.append(light_digit_signal_true_track_id)
                 light_waveforms_true_photons_list.append(light_digit_signal_true_photons)
@@ -504,10 +507,12 @@ def run_simulation(input_filename,
                 light_event_id_list_batch = np.concatenate(light_event_id_list, axis=0)
                 light_start_time_list_batch = np.concatenate(light_start_time_list, axis=0)
                 light_trigger_idx_list_batch = np.concatenate(light_trigger_idx_list, axis=0)
+                light_op_channel_idx_list_batch = np.concatenate(light_op_channel_idx_list, axis=0)
                 light_waveforms_list_batch = np.concatenate(light_waveforms_list, axis=0)
                 light_waveforms_true_track_id_list_batch = np.concatenate(light_waveforms_true_track_id_list, axis=0)
                 light_waveforms_true_photons_list_batch = np.concatenate(light_waveforms_true_photons_list, axis=0)
-
+                light_trigger_modules = cp.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[light_op_channel_idx_list_batch.get()][:,0]])
+                    
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
                                adc_tot_ticks_list_batch,
@@ -519,6 +524,7 @@ def run_simulation(input_filename,
                                is_first_event=last_time==0,
                                light_trigger_times=event_times[np.unique(event_id_list_batch)] if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
                                light_trigger_event_id=np.unique(event_id_list_batch) if not light.LIGHT_SIMULATED else light_event_id_list_batch,
+                               light_trigger_modules=np.ones(len(np.unique(event_id_list_batch))) if not light.LIGHT_SIMULATED else light_trigger_modules,
                                bad_channels=bad_channels)
 
             event_id_list = []
@@ -532,6 +538,7 @@ def run_simulation(input_filename,
                 light_sim.export_to_hdf5(light_event_id_list_batch,
                                          light_start_time_list_batch,
                                          light_trigger_idx_list_batch,
+                                         light_op_channel_idx_list_batch,
                                          light_waveforms_list_batch,
                                          output_filename,
                                          event_times[np.unique(light_event_id_list_batch)],
@@ -541,6 +548,7 @@ def run_simulation(input_filename,
                 light_event_id_list = []
                 light_start_time_list = []
                 light_trigger_idx_list = []
+                light_op_channel_idx_list = []
                 light_waveforms_list = []
                 light_waveforms_true_track_id_list_batch = []
                 light_waveforms_true_photons_list_batch = []

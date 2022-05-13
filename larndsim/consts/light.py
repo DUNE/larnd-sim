@@ -9,19 +9,22 @@ import os
 MAX_MC_TRUTH_IDS = 0 #256
 #: Threshold for propogating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 0.1 # pe/us
+ENABLE_LUT_SMEARING = False
 
 LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
 LIGHT_SIMULATED = True
 OP_CHANNEL_EFFICIENCY = np.zeros(0)
 OP_CHANNEL_TO_TPC = np.zeros(0)
+TPC_TO_OP_CHANNEL = np.zeros((0,0))
+
 #: Prescale factor analogous to ScintPreScale in LArSoft FIXME
 SCINT_PRESCALE = 1
 #: Ion + excitation work function in `MeV`
 W_PH = 19.5e-6 # MeV
 
 #: Step size for light simulation [microseconds]
-LIGHT_TICK_SIZE = 0.005 # us
+LIGHT_TICK_SIZE = 0.001 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (1, 10) # us
 
@@ -30,7 +33,7 @@ SINGLET_FRACTION = 0.3
 #: Singlet decay time [microseconds]
 TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
-TAU_T = 1.530 # us
+TAU_T = 1.530
 
 #: Conversion from PE/microsecond to ADC
 LIGHT_GAIN = -2.30 # ADC * us/PE
@@ -47,8 +50,10 @@ IMPULSE_MODEL = np.array([1,0])
 #: Arbitrary input model tick size [microseconds]
 IMPULSE_TICK_SIZE = 0.001
 
+#: Number of SiPMs per detector (used by trigger)
+OP_CHANNEL_PER_TRIG = 6
 #: Total detector light threshold [ADC]
-LIGHT_TRIG_THRESHOLD = -10000
+LIGHT_TRIG_THRESHOLD = -2000
 #: Light digitization window [microseconds]
 LIGHT_TRIG_WINDOW = (0.9, 1.66) # us
 #: Light waveform sample rate [microseconds]
@@ -70,14 +75,16 @@ def set_light_properties(detprop_file):
     global LIGHT_SIMULATED
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
+    global TPC_TO_OP_CHANNEL
 
+    global ENABLE_LUT_SMEARING
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
-
+    
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
-
+    
     global LIGHT_GAIN
     global SIPM_RESPONSE_MODEL
     global LIGHT_RESPONSE_TIME
@@ -86,6 +93,7 @@ def set_light_properties(detprop_file):
     global IMPULSE_MODEL
     global IMPULSE_TICK_SIZE
 
+    global OP_CHANNEL_PER_TRIG
     global LIGHT_TRIG_THRESHOLD
     global LIGHT_TRIG_WINDOW
     global LIGHT_DIGIT_SAMPLE_SPACING
@@ -98,22 +106,24 @@ def set_light_properties(detprop_file):
         LUT_VOX_DIV = np.array(detprop['lut_vox_div'])
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
-
+        
         tpc_to_op_channel = detprop['tpc_to_op_channel']
         OP_CHANNEL_TO_TPC = np.zeros((N_OP_CHANNEL,), int)
+        TPC_TO_OP_CHANNEL = np.zeros((len(tpc_to_op_channel), len(tpc_to_op_channel[0])), int)
         for itpc in range(len(tpc_to_op_channel)):
-            for idet in range(N_OP_CHANNEL):
-                if idet in tpc_to_op_channel[itpc]:
-                    OP_CHANNEL_TO_TPC[idet] = itpc
+            TPC_TO_OP_CHANNEL[itpc] = np.array(tpc_to_op_channel[itpc])
+            for idet in tpc_to_op_channel[itpc]:
+                OP_CHANNEL_TO_TPC[idet] = itpc
 
+        ENABLE_LUT_SMEARING = bool(detprop.get('enable_lut_smearing', ENABLE_LUT_SMEARING))
         LIGHT_TICK_SIZE = float(detprop.get('light_tick_size', LIGHT_TICK_SIZE))
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
-
+        
         SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
-
+        
         LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
@@ -137,11 +147,14 @@ def set_light_properties(detprop_file):
                     print("Impulse model file not found:", impulse_model_filename)
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
+        OP_CHANNEL_PER_TRIG = int(detprop.get('op_channel_per_det', OP_CHANNEL_PER_TRIG))
         LIGHT_TRIG_THRESHOLD = float(detprop.get('light_trig_threshold', LIGHT_TRIG_THRESHOLD))
         LIGHT_TRIG_WINDOW = tuple(detprop.get('light_trig_window', LIGHT_TRIG_WINDOW))
         assert len(LIGHT_TRIG_WINDOW) == 2
         LIGHT_DIGIT_SAMPLE_SPACING = float(detprop.get('light_digit_sample_spacing', LIGHT_DIGIT_SAMPLE_SPACING))
         LIGHT_NBIT = int(detprop.get('light_nbit', LIGHT_NBIT))
+
+        
 
     except KeyError:
         LIGHT_SIMULATED = False

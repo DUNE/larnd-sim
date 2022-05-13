@@ -196,7 +196,6 @@ def dump(input_file, output_file):
             segments_list = list()
             vertices_list = list()
 
-
         if nb <= 0:
             continue
 
