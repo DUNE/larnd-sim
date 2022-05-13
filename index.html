@@ -800,7 +800,7 @@ ADC counts.</p>
 
 <dl class="function">
 <dt id="larndsim.fee.export_to_hdf5">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param">event_id_list</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">unique_pix</em>, <em class="sig-param">current_fractions</em>, <em class="sig-param">track_ids</em>, <em class="sig-param">filename</em>, <em class="sig-param">event_start_times</em>, <em class="sig-param">is_first_event</em>, <em class="sig-param">light_trigger_times=None</em>, <em class="sig-param">light_trigger_event_id=None</em>, <em class="sig-param">bad_channels=None</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param">event_id_list</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">unique_pix</em>, <em class="sig-param">current_fractions</em>, <em class="sig-param">track_ids</em>, <em class="sig-param">filename</em>, <em class="sig-param">event_start_times</em>, <em class="sig-param">is_first_event</em>, <em class="sig-param">light_trigger_times=None</em>, <em class="sig-param">light_trigger_event_id=None</em>, <em class="sig-param">light_trigger_modules=None</em>, <em class="sig-param">bad_channels=None</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the ADC counts in the LArPix HDF5 format.
 :Parameters: * <strong>event_id_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.22)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of event ids for each ADC value for each pixel</p>
 <blockquote>
@@ -817,6 +817,7 @@ to each pixel</p></li>
 <li><p><strong>is_first_event</strong> (<em>bool</em>) – <cite>True</cite> if this is the first event to save to the file</p></li>
 <li><p><strong>light_trigger_times</strong> (<em>array</em>) – 1D array of light trigger timestamps (relative to event t0) [in microseconds]</p></li>
 <li><p><strong>light_trigger_event_id</strong> (<em>array</em>) – 1D array of event id for each light trigger</p></li>
+<li><p><strong>light_trigger_modules</strong> (<em>array</em>) – 1D array of module id for each light trigger</p></li>
 <li><p><strong>bad_channels</strong> (<em>dict</em>) – dictionary containing as value a list of bad channels and as
 the chip key</p></li>
 </ul>
@@ -962,6 +963,12 @@ as global variables</p>
 <dt id="larndsim.consts.detector.MODULE_TO_IO_GROUPS">
 <code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">MODULE_TO_IO_GROUPS</code><em class="property"> = {}</em><a class="headerlink" href="#larndsim.consts.detector.MODULE_TO_IO_GROUPS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Association between modules and io groups</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.consts.detector.MODULE_TO_TPCS">
+<code class="sig-prename descclassname">larndsim.consts.detector.</code><code class="sig-name descname">MODULE_TO_TPCS</code><em class="property"> = {}</em><a class="headerlink" href="#larndsim.consts.detector.MODULE_TO_TPCS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Association between modules and tpcs</p>
 </dd></dl>
 
 <dl class="data">
@@ -1233,13 +1240,13 @@ filename</p></li>
 
 <dl class="data">
 <dt id="larndsim.consts.light.LIGHT_TICK_SIZE">
-<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TICK_SIZE</code><em class="property"> = 0.005</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TICK_SIZE" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TICK_SIZE</code><em class="property"> = 0.001</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TICK_SIZE" title="Permalink to this definition">¶</a></dt>
 <dd><p>Step size for light simulation [microseconds]</p>
 </dd></dl>
 
 <dl class="data">
 <dt id="larndsim.consts.light.LIGHT_TRIG_THRESHOLD">
-<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TRIG_THRESHOLD</code><em class="property"> = -10000</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TRIG_THRESHOLD" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TRIG_THRESHOLD</code><em class="property"> = -2000</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TRIG_THRESHOLD" title="Permalink to this definition">¶</a></dt>
 <dd><p>Total detector light threshold [ADC]</p>
 </dd></dl>
 
@@ -1265,6 +1272,12 @@ filename</p></li>
 <dt id="larndsim.consts.light.MC_TRUTH_THRESHOLD">
 <code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">MC_TRUTH_THRESHOLD</code><em class="property"> = 0.1</em><a class="headerlink" href="#larndsim.consts.light.MC_TRUTH_THRESHOLD" title="Permalink to this definition">¶</a></dt>
 <dd><p>Threshold for propogating truth information on a given SiPM</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="larndsim.consts.light.OP_CHANNEL_PER_TRIG">
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">OP_CHANNEL_PER_TRIG</code><em class="property"> = 6</em><a class="headerlink" href="#larndsim.consts.light.OP_CHANNEL_PER_TRIG" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of SiPMs per detector (used by trigger)</p>
 </dd></dl>
 
 <dl class="data">
