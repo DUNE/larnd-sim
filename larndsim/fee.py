@@ -35,7 +35,7 @@ RESET_CYCLES = 1
 CLOCK_CYCLE = 0.1
 #: Clock rollover / reset time in larpix clock ticks
 ROLLOVER_CYCLES = 2**31
-#: Front-end gain in :math:`mV/ke-`
+#: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
 BUFFER_RISETIME = 0.100
