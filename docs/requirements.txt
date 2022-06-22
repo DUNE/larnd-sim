@@ -1,5 +1,5 @@
 sphinx-rtd-theme~=0.5
-numpy==1.21.0
+numpy==1.22.0
 pytest~=6.2
 numba
 tqdm
