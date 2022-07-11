@@ -556,8 +556,9 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
 
             if itick < signals.shape[2]:
                 itime = start_tick + itick
-                cuda.atomic.add(pixels_signals, (pixel_index, itime), signals[itrk][ipix][itick])
-                cuda.atomic.add(pixels_tracks_signals, (pixel_index, itime, counter), signals[itrk][ipix][itick])
+                if itime < pixels_signals.shape[1]:
+                    cuda.atomic.add(pixels_signals, (pixel_index, itime), signals[itrk][ipix][itick])
+                    cuda.atomic.add(pixels_tracks_signals, (pixel_index, itime, counter), signals[itrk][ipix][itick])
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
