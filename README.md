@@ -14,13 +14,6 @@ The software takes as input an array containing the necessary truth information 
 
 ## Installation
 
-Some binary files required to run `larnd-sim` files are stored using [Git LFS](https://git-lfs.github.com). To be able to install the clone and install 'larnd-sim` you first need to do:
-
-```bash
-git lfs install
-git lfs pull
-```
-
 The package can be installed in this way:
 
 ```bash
@@ -29,7 +22,9 @@ cd larnd-sim
 pip install .
 ```
 
-which should take care of installing the required dependencies. If you are a developer you might want to install it in _editable mode_, so you can make changes to the code without having to re-install the package every time:
+which should take care of installing the required dependencies. `cupy` installation might take a long time. You can considerably speed up the process by pre-installing `cupy` precompiled binaries, available [here](https://docs.cupy.dev/en/stable/install.html#installing-cupy). The version will depend on the version of CUDA installed on your system.
+
+If you are a developer you might want to install it in _editable mode_, so you can make changes to the code without having to re-install the package every time:
 
 ```bash
 pip install -e .
