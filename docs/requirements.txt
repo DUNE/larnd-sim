@@ -5,3 +5,4 @@ numba
 tqdm
 pyyaml
 h5py
+fire
