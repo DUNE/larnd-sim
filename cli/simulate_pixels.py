@@ -68,13 +68,16 @@ def swap_coordinates(tracks):
 
 def maybe_create_rng_states(n, seed=0, rng_states=None):
     """Create or extend random states for CUDA kernel"""
+
     if rng_states is None:
         return create_xoroshiro128p_states(n, seed=seed)
-    elif n > len(rng_states):
+
+    if n > len(rng_states):
         new_states = device_array(n, dtype=rng_states.dtype)
         new_states[:len(rng_states)] = rng_states
         new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed)
         return new_states
+
     return rng_states
 
 def run_simulation(input_filename,
@@ -273,7 +276,8 @@ def run_simulation(input_filename,
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
-    for ievd in tqdm(range(0, tot_evids.shape[0], step), desc='Simulating events...', ncols=80, smoothing=0):
+    for ievd in tqdm(range(0, tot_evids.shape[0], step),
+                     desc='Simulating events...', ncols=80, smoothing=0):
 
         first_event = tot_evids[ievd]
         last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
@@ -288,7 +292,8 @@ def run_simulation(input_filename,
         evt_tracks = track_subset[event_mask]
         first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE), desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+        for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE),
+                         desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
@@ -441,7 +446,7 @@ def run_simulation(input_filename,
 
                 TPB = (1,64)
                 BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
-                    ceil(light_sample_inc.shape[1] / TPB[1]))
+                       ceil(light_sample_inc.shape[1] / TPB[1]))
                 light_sim.sum_light_signals[BPG, TPB](
                     selected_tracks, track_light_voxel[track_slice][event_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
                     light_inc, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
@@ -512,7 +517,7 @@ def run_simulation(input_filename,
                 light_waveforms_true_track_id_list_batch = np.concatenate(light_waveforms_true_track_id_list, axis=0)
                 light_waveforms_true_photons_list_batch = np.concatenate(light_waveforms_true_photons_list, axis=0)
                 light_trigger_modules = cp.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[light_op_channel_idx_list_batch.get()][:,0]])
-                    
+
             fee.export_to_hdf5(event_id_list_batch,
                                adc_tot_list_batch,
                                adc_tot_ticks_list_batch,

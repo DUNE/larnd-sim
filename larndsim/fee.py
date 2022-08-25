@@ -91,18 +91,18 @@ def rotate_tile(pixel_id, tile_id):
 def gen_event_times(nevents, t0):
     """
     Generate sequential event times assuming events are uncorrelated
-    
+
     Args:
         nevents(int): number of event times to generate
         t0(int): offset to apply [microseconds]
-        
+
     Returns:
         array: shape `(nevents,)`, sequential event times [microseconds]
     """
     event_start_time = cp.random.exponential(scale=EVENT_RATE, size=int(nevents))
     event_start_time = cp.cumsum(event_start_time)
     event_start_time += t0
-    
+
     return event_start_time
 
 
@@ -141,20 +141,20 @@ def export_to_hdf5(event_id_list,
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
-    dtype = np.dtype([('track_ids', '(%i,)i8' % track_ids.shape[1]), ('fraction', '(%i,)f8' % current_fractions.shape[2])])
+    dtype = np.dtype([('track_ids', f'({track_ids.shape[1]},)i8'), ('fraction', f'({current_fractions.shape[2]},)f8')])
 
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
     packets = []
     packets_mc = []
     packets_frac = []
-    
+
     if is_first_event:
         for io_group in io_groups:
             packets.append(TimestampPacket(timestamp=0))
             packets[-1].chip_key = Key(io_group,0,0)
             packets_mc.append([-1] * track_ids.shape[1])
             packets_frac.append([0] * current_fractions.shape[2])
-            
+
             packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
             packets_mc.append([-1] * track_ids.shape[1])
             packets_frac.append([0] * current_fractions.shape[2])
@@ -197,7 +197,7 @@ def export_to_hdf5(event_id_list,
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
-                    
+
                     if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:
                         # 31-bit rollover
                         rollover_count += 1
@@ -217,13 +217,13 @@ def export_to_hdf5(event_id_list,
                 if event != last_event:
                     for io_group in io_groups:
                         packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
-                        packets[-1].chip_key = Key(io_group,0,0)                        
+                        packets[-1].chip_key = Key(io_group,0,0)
                         packets_mc.append([-1] * track_ids.shape[1])
                         packets_frac.append([0] * current_fractions.shape[2])
 
                     trig_mask = light_trigger_event_id == event
                     if any(trig_mask):
-                        for t_trig, event_id_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_event_id[trig_mask], light_trigger_modules[trig_mask]):
+                        for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
                             t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
                             for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                 packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
@@ -238,7 +238,7 @@ def export_to_hdf5(event_id_list,
                                                                                 pix_y % detector.N_PIXELS_PER_TILE[1]),
                                                                    tile_id)]
                 except KeyError:
-                    logger.warning("Pixel ID not valid %i" % pixel_id)
+                    logger.warning(f"Pixel ID not valid {pixel_id}")
                     continue
 
                 p.dataword = int(adc)
