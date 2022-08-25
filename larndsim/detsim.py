@@ -10,9 +10,8 @@ import numba as nb
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
-from . import consts
 from .consts.detector import TPC_BORDERS, TIME_INTERVAL
-from .consts import detector, physics
+from .consts import detector
 from .pixels_from_track import id2pixel
 
 MAX_TRACKS_PER_PIXEL = 5
@@ -163,57 +162,6 @@ def rho(point, q, start, sigmas, segment):
     return expo
 
 @nb.njit
-def truncexpon(x, loc=0, scale=1):
-    """
-    A truncated exponential distribution.
-    To shift and/or scale the distribution use the `loc` and `scale` parameters.
-    
-    Args:
-        x (float): where to evaluate the function
-        loc (float, optional): shift position of the distribution. Defaults to 0.
-        scale (float, optional): scale the distribution. Defaults to 1.
-        
-    Returns:
-        float: exp(-(x-loc)/scale)/scale
-    """
-    y = (x-loc)/scale
-
-    return exp(-y)/scale if y > 0 else 0
-
-@nb.njit
-def current_model(t, t0, x, y):
-    """
-    Parametrization of the induced current on the pixel, which depends
-    on the of arrival at the anode (:math:`t_0`) and on the position
-    on the pixel pad.
-
-    Args:
-        t (float): time where we evaluate the current
-        t0 (float): time of arrival at the anode
-        x (float): distance between the point on the pixel and the pixel center
-            on the :math:`x` axis
-        y (float): distance between the point on the pixel and the pixel center
-            on the :math:`y` axis
-
-    Returns:
-        float: the induced current at time :math:`t`
-    """
-    B_params = (1.060, -0.909, -0.909, 5.856, 0.207, 0.207)
-    C_params = (0.679, -1.083, -1.083, 8.772, -5.521, -5.521)
-    D_params = (2.644, -9.174, -9.174, 13.483, 45.887, 45.887)
-    t0_params = (2.948, -2.705, -2.705, 4.825, 20.814, 20.814)
-
-    a = B_params[0] + B_params[1]*x+B_params[2]*y+B_params[3]*x*y+B_params[4]*x*x+B_params[5]*y*y
-    b = C_params[0] + C_params[1]*x+C_params[2]*y+C_params[3]*x*y+C_params[4]*x*x+C_params[5]*y*y
-    c = D_params[0] + D_params[1]*x+D_params[2]*y+D_params[3]*x*y+D_params[4]*x*x+D_params[5]*y*y
-    shifted_t0 = t0 + t0_params[0] + t0_params[1]*x + t0_params[2]*y + \
-                      t0_params[3]*x*y + t0_params[4]*x*x + t0_params[5]*y*y
-
-    a = min(a, 1)
-
-    return a * truncexpon(-t, -shifted_t0, b) + (1-a) * truncexpon(-t, -shifted_t0, c)
-
-@nb.njit
 def track_point(start, direction, z):
     """
     This function returns the segment coordinates for a point along the `z` coordinate
@@ -277,21 +225,21 @@ def overlapping_segment(x, y, start, end, radius):
     """
     Calculates the segment of the track defined by start, end that overlaps
     with a circle centered at x,y
-    
+
     """
     dxy = x - start[0], y - start[1]
     v = end[0] - start[0], end[1] - start[1]
     l = sqrt(v[0]**2 + v[1]**2)
     v = v[0]/l, v[1]/l
     s = (dxy[0] * v[0] + dxy[1] * v[1])/l # position of point of closest approach
-    
+
     r = sqrt((dxy[0] - v[0] * s * l)**2 + (dxy[1] - v[1] * s * l)**2)
     if r > radius:
         return start, start # no overlap
-    
+
     s_plus = s + sqrt(radius**2 - r**2) / l
     s_minus = s - sqrt(radius**2 - r**2) / l
-    
+
     if s_plus > 1:
         s_plus = 1
     elif s_plus < 0:
@@ -300,7 +248,7 @@ def overlapping_segment(x, y, start, end, radius):
         s_minus = 1
     elif s_minus < 0:
         s_minus = 0
-        
+
     new_start = (start[0] * (1 - s_minus) + end[0] * s_minus,
                  start[1] * (1 - s_minus) + end[1] * s_minus,
                  start[2] * (1 - s_minus) + end[2] * s_minus)
@@ -329,7 +277,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
     """
     itrk, ipix, it = cuda.grid(3)
     ntrk, _, _ = cuda.gridsize(3)
-    
+
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
@@ -348,7 +296,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             else:
                 end = (t["x_start"], t["y_start"], t["z_start"])
                 start = (t["x_end"], t["y_end"], t["z_end"])
-                
+
             t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
             time_tick = t_start + it * detector.TIME_SAMPLING
 
@@ -357,21 +305,21 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
 
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
-            
-            impact_factor = sqrt(response.shape[0]**2 + 
+
+            impact_factor = sqrt(response.shape[0]**2 +
                                      response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
 
             subsegment_start, subsegment_end = overlapping_segment(x_p, y_p, start, end, impact_factor)
-            subsegment = (subsegment_end[0]-subsegment_start[0], 
-                          subsegment_end[1]-subsegment_start[1], 
+            subsegment = (subsegment_end[0]-subsegment_start[0],
+                          subsegment_end[1]-subsegment_start[1],
                           subsegment_end[2]-subsegment_start[2])
             subsegment_length = sqrt(subsegment[0]**2 + subsegment[1]**2 + subsegment[2]**2)
             if subsegment_length == 0:
                 return
-                
+
             nstep = max(round(subsegment_length / MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
-            
+
             charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
             total_current = 0
             rng_state = (rng_states[itrk + ntrk * ipix],)
@@ -380,17 +328,17 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
                     y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
                     z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
-                
+
                     z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
                     t0 = abs(z - TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
                     if not t0 < time_tick < t0 + detector.TIME_WINDOW:
                         continue
-                
+
                     x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
                     y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
                     x_dist = abs(x_p - x)
                     y_dist = abs(y_p - y)
-                
+
                     if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
                         continue
                     if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
@@ -449,7 +397,6 @@ def tracks_current(signals, pixels, tracks, response):
                                 sqrt(detector.PIXEL_PITCH**2 + detector.PIXEL_PITCH**2)/2)*2
 
             z_poca, z_start, z_end = z_interval(start, end, x_p, y_p, impact_factor)
-#             print(z_poca,z_start,z_end,start[2])
             if z_poca != 0:
 
                 z_start_int = z_start - 4*sigmas[2]
@@ -508,10 +455,10 @@ def tracks_current(signals, pixels, tracks, response):
 def sign(x):
     """
     Sign function
-    
+
     Args:
         x (float): input number
-    
+
     Returns:
         int: 1 if x>=0 else -1
     """
@@ -557,8 +504,12 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
             if itick < signals.shape[2]:
                 itime = start_tick + itick
                 if itime < pixels_signals.shape[1]:
-                    cuda.atomic.add(pixels_signals, (pixel_index, itime), signals[itrk][ipix][itick])
-                    cuda.atomic.add(pixels_tracks_signals, (pixel_index, itime, counter), signals[itrk][ipix][itick])
+                    cuda.atomic.add(pixels_signals,
+                                    (pixel_index, itime),
+                                    signals[itrk][ipix][itick])
+                    cuda.atomic.add(pixels_tracks_signals,
+                                    (pixel_index, itime, counter),
+                                    signals[itrk][ipix][itick])
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
