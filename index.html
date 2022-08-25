@@ -231,32 +231,6 @@ the properties of the segments at the anode:</p>
 <p>Module that calculates the current induced by edep-sim track segments
 on the pixels</p>
 <dl class="attribute">
-<dt id="larndsim.detsim.current_model">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">current_model</code><a class="headerlink" href="#larndsim.detsim.current_model" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parametrization of the induced current on the pixel, which depends
-on the of arrival at the anode (<span class="math notranslate nohighlight">\(t_0\)</span>) and on the position
-on the pixel pad.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>t</strong> (<em>float</em>) – time where we evaluate the current</p></li>
-<li><p><strong>t0</strong> (<em>float</em>) – time of arrival at the anode</p></li>
-<li><p><strong>x</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
-on the <span class="math notranslate nohighlight">\(x\)</span> axis</p></li>
-<li><p><strong>y</strong> (<em>float</em>) – distance between the point on the pixel and the pixel center
-on the <span class="math notranslate nohighlight">\(y\)</span> axis</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>the induced current at time <span class="math notranslate nohighlight">\(t\)</span></p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="attribute">
 <dt id="larndsim.detsim.get_closest_waveform">
 <code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">get_closest_waveform</code><a class="headerlink" href="#larndsim.detsim.get_closest_waveform" title="Permalink to this definition">¶</a></dt>
 <dd><p>This function, given a point on the pixel pad and a time, returns the
@@ -453,28 +427,6 @@ the number of track segments, P is the number of pixels and contains the pixel I
 <li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
 generation</p></li>
 </ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="attribute">
-<dt id="larndsim.detsim.truncexpon">
-<code class="sig-prename descclassname">larndsim.detsim.</code><code class="sig-name descname">truncexpon</code><a class="headerlink" href="#larndsim.detsim.truncexpon" title="Permalink to this definition">¶</a></dt>
-<dd><p>A truncated exponential distribution.
-To shift and/or scale the distribution use the <cite>loc</cite> and <cite>scale</cite> parameters.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> (<em>float</em>) – where to evaluate the function</p></li>
-<li><p><strong>loc</strong> (<em>float, optional</em>) – shift position of the distribution. Defaults to 0.</p></li>
-<li><p><strong>scale</strong> (<em>float, optional</em>) – scale the distribution. Defaults to 1.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>exp(-(x-loc)/scale)/scale</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
 </dd>
 </dl>
 </dd></dl>
