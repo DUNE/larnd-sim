@@ -27,7 +27,7 @@ jobs:
     - uses: ammaraskar/sphinx-action@master
       with:
         docs-folder: "docs/"
-        pre-build-command: "sed -i 's/@cuda/#@cuda/g' larndsim/*.py; sed -i 's/import cupy/#import cupy/g' larndsim/fee.py; sed -i 's/from larpix/#from larpix/g' larndsim/fee.py"
+        pre-build-command: "sed -i 's/@cuda/#@cuda/g' larndsim/*.py; sed -i 's/import cupy/#import cupy/g' larndsim/fee.py; sed -i 's/import cupy/#import cupy/g' cli/simulate_pixels.py; sed -i 's/from cupy/#from cupy/g' cli/simulate_pixels.py; sed -i 's/from larpix/#from larpix/g' larndsim/fee.py"
     - uses: actions/upload-artifact@v1
       with:
         name: DocumentationHTML
