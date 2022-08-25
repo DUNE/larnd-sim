@@ -178,6 +178,7 @@
  | <a href="#U"><strong>U</strong></a>
  | <a href="#V"><strong>V</strong></a>
  | <a href="#W"><strong>W</strong></a>
+ | <a href="#X"><strong>X</strong></a>
  | <a href="#Z"><strong>Z</strong></a>
  
 </div>
@@ -216,6 +217,14 @@
 <h2 id="C">C</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="larndsim.html#larndsim.light_sim.calc_light_detector_response">calc_light_detector_response() (in module larndsim.light_sim)</a>
+</li>
+      <li><a href="larndsim.html#larndsim.light_sim.calc_scintillation_effect">calc_scintillation_effect() (in module larndsim.light_sim)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="larndsim.html#larndsim.light_sim.calc_stat_fluctuations">calc_stat_fluctuations() (in module larndsim.light_sim)</a>
+</li>
       <li><a href="larndsim.html#larndsim.fee.CLOCK_CYCLE">CLOCK_CYCLE (in module larndsim.fee)</a>
 </li>
   </ul></td>
@@ -228,10 +237,12 @@
 </li>
       <li><a href="larndsim.html#larndsim.fee.digitize">digitize() (in module larndsim.fee)</a>
 </li>
-      <li><a href="larndsim.html#larndsim.fee.DISCRIMINATION_THRESHOLD">DISCRIMINATION_THRESHOLD (in module larndsim.fee)</a>
+      <li><a href="larndsim.html#larndsim.light_sim.digitize_signal">digitize_signal() (in module larndsim.light_sim)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="larndsim.html#larndsim.fee.DISCRIMINATION_THRESHOLD">DISCRIMINATION_THRESHOLD (in module larndsim.fee)</a>
+</li>
       <li><a href="larndsim.html#larndsim.fee.DISCRIMINATOR_NOISE">DISCRIMINATOR_NOISE (in module larndsim.fee)</a>
 </li>
       <li><a href="larndsim.html#larndsim.drifting.drift">drift() (in module larndsim.drifting)</a>
@@ -257,7 +268,11 @@
       <li><a href="larndsim.html#larndsim.fee.EVENT_RATE">EVENT_RATE (in module larndsim.fee)</a>
 </li>
       <li><a href="larndsim.html#larndsim.fee.export_to_hdf5">export_to_hdf5() (in module larndsim.fee)</a>
+
+      <ul>
+        <li><a href="larndsim.html#larndsim.light_sim.export_to_hdf5">(in module larndsim.light_sim)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -268,15 +283,21 @@
 </li>
       <li><a href="larndsim.html#larndsim.fee.gen_event_times">gen_event_times() (in module larndsim.fee)</a>
 </li>
+      <li><a href="larndsim.html#larndsim.light_sim.gen_light_detector_noise">gen_light_detector_noise() (in module larndsim.light_sim)</a>
+</li>
       <li><a href="larndsim.html#larndsim.fee.get_adc_values">get_adc_values() (in module larndsim.fee)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="larndsim.html#larndsim.detsim.get_closest_waveform">get_closest_waveform (in module larndsim.detsim)</a>
 </li>
+      <li><a href="larndsim.html#larndsim.light_sim.get_nticks">get_nticks() (in module larndsim.light_sim)</a>
+</li>
       <li><a href="larndsim.html#larndsim.detsim.get_pixel_coordinates">get_pixel_coordinates (in module larndsim.detsim)</a>
 </li>
       <li><a href="larndsim.html#larndsim.detsim.get_track_pixel_map">get_track_pixel_map() (in module larndsim.detsim)</a>
+</li>
+      <li><a href="larndsim.html#larndsim.light_sim.get_triggers">get_triggers() (in module larndsim.light_sim)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -289,6 +310,8 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="larndsim.html#larndsim.consts.light.IMPULSE_TICK_SIZE">IMPULSE_TICK_SIZE (in module larndsim.consts.light)</a>
+</li>
+      <li><a href="larndsim.html#larndsim.light_sim.interp">interp (in module larndsim.light_sim)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -311,6 +334,8 @@
       <li><a href="larndsim.html#module-larndsim.drifting">larndsim.drifting (module)</a>
 </li>
       <li><a href="larndsim.html#module-larndsim.fee">larndsim.fee (module)</a>
+</li>
+      <li><a href="larndsim.html#module-larndsim.light_sim">larndsim.light_sim (module)</a>
 </li>
       <li><a href="larndsim.html#module-larndsim.quenching">larndsim.quenching (module)</a>
 </li>
@@ -434,17 +459,25 @@
 </li>
       <li><a href="larndsim.html#larndsim.consts.light.SCINT_PRESCALE">SCINT_PRESCALE (in module larndsim.consts.light)</a>
 </li>
+      <li><a href="larndsim.html#larndsim.light_sim.scintillation_model">scintillation_model (in module larndsim.light_sim)</a>
+</li>
       <li><a href="larndsim.html#larndsim.consts.detector.set_detector_properties">set_detector_properties() (in module larndsim.consts.detector)</a>
 </li>
       <li><a href="larndsim.html#larndsim.consts.light.set_light_properties">set_light_properties() (in module larndsim.consts.light)</a>
 </li>
+      <li><a href="larndsim.html#larndsim.detsim.sign">sign (in module larndsim.detsim)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="larndsim.html#larndsim.detsim.sign">sign (in module larndsim.detsim)</a>
+      <li><a href="larndsim.html#larndsim.light_sim.sim_triggers">sim_triggers() (in module larndsim.light_sim)</a>
 </li>
       <li><a href="larndsim.html#larndsim.consts.light.SINGLET_FRACTION">SINGLET_FRACTION (in module larndsim.consts.light)</a>
 </li>
       <li><a href="larndsim.html#larndsim.consts.light.SIPM_RESPONSE_MODEL">SIPM_RESPONSE_MODEL (in module larndsim.consts.light)</a>
+</li>
+      <li><a href="larndsim.html#larndsim.light_sim.sipm_response_model">sipm_response_model (in module larndsim.light_sim)</a>
+</li>
+      <li><a href="larndsim.html#larndsim.light_sim.sum_light_signals">sum_light_signals() (in module larndsim.light_sim)</a>
 </li>
       <li><a href="larndsim.html#larndsim.detsim.sum_pixel_signals">sum_pixel_signals() (in module larndsim.detsim)</a>
 </li>
@@ -531,6 +564,14 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="larndsim.html#larndsim.consts.light.W_PH">W_PH (in module larndsim.consts.light)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="X">X</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="larndsim.html#larndsim.light_sim.xoroshiro128p_poisson_int32">xoroshiro128p_poisson_int32 (in module larndsim.light_sim)</a>
 </li>
   </ul></td>
 </tr></table>
