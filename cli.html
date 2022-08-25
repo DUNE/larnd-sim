@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Command-line interface &mdash; larnd-sim 0.3.3 documentation</title>
+  <title>Command-line utilities &mdash; larnd-sim 0.3.3 documentation</title>
   
 
   
@@ -89,7 +89,11 @@
               <p class="caption"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="larndsim.html">larndsim package</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Command-line interface</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Command-line utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-cli.simulate_pixels"><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-cli.dumpTree"><code class="code docutils literal notranslate"><span class="pre">dumpTree.py</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="output.html">Output format</a></li>
 </ul>
 
@@ -139,7 +143,7 @@
     
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
         
-      <li>Command-line interface</li>
+      <li>Command-line utilities</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -158,8 +162,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="module-cli.simulate_pixels">
-<span id="command-line-interface"></span><h1>Command-line interface<a class="headerlink" href="#module-cli.simulate_pixels" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="command-line-utilities">
+<h1>Command-line utilities<a class="headerlink" href="#command-line-utilities" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-cli.simulate_pixels">
+<span id="simulate-pixels-py"></span><h2><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code><a class="headerlink" href="#module-cli.simulate_pixels" title="Permalink to this headline">¶</a></h2>
 <p>Command-line interface to larnd-sim module.</p>
 <dl class="function">
 <dt id="cli.simulate_pixels.maybe_create_rng_states">
@@ -215,6 +221,56 @@ from the convention in edep-sim. FIXME.</p>
 </dl>
 </dd></dl>
 
+</div>
+<div class="section" id="module-cli.dumpTree">
+<span id="dumptree-py"></span><h2><code class="code docutils literal notranslate"><span class="pre">dumpTree.py</span></code><a class="headerlink" href="#module-cli.dumpTree" title="Permalink to this headline">¶</a></h2>
+<p>Converts ROOT file created by edep-sim into HDF5 format</p>
+<dl class="function">
+<dt id="cli.dumpTree.dump">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">dump</code><span class="sig-paren">(</span><em class="sig-param">input_file</em>, <em class="sig-param">output_file</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.dump" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.initHDF5File">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">initHDF5File</code><span class="sig-paren">(</span><em class="sig-param">output_file</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.initHDF5File" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printHitSegment">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printHitSegment</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">hitSegment</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printHitSegment" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printPrimaryParticle">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printPrimaryParticle</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">primaryParticle</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printPrimaryParticle" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printPrimaryVertex">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printPrimaryVertex</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">primaryVertex</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printPrimaryVertex" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printSegmentContainer">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printSegmentContainer</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">containerName</em>, <em class="sig-param">hitSegments</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printSegmentContainer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printTrajectory">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printTrajectory</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">trajectory</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printTrajectory" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.printTrajectoryPoint">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">printTrajectoryPoint</code><span class="sig-paren">(</span><em class="sig-param">depth</em>, <em class="sig-param">trajectoryPoint</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.printTrajectoryPoint" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cli.dumpTree.updateHDF5File">
+<code class="sig-prename descclassname">cli.dumpTree.</code><code class="sig-name descname">updateHDF5File</code><span class="sig-paren">(</span><em class="sig-param">output_file</em>, <em class="sig-param">trajectories</em>, <em class="sig-param">segments</em>, <em class="sig-param">vertices</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.dumpTree.updateHDF5File" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
 </div>
 
 
