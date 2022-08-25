@@ -17,12 +17,11 @@ sys.path.insert(0,parentdir)
 # -- Project information -----------------------------------------------------
 
 project = 'larnd-sim'
-copyright = '2020, DUNE collaboration'
+copyright = '2022, DUNE collaboration'
 author = 'DUNE collaboration'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
-
+release = '0.3.3'
 
 # -- General configuration ---------------------------------------------------
 
