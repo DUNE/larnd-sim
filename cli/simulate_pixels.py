@@ -527,7 +527,7 @@ def run_simulation(input_filename,
                                output_filename,
                                event_times[np.unique(event_id_list_batch)],
                                is_first_event=last_time==0,
-                               light_trigger_times=event_times[np.unique(event_id_list_batch)] if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
+                               light_trigger_times=cp.zeros_like(event_times[np.unique(event_id_list_batch)]) if not light.LIGHT_SIMULATED else light_start_time_list_batch + light_trigger_idx_list_batch * light.LIGHT_TICK_SIZE,
                                light_trigger_event_id=np.unique(event_id_list_batch) if not light.LIGHT_SIMULATED else light_event_id_list_batch,
                                light_trigger_modules=np.ones(len(np.unique(event_id_list_batch))) if not light.LIGHT_SIMULATED else light_trigger_modules,
                                bad_channels=bad_channels)
