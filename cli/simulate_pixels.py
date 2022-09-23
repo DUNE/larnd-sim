@@ -22,11 +22,11 @@ from numba.core.errors import NumbaPerformanceWarning
 from tqdm import tqdm
 
 from larndsim import consts
-from larndsim.cuda_dict import CudaDict
+from larndsim.util import CudaDict, batching
 
 SEED = int(time())
 BATCH_SIZE = 4000
-EVENT_BATCH_SIZE = 10
+EVENT_BATCH_SIZE = 1
 
 LOGO = """
   _                      _            _
@@ -120,6 +120,7 @@ def run_simulation(input_filename,
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
     print("Random seed:", SEED)
+    print("Event batch size:", EVENT_BATCH_SIZE)
     print("Batch size:", BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
@@ -180,6 +181,7 @@ def run_simulation(input_filename,
         tracks = tracks[:n_tracks]
         if light.LIGHT_SIMULATED:
             light_sim_dat = light_sim_dat[:n_tracks]
+            track_light_voxel = track_light_voxel[:n_tracks]
 
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
@@ -249,6 +251,7 @@ def run_simulation(input_filename,
     _, _, start_idx = np.intersect1d(tot_evids, tracks['eventID'], return_indices=True)
     _, _, rev_idx = np.intersect1d(tot_evids, tracks['eventID'][::-1], return_indices=True)
     end_idx = len(tracks['eventID']) - 1 - rev_idx
+    track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
 
     # create a lookup table for event timestamps
     event_times = fee.gen_event_times(tot_evids.max()+1, 0)
@@ -276,24 +279,19 @@ def run_simulation(input_filename,
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
-    for ievd in tqdm(range(0, tot_evids.shape[0], step),
-                     desc='Simulating events...', ncols=80, smoothing=0):
-
-        first_event = tot_evids[ievd]
-        last_event = tot_evids[min(ievd+step, tot_evids.shape[0]-1)]
-
-        if first_event == last_event:
-            last_event += 1
-
-        # load a subset of segments from the file and process those that are from the current event
-        track_slice = slice(min(start_idx[ievd:ievd + step]), max(end_idx[ievd:ievd + step])+1)
-        track_subset = tracks[track_slice]
-        event_mask = (track_subset['eventID'] >= first_event) & (track_subset['eventID'] < last_event)
-        evt_tracks = track_subset[event_mask]
-        first_trk_id = np.where(track_subset['eventID'] == evt_tracks['eventID'][0])[0][0] + min(start_idx[ievd:ievd + step])
+    for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
+                           desc='Simulating events...', ncols=80, smoothing=0):
+        # grab only tracks from current batch
+        track_subset = tracks[batch_mask]
+        ievd = int(track_subset[0]['eventID'])
+        evt_tracks = track_subset
+        first_trk_id = np.argmax(batch_mask) # first track in batch
 
         for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE),
                          desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+            if itrk > 0:
+                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
+                
             selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
@@ -429,14 +427,15 @@ def run_simulation(input_filename,
             adc_tot_ticks_list.append(adc_ticks_list)
             unique_pix_tot.append(unique_pix)
             current_fractions_tot.append(current_fractions)
-            track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+            #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+            track_pixel_map[track_pixel_map != -1] = track_ids[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
             track_pixel_map_tot.append(track_pixel_map)
 
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
-                light_inc = light_sim_dat[track_slice][event_mask][itrk:itrk+BATCH_SIZE]
-                selected_track_id = cp.arange(track_slice.start, track_slice.stop)[event_mask][itrk:itrk+BATCH_SIZE]
+                light_inc = light_sim_dat[batch_mask][itrk:itrk+BATCH_SIZE]
+                selected_track_id = track_ids[batch_mask][itrk:itrk+BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
 
                 n_light_det = light_inc.shape[-1]
@@ -448,7 +447,7 @@ def run_simulation(input_filename,
                 BPG = (ceil(light_sample_inc.shape[0] / TPB[0]),
                        ceil(light_sample_inc.shape[1] / TPB[1]))
                 light_sim.sum_light_signals[BPG, TPB](
-                    selected_tracks, track_light_voxel[track_slice][event_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
+                    selected_tracks, track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
                     light_inc, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
                 RangePop()
