@@ -27,7 +27,7 @@ class TPCBatcher(TrackSegmentBatcher):
         #print(f"TPCBatcher(tracks={self.track_seg.shape}, batch_size={self.tpc_batch_size}, events={len(self._events)}, curr_event={self._curr_event}, curr_tpc={self._curr_tpc})")
 
     def __len__(self):
-        return (self._last_event - self._first_event + 1) * ceil(self.tpc_borders.shape[0] / self.tpc_batch_size)
+        return len(self._events) * ceil(self.tpc_borders.shape[0] / self.tpc_batch_size)
 
     def __iter__(self):
         return self

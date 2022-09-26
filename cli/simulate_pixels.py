@@ -25,8 +25,9 @@ from larndsim import consts
 from larndsim.util import CudaDict, batching
 
 SEED = int(time())
-BATCH_SIZE = 4000
-EVENT_BATCH_SIZE = 1
+BATCH_SIZE = 4000 # track segments
+EVENT_BATCH_SIZE = 2 # tpcs
+WRITE_BATCH_SIZE = 1000 # batches
 
 LOGO = """
   _                      _            _
@@ -122,6 +123,7 @@ def run_simulation(input_filename,
     print("Random seed:", SEED)
     print("Event batch size:", EVENT_BATCH_SIZE)
     print("Batch size:", BATCH_SIZE)
+    print("Write batch size:", WRITE_BATCH_SIZE)    
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
     print("edep-sim input file:", input_filename)
@@ -231,7 +233,13 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)['arr']
+        
+        # clip LUT so that no voxel contains 0 visibility
+        mask = lut['vis'] > 0
+        lut['vis'][~mask] = lut['vis'][mask].min()
+        
         light_noise = cp.load(light_det_noise_filename)
+        
         TPB = 256
         BPG = ceil(tracks.shape[0] / TPB)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
@@ -280,7 +288,7 @@ def run_simulation(input_filename,
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
     for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
-                           desc='Simulating events...', ncols=80, smoothing=0):
+                           desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
         track_subset = tracks[batch_mask]
         ievd = int(track_subset[0]['eventID'])
@@ -288,7 +296,7 @@ def run_simulation(input_filename,
         first_trk_id = np.argmax(batch_mask) # first track in batch
 
         for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE),
-                         desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+                         delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
                 warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
                 
@@ -437,8 +445,10 @@ def run_simulation(input_filename,
                 light_inc = light_sim_dat[batch_mask][itrk:itrk+BATCH_SIZE]
                 selected_track_id = track_ids[batch_mask][itrk:itrk+BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
+                op_channel = light_sim.get_active_op_channel(light_inc)
 
-                n_light_det = light_inc.shape[-1]
+                #n_light_det = light_inc.shape[-1]
+                n_light_det = op_channel.shape[0]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                 light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
@@ -448,7 +458,7 @@ def run_simulation(input_filename,
                        ceil(light_sample_inc.shape[1] / TPB[1]))
                 light_sim.sum_light_signals[BPG, TPB](
                     selected_tracks, track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
-                    light_inc, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                    light_inc[:, op_channel.get()].copy(), lut[..., op_channel.get() % lut.shape[-1]].copy(), light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
                 RangePop()
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
@@ -475,31 +485,34 @@ def run_simulation(input_filename,
                 light_sim.calc_light_detector_response[BPG, TPB](
                     light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                     light_response, light_response_true_track_id, light_response_true_photons)
-                light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise))
+                light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()
 
                 RangePush("sim_light_triggers")
-                trigger_idx, op_channel_idx = light_sim.get_triggers(light_response)
+                light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
+                light_threshold = light_threshold.ravel()[op_channel.get()].copy()
+                light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
+                trigger_idx, trigger_op_channel_idx = light_sim.get_triggers(light_response, light_threshold, op_channel)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
-                       ceil(op_channel_idx.shape[1] / TPB[1]),
+                       ceil(trigger_op_channel_idx.shape[1] / TPB[1]),
                        ceil(digit_samples / TPB[2]))
 
                 light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                    BPG, TPB, light_response, light_response_true_track_id, light_response_true_photons, trigger_idx, op_channel_idx,
+                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
                     digit_samples, light_noise)
                 RangePop()
 
                 light_event_id_list.append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 light_start_time_list.append(cp.full(trigger_idx.shape[0], light_t_start))
                 light_trigger_idx_list.append(trigger_idx)
-                light_op_channel_idx_list.append(op_channel_idx)
+                light_op_channel_idx_list.append(trigger_op_channel_idx)
                 light_waveforms_list.append(light_digit_signal)
                 light_waveforms_true_track_id_list.append(light_digit_signal_true_track_id)
                 light_waveforms_true_photons_list.append(light_digit_signal_true_photons)
 
-        if event_id_list and adc_tot_list and (len(event_id_list) > EVENT_BATCH_SIZE or ievd == tot_evids.shape[0]-1):
+        if event_id_list and adc_tot_list and (len(event_id_list) > WRITE_BATCH_SIZE or ievd == tot_evids.shape[0]-1):
             event_id_list_batch = np.concatenate(event_id_list, axis=0)
             adc_tot_list_batch = np.concatenate(adc_tot_list, axis=0)
             adc_tot_ticks_list_batch = np.concatenate(adc_tot_ticks_list, axis=0)

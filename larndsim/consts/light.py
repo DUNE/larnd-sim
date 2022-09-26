@@ -70,6 +70,7 @@ def set_light_properties(detprop_file):
         detprop_file (str): detector properties YAML filename
 
     """
+    global MAX_MC_TRUTH_IDS
     global LUT_VOX_DIV
     global N_OP_CHANNEL
     global LIGHT_SIMULATED
@@ -103,6 +104,8 @@ def set_light_properties(detprop_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
+        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',0)
+        
         LUT_VOX_DIV = np.array(detprop['lut_vox_div'])
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])

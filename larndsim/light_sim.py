@@ -16,7 +16,7 @@ import h5py
 from .consts import light
 from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
-from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS
+from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
 from .consts import units as units
 
 from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES
@@ -39,6 +39,21 @@ def get_nticks(light_incidence):
         end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
         return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
     return int((LIGHT_WINDOW[1] + LIGHT_WINDOW[0])/LIGHT_TICK_SIZE), 0
+
+def get_active_op_channel(light_incidence):
+    """
+    Returns an array of optical channels that need to be simulated
+
+    Args:
+        light_incidence(array): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
+
+    Returns:
+        array: shape `(ndet_active,)` op detector index of each active channel (`int`)
+    """
+    mask = light_incidence['n_photons_det'] > 0
+    if np.any(mask):
+        return cp.array(np.where(np.any(mask, axis=0))[0], dtype='i4')
+    return cp.empty((0,), dtype='i4')
     
 @cuda.jit
 def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
@@ -368,12 +383,14 @@ def gen_light_detector_noise(shape, light_det_noise):
     return noise[:,:shape[1]]
 
 
-def get_triggers(signal):
+def get_triggers(signal, group_threshold, op_channel_idx):
     """
     Identifies each simulated ticks that would initiate a trigger taking into account the ADC digitization window
     
     Args:
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
+        group_threshold(array): shape `(ngrp,)`, threshold on group sum (requires `ndet/ngrp == OP_CHANNEL_PER_TRIG`)
+        op_channel_idx(array): shape `(ndet,)`, optical channel index for each signal
         
     Returns:
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
@@ -391,46 +408,52 @@ def get_triggers(signal):
     signal_sum = signal_sum.reshape(-1, 1, shape[-1] + padding)[...,:(-padding if padding > 0 else shape[-1])]
     
     # apply trigger threshold
-    sample_above_thresh = cp.broadcast_to(signal_sum < cp.array(LIGHT_TRIG_THRESHOLD)[:,cp.newaxis,cp.newaxis], (shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, shape[-1]))
+    sample_above_thresh = cp.broadcast_to(signal_sum < group_threshold[:,cp.newaxis,cp.newaxis], (shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, shape[-1]))
     # cast back into the original signal array
     sample_above_thresh = sample_above_thresh.reshape(signal.shape)
 
     # calculate the minimum number of ticks between two triggers on the same module
     digit_ticks = ceil((LIGHT_TRIG_WINDOW[1] + LIGHT_TRIG_WINDOW[0])/LIGHT_TICK_SIZE)
 
-    trigger_idx = []
-    op_channel_idx = []
+    tpc_ids = np.unique(OP_CHANNEL_TO_TPC[op_channel_idx.get()])
+    mod_ids = np.unique([TPC_TO_MODULE[tpc_id] for tpc_id in tpc_ids])
+    
+    trigger_idx_list = []
+    op_channel_idx_list = []
     # treat each module independently
-    for mod_id, tpc_ids in MODULE_TO_TPCS.items():
+    for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
         # get active channels for the module
         op_channels = TPC_TO_OP_CHANNEL[tpc_ids].ravel()
-        module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
+        op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
+        #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
+        module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
 
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
             next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
             # keep track of trigger time
-            trigger_idx.append(next_idx)
-            op_channel_idx.append(op_channels)
+            trigger_idx_list.append(next_idx)
+            op_channel_idx_list.append(op_channels)
             # ignore samples during digitization window
             module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
             last_trigger = next_idx + digit_ticks
 
-    if len(trigger_idx):
-        return cp.array(trigger_idx), cp.array(op_channel_idx)
+    if len(trigger_idx_list):
+        return cp.array(trigger_idx_list), cp.array(op_channel_idx_list)
     return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int)
 
 
 @cuda.jit
-def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, signal_true_photons, digit_signal, digit_signal_true_track_id, digit_signal_true_photons):
+def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_channel_idx, signal_true_track_id, signal_true_photons, digit_signal, digit_signal_true_track_id, digit_signal_true_photons):
     """
     Interpolate signal to the appropriate sampling frequency
     
     Args:
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
+        signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
         trigger_idx(array): shape `(ntrigs,)`, tick index for each trigger
-        op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
+        trigger_op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
         digit_signal(array): output array, shape `(ntrigs, ndet_module, nsamples)`, digitized signal
     """
     itrig,idet_module,isample = cuda.grid(3)
@@ -439,8 +462,14 @@ def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, s
         if idet_module < digit_signal.shape[1]:
             if isample < digit_signal.shape[2]:
                 sample_tick = isample * LIGHT_DIGIT_SAMPLE_SPACING / LIGHT_TICK_SIZE - LIGHT_TRIG_WINDOW[0] / LIGHT_TICK_SIZE + trigger_idx[itrig]
-                idet = op_channel_idx[itrig, idet_module]
-                digit_signal[itrig,idet_module,isample] = interp(sample_tick, signal[idet], 0, 0)
+                idet = trigger_op_channel_idx[itrig, idet_module]
+                idet_signal = 0
+                for idet_signal in range(signal.shape[0]):
+                    if idet == signal_op_channel_idx[idet_signal]:
+                        break
+                if idet_signal == signal.shape[0]:
+                    return
+                digit_signal[itrig,idet_module,isample] = interp(sample_tick, signal[idet_signal], 0, 0)
 
                 itick0 = int(floor(sample_tick))
                 itick1 = int(ceil(sample_tick))
@@ -450,14 +479,14 @@ def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, s
                 for jtrue in range(signal_true_track_id.shape[-1]):
                     if itrue >= digit_signal_true_track_id.shape[-1]:
                         break
-                    if signal_true_track_id[idet,itick0,jtrue] == -1:
+                    if signal_true_track_id[idet_signal,itick0,jtrue] == -1:
                         break
                             
                     photons0, photons1 = 0, 0
 
                     # if matches the current sample track or we have empty truth slot, add truth info
-                    if signal_true_track_id[idet,itick0,jtrue] == digit_signal_true_track_id[itrig,idet_module,isample,itrue] or digit_signal_true_track_id[itrig,idet_module,isample,itrue] == -1:
-                        digit_signal_true_track_id[itrig,idet_module,isample,itrue] = signal_true_track_id[idet,itick0,jtrue]
+                    if signal_true_track_id[idet_signal,itick0,jtrue] == digit_signal_true_track_id[itrig,idet_module,isample,itrue] or digit_signal_true_track_id[itrig,idet_module,isample,itrue] == -1:
+                        digit_signal_true_track_id[itrig,idet_module,isample,itrue] = signal_true_track_id[idet_signal,itick0,jtrue]
                         itrue += 1
                         # interpolate true photons
                         photons0 = signal_true_photons[idet,itick0,jtrue]
@@ -467,12 +496,12 @@ def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, s
 
                         # loop over next tick
                         # first try same position (for speed-up)
-                        if signal_true_track_id[idet,itick0,jtrue] == signal_true_track_id[idet,itick1,jtrue]:
-                            photons1 = signal_true_photons[idet,itick1,jtrue]
+                        if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,jtrue]:
+                            photons1 = signal_true_photons[idet_signal,itick1,jtrue]
                         else:
                             for ktrue in range(signal_true_track_id.shape[-1]):
-                                if signal_true_track_id[idet,itick0,jtrue] == signal_true_track_id[idet,itick1,ktrue]:
-                                    photons1 = signal_true_photons[idet,itick1,ktrue]
+                                if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,ktrue]:
+                                    photons1 = signal_true_photons[idet_signal,itick1,ktrue]
                                     break
 
                     # if a valid truth entry was found, do interpolation
@@ -480,7 +509,7 @@ def digitize_signal(signal, trigger_idx, op_channel_idx, signal_true_track_id, s
                         digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
 
 
-def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
+def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
     """
     Generates digitized waveforms at specified simulation tick indices
     
@@ -488,6 +517,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
         bpg(tuple): blocks per grid used to generate digitized waveforms, `len(bpg) == 3`, `prod(bpg) * prod(tpb) >= digit_samples.size`
         tpb(tuple): threads per grid used to generate digitized waveforms, `len(bpg) == 3`, `bpg[i] * tpb[i] >= digit_samples.shape[i]`
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
+        signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
         signal_true_track_id(array): shape `(ndet, nticks, ntruth)`, true segments associated with each tick
         signal_true_photons(array): shape `(ndet, nticks, ntruth)`, true photons associated with each tick from each track
         trigger_idx(array): shape `(ntrigs,)`, tick index for each trigger to digitize
@@ -511,7 +541,7 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx.min() - pre_digit_ticks < 0:
         pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx.min()))
-        signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise), signal], axis=-1)
+        signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]), signal], axis=-1)
         signal_true_track_id = cp.concatenate([cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype), signal_true_track_id], axis=-2)
         signal_true_photons = cp.concatenate([cp.zeros(pad_shape + signal_true_photons.shape[-1:], signal_true_photons.dtype), signal_true_photons], axis=-2)
         padded_trigger_idx += pad_shape[1]
@@ -521,12 +551,27 @@ def sim_triggers(bpg, tpb, signal, signal_true_track_id, signal_true_photons, tr
     if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
         pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))
 
-        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise)], axis=-1)
+        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
-        
 
-    digitize_signal[bpg,tpb](signal, padded_trigger_idx, op_channel_idx, signal_true_track_id, signal_true_photons,
+    # add noise for any channels that had no signal
+    if cp.any(~cp.isin(op_channel_idx, signal_op_channel_idx)):
+        missing = cp.unique(op_channel_idx[~cp.isin(op_channel_idx, signal_op_channel_idx)])
+        pad_shape = (missing.shape[0], signal.shape[-1])
+        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing])], axis=0)
+        signal_op_channel_idx = cp.concatenate([signal_op_channel_idx, missing], axis=0)
+        signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=0)
+        signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=0)
+
+        # sort to keep consistency across events
+        order = cp.argsort(signal_op_channel_idx, axis=-1)
+        signal = cp.take_along_axis(signal, order[...,np.newaxis], axis=0)
+        signal_op_channel_idx = cp.take_along_axis(signal_op_channel_idx, order, axis=0)
+        signal_true_track_id = cp.take_along_axis(signal_true_track_id, order[...,np.newaxis,np.newaxis], axis=0)
+        signal_true_photons = cp.take_along_axis(signal_true_photons, order[...,np.newaxis,np.newaxis], axis=0)
+
+    digitize_signal[bpg,tpb](signal, signal_op_channel_idx, padded_trigger_idx, op_channel_idx, signal_true_track_id, signal_true_photons,
         digit_signal, digit_signal_true_track_id, digit_signal_true_photons)
 
     # truncate to correct number of bits
