@@ -74,10 +74,7 @@ class TPCBatcher(TrackSegmentBatcher):
         mask = mask & tpc_mask
         self._simulated = self._simulated | mask
 
-        if np.any(mask):
-            return mask
-        else:
-            return next(self)
+        return mask
 
         
         

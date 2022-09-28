@@ -605,26 +605,26 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
-        trig_data['op_channel'] = op_channel_idx.get()
-        trig_data['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s).get()
-        trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES).get()
+        trig_data['op_channel'] = op_channel_idx
+        trig_data['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
+        trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES)
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
             truth_dtype = np.dtype([('track_ids', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_photons.shape[-1],))])
             truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
-            truth_data['track_ids'] = waveforms_true_track_id.get()
-            truth_data['pe_current'] = waveforms_true_photons.get()
+            truth_data['track_ids'] = waveforms_true_track_id
+            truth_data['pe_current'] = waveforms_true_photons
         
         if 'light_wvfm' not in f:
-            f.create_dataset('light_wvfm', data=waveforms.get(), maxshape=(None,None,None))
+            f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
             f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
             if waveforms_true_track_id.size > 0:
                 f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
         else:
             f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
-            f['light_wvfm'][-waveforms.shape[0]:] = waveforms.get()
-
+            f['light_wvfm'][-waveforms.shape[0]:] = waveforms
+            
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
