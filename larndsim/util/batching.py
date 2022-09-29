@@ -54,21 +54,18 @@ class TPCBatcher(TrackSegmentBatcher):
         for i_tpc in range(self._curr_tpc, min(self._curr_tpc + self.tpc_batch_size, self.tpc_borders.shape[0])):
             tpc_bound = self.tpc_borders[i_tpc]
             tpc_mask = tpc_mask | (
-                # overlap in X
                 ((self.track_seg['x_end'] > tpc_bound[0,0])
-                 | (self.track_seg['x_start'] > tpc_bound[0,0]))
-                & ((self.track_seg['x_end'] < tpc_bound[0,1])
-                   | (self.track_seg['x_start'] < tpc_bound[0,1]))
-                # overlap in Y
-                & ((self.track_seg['y_end'] > tpc_bound[1,0])
-                   | (self.track_seg['y_start'] > tpc_bound[1,0]))
-                & ((self.track_seg['y_end'] < tpc_bound[1,1])
-                   | (self.track_seg['y_start'] < tpc_bound[1,1]))
-                # overlap in Z
-                & ((self.track_seg['z_end'] > tpc_bound[2,0])
-                   | (self.track_seg['z_start'] > tpc_bound[2,0]))
-                & ((self.track_seg['z_end'] < tpc_bound[2,1])
-                   | (self.track_seg['z_start'] < tpc_bound[2,1])))
+                 & (self.track_seg['x_end'] < tpc_bound[0,1])
+                 & (self.track_seg['y_end'] > tpc_bound[1,0])
+                 & (self.track_seg['y_end'] < tpc_bound[1,1])
+                 & (self.track_seg['z_end'] > tpc_bound[2,0])
+                 & (self.track_seg['z_end'] < tpc_bound[2,1]))
+                | ((self.track_seg['x_start'] > tpc_bound[0,0])
+                   & (self.track_seg['x_start'] < tpc_bound[0,1])
+                   & (self.track_seg['y_start'] > tpc_bound[1,0])
+                   & (self.track_seg['y_start'] < tpc_bound[1,1])
+                   & (self.track_seg['z_start'] > tpc_bound[2,0])
+                   & (self.track_seg['z_start'] < tpc_bound[2,1])))
 
         self._curr_tpc += self.tpc_batch_size
         mask = mask & tpc_mask
