@@ -90,7 +90,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="larndsim.html">larndsim package</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Command-line utilities</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#module-cli.simulate_pixels"><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#simulate-pixels-py"><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-cli.dumpTree"><code class="code docutils literal notranslate"><span class="pre">dumpTree.py</span></code></a></li>
 </ul>
 </li>
@@ -164,63 +164,8 @@
             
   <div class="section" id="command-line-utilities">
 <h1>Command-line utilities<a class="headerlink" href="#command-line-utilities" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="module-cli.simulate_pixels">
-<span id="simulate-pixels-py"></span><h2><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code><a class="headerlink" href="#module-cli.simulate_pixels" title="Permalink to this headline">¶</a></h2>
-<p>Command-line interface to larnd-sim module.</p>
-<dl class="function">
-<dt id="cli.simulate_pixels.maybe_create_rng_states">
-<code class="sig-prename descclassname">cli.simulate_pixels.</code><code class="sig-name descname">maybe_create_rng_states</code><span class="sig-paren">(</span><em class="sig-param">n</em>, <em class="sig-param">seed=0</em>, <em class="sig-param">rng_states=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.simulate_pixels.maybe_create_rng_states" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create or extend random states for CUDA kernel</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="cli.simulate_pixels.run_simulation">
-<code class="sig-prename descclassname">cli.simulate_pixels.</code><code class="sig-name descname">run_simulation</code><span class="sig-paren">(</span><em class="sig-param">input_filename</em>, <em class="sig-param">pixel_layout</em>, <em class="sig-param">detector_properties</em>, <em class="sig-param">output_filename</em>, <em class="sig-param">response_file='../larndsim/bin/response_44.npy'</em>, <em class="sig-param">light_lut_filename='../larndsim/bin/lightLUT.npz'</em>, <em class="sig-param">light_det_noise_filename='../larndsim/bin/light_noise-module0.npy'</em>, <em class="sig-param">bad_channels=None</em>, <em class="sig-param">n_tracks=None</em>, <em class="sig-param">pixel_thresholds_file=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.simulate_pixels.run_simulation" title="Permalink to this definition">¶</a></dt>
-<dd><p>Command-line interface to run the simulation of a pixelated LArTPC</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_filename</strong> (<em>str</em>) – path of the edep-sim input file</p></li>
-<li><p><strong>pixel_layout</strong> (<em>str</em>) – path of the YAML file containing the pixel
-layout and connection details.</p></li>
-<li><p><strong>detector_properties</strong> (<em>str</em>) – path of the YAML file containing
-the detector properties</p></li>
-<li><p><strong>output_filename</strong> (<em>str</em>) – path of the HDF5 output file. If not specified
-the output is added to the input file.</p></li>
-<li><p><strong>response_file</strong> (<em>str, optional</em>) – path of the Numpy array containing the pre-calculated
-field responses. Defaults to ../larndsim/bin/response_44.npy.</p></li>
-<li><p><strong>light_lut_file</strong> (<em>str, optional</em>) – path of the Numpy array containing the light
-look-up table. Defaults to ../larndsim/bin/lightLUT.npy.</p></li>
-<li><p><strong>bad_channels</strong> (<em>str, optional</em>) – path of the YAML file containing the channels to be
-disabled. Defaults to None</p></li>
-<li><p><strong>n_tracks</strong> (<em>int, optional</em>) – number of tracks to be simulated. Defaults to None
-(all tracks).</p></li>
-<li><p><strong>pixel_thresholds_file</strong> (<em>str</em>) – path to npz file containing pixel thresholds. Defaults
-to None.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="function">
-<dt id="cli.simulate_pixels.swap_coordinates">
-<code class="sig-prename descclassname">cli.simulate_pixels.</code><code class="sig-name descname">swap_coordinates</code><span class="sig-paren">(</span><em class="sig-param">tracks</em><span class="sig-paren">)</span><a class="headerlink" href="#cli.simulate_pixels.swap_coordinates" title="Permalink to this definition">¶</a></dt>
-<dd><p>Swap x and z coordinates in tracks.
-This is because the convention in larnd-sim is different
-from the convention in edep-sim. FIXME.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – tracks array.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>tracks with swapped axes.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a></p>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="simulate-pixels-py">
+<h2><code class="code docutils literal notranslate"><span class="pre">simulate_pixels.py</span></code><a class="headerlink" href="#simulate-pixels-py" title="Permalink to this headline">¶</a></h2>
 </div>
 <div class="section" id="module-cli.dumpTree">
 <span id="dumptree-py"></span><h2><code class="code docutils literal notranslate"><span class="pre">dumpTree.py</span></code><a class="headerlink" href="#module-cli.dumpTree" title="Permalink to this headline">¶</a></h2>

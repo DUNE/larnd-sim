@@ -725,14 +725,15 @@ a two decay component scintillation model.</p>
 
 <dl class="function">
 <dt id="larndsim.light_sim.digitize_signal">
-<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">digitize_signal</code><span class="sig-paren">(</span><em class="sig-param">signal</em>, <em class="sig-param">trigger_idx</em>, <em class="sig-param">op_channel_idx</em>, <em class="sig-param">signal_true_track_id</em>, <em class="sig-param">signal_true_photons</em>, <em class="sig-param">digit_signal</em>, <em class="sig-param">digit_signal_true_track_id</em>, <em class="sig-param">digit_signal_true_photons</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.digitize_signal" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">digitize_signal</code><span class="sig-paren">(</span><em class="sig-param">signal</em>, <em class="sig-param">signal_op_channel_idx</em>, <em class="sig-param">trigger_idx</em>, <em class="sig-param">trigger_op_channel_idx</em>, <em class="sig-param">signal_true_track_id</em>, <em class="sig-param">signal_true_photons</em>, <em class="sig-param">digit_signal</em>, <em class="sig-param">digit_signal_true_track_id</em>, <em class="sig-param">digit_signal_true_photons</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.digitize_signal" title="Permalink to this definition">¶</a></dt>
 <dd><p>Interpolate signal to the appropriate sampling frequency</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>signal</strong> (<em>array</em>) – shape <cite>(ndet, nticks)</cite>, simulated signal on each channel</p></li>
+<li><p><strong>signal_op_channel_idx</strong> (<em>array</em>) – shape <cite>(ndet,)</cite>, optical channel index for each simulated signal</p></li>
 <li><p><strong>trigger_idx</strong> (<em>array</em>) – shape <cite>(ntrigs,)</cite>, tick index for each trigger</p></li>
-<li><p><strong>op_channel_idx</strong> (<em>array</em>) – shape <cite>(ntrigs, ndet_module)</cite>, optical channel index for each trigger</p></li>
+<li><p><strong>trigger_op_channel_idx</strong> (<em>array</em>) – shape <cite>(ntrigs, ndet_module)</cite>, optical channel index for each trigger</p></li>
 <li><p><strong>digit_signal</strong> (<em>array</em>) – output array, shape <cite>(ntrigs, ndet_module, nsamples)</cite>, digitized signal</p></li>
 </ul>
 </dd>
@@ -781,6 +782,23 @@ a two decay component scintillation model.</p>
 </dd></dl>
 
 <dl class="function">
+<dt id="larndsim.light_sim.get_active_op_channel">
+<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">get_active_op_channel</code><span class="sig-paren">(</span><em class="sig-param">light_incidence</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.get_active_op_channel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array of optical channels that need to be simulated</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>light_incidence</strong> (<em>array</em>) – shape <cite>(ntracks, ndet)</cite>, containing first hit time and number of photons on each detector</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>shape <cite>(ndet_active,)</cite> op detector index of each active channel (<cite>int</cite>)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="larndsim.light_sim.get_nticks">
 <code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">get_nticks</code><span class="sig-paren">(</span><em class="sig-param">light_incidence</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.get_nticks" title="Permalink to this definition">¶</a></dt>
 <dd><p>Calculates the number of time ticks needed to simulate light signals of the
@@ -800,11 +818,15 @@ event (plus the desired pre- and post-intervals)</p>
 
 <dl class="function">
 <dt id="larndsim.light_sim.get_triggers">
-<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">get_triggers</code><span class="sig-paren">(</span><em class="sig-param">signal</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.get_triggers" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">get_triggers</code><span class="sig-paren">(</span><em class="sig-param">signal</em>, <em class="sig-param">group_threshold</em>, <em class="sig-param">op_channel_idx</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.get_triggers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Identifies each simulated ticks that would initiate a trigger taking into account the ADC digitization window</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>signal</strong> (<em>array</em>) – shape <cite>(ndet, nticks)</cite>, simulated signal on each channel</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>signal</strong> (<em>array</em>) – shape <cite>(ndet, nticks)</cite>, simulated signal on each channel</p></li>
+<li><p><strong>group_threshold</strong> (<em>array</em>) – shape <cite>(ngrp,)</cite>, threshold on group sum (requires <cite>ndet/ngrp == OP_CHANNEL_PER_TRIG</cite>)</p></li>
+<li><p><strong>op_channel_idx</strong> (<em>array</em>) – shape <cite>(ndet,)</cite>, optical channel index for each signal</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>array of tick indices at each trigger (shape <cite>(ntrigs,)</cite>) and array of op channel index (shape <cite>(ntrigs, ndet_module)</cite>)</p>
@@ -858,7 +880,7 @@ during time interval <cite>time_tick</cite> to <cite>time_tick + 1</cite></p>
 
 <dl class="function">
 <dt id="larndsim.light_sim.sim_triggers">
-<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">sim_triggers</code><span class="sig-paren">(</span><em class="sig-param">bpg</em>, <em class="sig-param">tpb</em>, <em class="sig-param">signal</em>, <em class="sig-param">signal_true_track_id</em>, <em class="sig-param">signal_true_photons</em>, <em class="sig-param">trigger_idx</em>, <em class="sig-param">op_channel_idx</em>, <em class="sig-param">digit_samples</em>, <em class="sig-param">light_det_noise</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.sim_triggers" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">sim_triggers</code><span class="sig-paren">(</span><em class="sig-param">bpg</em>, <em class="sig-param">tpb</em>, <em class="sig-param">signal</em>, <em class="sig-param">signal_op_channel_idx</em>, <em class="sig-param">signal_true_track_id</em>, <em class="sig-param">signal_true_photons</em>, <em class="sig-param">trigger_idx</em>, <em class="sig-param">op_channel_idx</em>, <em class="sig-param">digit_samples</em>, <em class="sig-param">light_det_noise</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.sim_triggers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generates digitized waveforms at specified simulation tick indices</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -866,6 +888,7 @@ during time interval <cite>time_tick</cite> to <cite>time_tick + 1</cite></p>
 <li><p><strong>bpg</strong> (<em>tuple</em>) – blocks per grid used to generate digitized waveforms, <cite>len(bpg) == 3</cite>, <cite>prod(bpg) * prod(tpb) &gt;= digit_samples.size</cite></p></li>
 <li><p><strong>tpb</strong> (<em>tuple</em>) – threads per grid used to generate digitized waveforms, <cite>len(bpg) == 3</cite>, <cite>bpg[i] * tpb[i] &gt;= digit_samples.shape[i]</cite></p></li>
 <li><p><strong>signal</strong> (<em>array</em>) – shape <cite>(ndet, nticks)</cite>, simulated signal on each channel</p></li>
+<li><p><strong>signal_op_channel_idx</strong> (<em>array</em>) – shape <cite>(ndet,)</cite>, optical channel index for each simulated signal</p></li>
 <li><p><strong>signal_true_track_id</strong> (<em>array</em>) – shape <cite>(ndet, nticks, ntruth)</cite>, true segments associated with each tick</p></li>
 <li><p><strong>signal_true_photons</strong> (<em>array</em>) – shape <cite>(ndet, nticks, ntruth)</cite>, true photons associated with each tick from each track</p></li>
 <li><p><strong>trigger_idx</strong> (<em>array</em>) – shape <cite>(ntrigs,)</cite>, tick index for each trigger to digitize</p></li>
@@ -928,7 +951,7 @@ during time interval <cite>time_tick</cite> to <cite>time_tick + 1</cite></p>
 <dt id="larndsim.light_sim.xoroshiro128p_poisson_int32">
 <code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">xoroshiro128p_poisson_int32</code><a class="headerlink" href="#larndsim.light_sim.xoroshiro128p_poisson_int32" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return poisson distributed int32 and advance <cite>states[index]</cite>. For efficiency,
-if <cite>mean &gt; 100</cite>, returns a gaussian distributed int32 with <cite>mean == mean</cite>
+if <cite>mean &gt; 30</cite>, returns a gaussian distributed int32 with <cite>mean == mean</cite>
 and <cite>std = sqrt(mean)</cite> truncated at 0 (approximately equivalent to a poisson-
 distributed number)</p>
 <p>[DOI:10.1007/978-1-4613-8643-8_10]</p>
@@ -1281,8 +1304,8 @@ filename</p></li>
 
 <dl class="data">
 <dt id="larndsim.consts.light.LIGHT_TRIG_THRESHOLD">
-<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TRIG_THRESHOLD</code><em class="property"> = -2000</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TRIG_THRESHOLD" title="Permalink to this definition">¶</a></dt>
-<dd><p>Total detector light threshold [ADC]</p>
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_TRIG_THRESHOLD</code><em class="property"> = array([], dtype=float64)</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_TRIG_THRESHOLD" title="Permalink to this definition">¶</a></dt>
+<dd><p>Total detector light threshold [ADC] (one value for every OP_CHANNEL_PER_TRIG detector sum)</p>
 </dd></dl>
 
 <dl class="data">
