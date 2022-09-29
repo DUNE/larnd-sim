@@ -50,9 +50,9 @@ class TPCBatcher(TrackSegmentBatcher):
         mask = mask & (self.track_seg['eventID'] == self._events[self._curr_event])
 
         # select only tracks in current TPC(s)
-        tpc_bound = self.tpc_borders[self._curr_tpc]
         tpc_mask = np.zeros_like(mask)
         for i_tpc in range(self._curr_tpc, min(self._curr_tpc + self.tpc_batch_size, self.tpc_borders.shape[0])):
+            tpc_bound = self.tpc_borders[i_tpc]
             tpc_mask = tpc_mask | (
                 # overlap in X
                 ((self.track_seg['x_end'] > tpc_bound[0,0])
