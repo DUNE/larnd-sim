@@ -32,7 +32,7 @@ Light data
 
 For the light simulation output, ``larnd-sim`` uses an analogous data structure
 to the ADC64 format generated the the DUNE ND-LAr light system readout
-electronics. The datasets are summarized below:
+electronics. The datasets are summarized below
 
  - ``light_trig``, shape ``(n_triggers,)``: meta data associated with each light system self-trigger
 
