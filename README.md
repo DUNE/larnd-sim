@@ -35,6 +35,10 @@ which should take care of installing the required dependencies. `cupy` installat
 >>> is_available()
 ```
 
+If you already have ``cupy`` installed, you can force skip the automatic
+``cupy`` installation by setting the ``SKIP_CUPY_INSTALL`` environment variable
+prior to running ``pip``.
+
 ## How to run a simulation
 
 ### Input dataset
