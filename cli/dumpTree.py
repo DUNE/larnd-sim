@@ -24,7 +24,7 @@ segments_dtype = np.dtype([("eventID", "u4"), ("segment_id", "u4"), ("z_end", "f
                            ("pixel_plane", "i4"), ("t_end", "f4"),
                            ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
-                           ("n_photons","f4")])
+                           ("n_photons","f4")], align=True)
 
 trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
                                ("parentID", "i4"),
@@ -35,9 +35,9 @@ trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
                                ("pdgId", "i4"), ("start_process", "u4"),
                                ("start_subprocess", "u4"),
                                ("end_process", "u4"),
-                               ("end_subprocess", "u4")])
+                               ("end_subprocess", "u4")], align=True)
 
-vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")])
+vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")], align=True)
 
 # Convert from EDepSim default units (mm, ns)
 edep2cm = 0.1   # convert to cm

@@ -157,8 +157,17 @@ def run_simulation(input_filename,
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
-        track_ids = np.arange(tracks.shape[0]).astype('u4')
-        
+        if 'segment_id' in tracks.dtype.names:
+            track_ids = tracks['segment_id']
+        else:
+            dtype = tracks.dtype.descr
+            dtype = [('segment_id','u4')] + dtype
+            new_tracks = np.empty(tracks.shape, dtype=np.dtype(dtype, align=True))
+            new_tracks['segment_id'] = np.arange(tracks.shape[0], dtype='u4')
+            for field in dtype[1:]:
+                new_tracks[field[0]] = tracks[field[0]]
+            tracks = new_tracks
+            track_ids = tracks['segment_id']
         try:
             trajectories = np.array(f['trajectories'])
             input_has_trajectories = True
@@ -259,6 +268,7 @@ def run_simulation(input_filename,
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
+    # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         output_file.create_dataset("tracks", data=tracks)
         if light.LIGHT_SIMULATED:
