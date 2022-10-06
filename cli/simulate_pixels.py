@@ -139,7 +139,7 @@ def run_simulation(input_filename,
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
     # maybe can be implemented in a better way?
-    from larndsim import (quenching, drifting, detsim, pixels_from_track, fee,
+    from larndsim import (active_volume, quenching, drifting, detsim, pixels_from_track, fee,
         lightLUT, light_sim)
     RangePop()
 
@@ -152,9 +152,13 @@ def run_simulation(input_filename,
     RangePop()
 
     RangePush("load_hd5_file")
+    print("Loading track segments..." , end="")
+    start_load = time()
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
+        track_ids = np.arange(tracks.shape[0]).astype('u4')
+        
         try:
             trajectories = np.array(f['trajectories'])
             input_has_trajectories = True
@@ -168,28 +172,43 @@ def run_simulation(input_filename,
             print("Input file does not have true vertices info")
             input_has_vertices = False
 
-    RangePop()
-
-    # Makes an empty array to store data from lightlut
-    if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
-                                 dtype=[('n_photons_det','f4'),('t0_det','f4')])
-        track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
-
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
+    
+    RangePop()
+    end_load = time()
+    print(f" {end_load-start_load:.2f} s")
 
+    response = cp.load(response_file)
+
+    TPB = 256
+    BPG = ceil(tracks.shape[0] / TPB)
+
+    print("******************\nRUNNING SIMULATION\n******************")
+    # Reduce dataset if not all tracks to be simulated
     if n_tracks:
         tracks = tracks[:n_tracks]
-        if light.LIGHT_SIMULATED:
-            light_sim_dat = light_sim_dat[:n_tracks]
-            track_light_voxel = track_light_voxel[:n_tracks]
+
+    # Sub-select only segments in active volumes
+    print("Skipping non-active volumes..." , end="")
+    start_mask = time()
+    active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
+    tracks = tracks[active_tracks]
+    track_ids = track_ids[active_tracks]
+    end_mask = time()
+    print(f" {end_mask-start_mask:.2f} s")
+
+    # Set up light simulation data objects
+    if light.LIGHT_SIMULATED:
+        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
+                                 dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+        light_sim_dat['segment_id'] = track_ids[..., np.newaxis]
+        track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-
 
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
@@ -209,13 +228,7 @@ def run_simulation(input_filename,
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
     tracks = swap_coordinates(tracks)
-
-    response = cp.load(response_file)
-
-    TPB = 256
-    BPG = ceil(tracks.shape[0] / TPB)
-
-    print("******************\nRUNNING SIMULATION\n******************")
+    
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons..." , end="")
@@ -260,7 +273,9 @@ def run_simulation(input_filename,
     _, _, start_idx = np.intersect1d(tot_evids, tracks['eventID'], return_indices=True)
     _, _, rev_idx = np.intersect1d(tot_evids, tracks['eventID'][::-1], return_indices=True)
     end_idx = len(tracks['eventID']) - 1 - rev_idx
-    track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
+
+    # copy to device
+    track_ids = cp.asarray(track_ids)
 
     # create a lookup table for event timestamps
     event_times = fee.gen_event_times(tot_evids.max()+1, 0)
