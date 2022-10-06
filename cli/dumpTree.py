@@ -13,7 +13,7 @@ from tqdm import tqdm
 from ROOT import TG4Event, TFile
 
 # Output array datatypes
-segments_dtype = np.dtype([("eventID", "u4"), ("z_end", "f4"),
+segments_dtype = np.dtype([("eventID", "u4"), ("segment_id", "u4"), ("z_end", "f4"),
                            ("trackID", "u4"), ("tran_diff", "f4"),
                            ("z_start", "f4"), ("x_end", "f4"),
                            ("y_end", "f4"), ("n_electrons", "u4"),
@@ -24,7 +24,7 @@ segments_dtype = np.dtype([("eventID", "u4"), ("z_end", "f4"),
                            ("pixel_plane", "i4"), ("t_end", "f4"),
                            ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
-                           ("n_photons","f4")])
+                           ("n_photons","f4")], align=True)
 
 trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
                                ("parentID", "i4"),
@@ -35,9 +35,9 @@ trajectories_dtype = np.dtype([("eventID", "u4"), ("trackID", "u4"),
                                ("pdgId", "i4"), ("start_process", "u4"),
                                ("start_subprocess", "u4"),
                                ("end_process", "u4"),
-                               ("end_subprocess", "u4")])
+                               ("end_subprocess", "u4")], align=True)
 
-vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")])
+vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_vert","f4")], align=True)
 
 # Convert from EDepSim default units (mm, ns)
 edep2cm = 0.1   # convert to cm
@@ -180,6 +180,7 @@ def dump(input_file, output_file):
     trajectories_list = list()
     vertices_list = list()
 
+    segment_id = 0
     for jentry in tqdm(range(entries)):
         #print(jentry)
         nb = inputTree.GetEntry(jentry)
@@ -242,6 +243,8 @@ def dump(input_file, output_file):
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
                 segment[iHit]["eventID"] = event.EventId
+                segment[iHit]["segment_id"] = segment_id
+                segment_id += 1
                 segment[iHit]["trackID"] = trajectories[hitSegment.Contrib[0]]["trackID"]
                 segment[iHit]["x_start"] = hitSegment.GetStart().X() * edep2cm
                 segment[iHit]["y_start"] = hitSegment.GetStart().Y() * edep2cm
