@@ -2,7 +2,7 @@
 
 VER = "0.3.1"
 
-reqs = ["numpy", "pytest", "numba==0.52", "larpix-control", "larpix-geometry", "tqdm", "fire"]
+reqs = ["numpy", "pytest", "numba>=0.52", "larpix-control", "larpix-geometry", "tqdm", "fire"]
 
 try:
     import cupy
