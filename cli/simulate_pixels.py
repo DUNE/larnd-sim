@@ -439,7 +439,7 @@ def run_simulation(input_filename,
             signals = cp.zeros((selected_tracks.shape[0],
                                 neighboring_pixels.shape[1],
                                 cp.asnumpy(max_length)[0]), dtype=np.float32)
-            TPB = (8,8,8)
+            TPB = (1,1,64)
             BPG_X = ceil(signals.shape[0] / TPB[0])
             BPG_Y = ceil(signals.shape[1] / TPB[1])
             BPG_Z = ceil(signals.shape[2] / TPB[2])
