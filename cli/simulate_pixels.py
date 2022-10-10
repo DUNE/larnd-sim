@@ -199,6 +199,10 @@ def run_simulation(input_filename,
     if n_tracks:
         tracks = tracks[:n_tracks]
 
+    # Here we swap the x and z coordinates of the tracks
+    # because of the different convention in larnd-sim wrt edep-sim
+    tracks = swap_coordinates(tracks)
+
     # Sub-select only segments in active volumes
     print("Skipping non-active volumes..." , end="")
     start_mask = time()
@@ -218,7 +222,7 @@ def run_simulation(input_filename,
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-
+        
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
         # in the input files, it is called 't'
@@ -234,10 +238,6 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
-    # Here we swap the x and z coordinates of the tracks
-    # because of the different convention in larnd-sim wrt edep-sim
-    tracks = swap_coordinates(tracks)
-    
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons..." , end="")
