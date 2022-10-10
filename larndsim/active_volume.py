@@ -14,7 +14,7 @@ def select_active_volume(track_seg, tpc_borders):
     """
     xp = cp.get_array_module(track_seg)
     tpc_mask = xp.zeros(track_seg.shape, dtype=bool)
-    tpb_borders = xp.sort(tpc_borders, axis=-1)
+    tpc_borders = xp.sort(tpc_borders, axis=-1)
     for i_tpc in range(tpc_borders.shape[0]):
         tpc_bound = tpc_borders[i_tpc]
         tpc_mask = tpc_mask | (
