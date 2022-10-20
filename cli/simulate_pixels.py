@@ -158,7 +158,7 @@ def run_simulation(input_filename,
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
         if 'segment_id' in tracks.dtype.names:
-            track_ids = tracks['segment_id']
+            segment_ids = tracks['segment_id']
         else:
             dtype = tracks.dtype.descr
             dtype = [('segment_id','u4')] + dtype
@@ -167,7 +167,7 @@ def run_simulation(input_filename,
             for field in dtype[1:]:
                 new_tracks[field[0]] = tracks[field[0]]
             tracks = new_tracks
-            track_ids = tracks['segment_id']
+            segment_ids = tracks['segment_id']
         try:
             trajectories = np.array(f['trajectories'])
             input_has_trajectories = True
@@ -208,7 +208,7 @@ def run_simulation(input_filename,
     start_mask = time()
     active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
     tracks = tracks[active_tracks]
-    track_ids = track_ids[active_tracks]
+    segment_ids = segment_ids[active_tracks]
     end_mask = time()
     print(f" {end_mask-start_mask:.2f} s")
 
@@ -216,7 +216,7 @@ def run_simulation(input_filename,
     if light.LIGHT_SIMULATED:
         light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
                                  dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
-        light_sim_dat['segment_id'] = track_ids[..., np.newaxis]
+        light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
         track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
     if 'n_photons' not in tracks.dtype.names:
@@ -285,7 +285,7 @@ def run_simulation(input_filename,
     end_idx = len(tracks['eventID']) - 1 - rev_idx
 
     # copy to device
-    track_ids = cp.asarray(track_ids)
+    track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
     # create a lookup table for event timestamps
     event_times = fee.gen_event_times(tot_evids.max()+1, 0)
