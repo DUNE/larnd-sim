@@ -56,7 +56,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
+def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
     """
     Sums the number of photons observed by each light detector at each time tick
 
@@ -65,7 +65,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut,
         segment_voxel(array): shape `(ntracks, 3)`, LUT voxel for eack edep-sim track
         segment_track_id(array): shape `(ntracks,)`, unique id for each track segment (for MC truth backtracking)
         light_inc(array): shape `(ntracks, ndet)`, number of photons incident on each detector and voxel id
-        lut(array): shape `(nx,ny,nz)`, light look up table
+        op_channel(array): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
+        lut(array): shape `(nx,ny,nz,ndet_tpc)`, light look up table
         start_time(float): start time of light simulation in microseconds
         light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
         light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
@@ -82,8 +83,10 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, lut,
             # find tracks that contribute light to this time tick
             for itrk in range(segments.shape[0]):
                 if light_inc[itrk,idet]['n_photons_det'] > 0:
+                    idet_lut = op_channel[idet] % lut.shape[3]
+                    
                     voxel = segment_voxel[itrk]
-                    time_profile = lut[voxel[0],voxel[1],voxel[2],idet]['time_dist']
+                    time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
                     track_time = segments[itrk]['t0']
                     track_end_time = track_time + time_profile.shape[0] * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
 

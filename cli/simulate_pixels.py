@@ -16,7 +16,7 @@ from cupy.cuda.nvtx import RangePush, RangePop
 import fire
 import h5py
 
-from numba.cuda import device_array
+from numba.cuda import device_array, to_device
 from numba.cuda.random import create_xoroshiro128p_states
 from numba.core.errors import NumbaPerformanceWarning
 
@@ -260,6 +260,8 @@ def run_simulation(input_filename,
         # clip LUT so that no voxel contains 0 visibility
         mask = lut['vis'] > 0
         lut['vis'][~mask] = lut['vis'][mask].min()
+
+        lut = to_device(lut)
         
         light_noise = cp.load(light_det_noise_filename)
         
@@ -540,7 +542,7 @@ def run_simulation(input_filename,
                        ceil(light_sample_inc.shape[1] / TPB[1]))
                 light_sim.sum_light_signals[BPG, TPB](
                     selected_tracks, track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
-                    light_inc[:, op_channel.get()].copy(), lut[..., op_channel.get() % lut.shape[-1]].copy(), light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                    light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
                 RangePop()
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
