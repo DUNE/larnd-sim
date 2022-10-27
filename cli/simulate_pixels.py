@@ -195,7 +195,7 @@ def run_simulation(input_filename,
     response = cp.load(response_file)
 
     TPB = 256
-    BPG = ceil(tracks.shape[0] / TPB)
+    BPG = max(ceil(tracks.shape[0] / TPB),1)
 
     print("******************\nRUNNING SIMULATION\n******************")
     # Reduce dataset if not all tracks to be simulated
@@ -269,7 +269,7 @@ def run_simulation(input_filename,
         light_noise = cp.load(light_det_noise_filename)
         
         TPB = 256
-        BPG = ceil(tracks.shape[0] / TPB)
+        BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
@@ -400,7 +400,7 @@ def run_simulation(input_filename,
             max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
 
             TPB = 128
-            BPG = ceil(selected_tracks.shape[0] / TPB)
+            BPG = max(ceil(selected_tracks.shape[0] / TPB),1)
             max_pixels = np.array([0])
             pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
 
@@ -445,9 +445,9 @@ def run_simulation(input_filename,
                                 neighboring_pixels.shape[1],
                                 cp.asnumpy(max_length)[0]), dtype=np.float32)
             TPB = (1,1,64)
-            BPG_X = ceil(signals.shape[0] / TPB[0])
-            BPG_Y = ceil(signals.shape[1] / TPB[1])
-            BPG_Z = ceil(signals.shape[2] / TPB[2])
+            BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
+            BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
+            BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
             BPG = (BPG_X, BPG_Y, BPG_Z)
             rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=SEED+ievd+itrk, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
@@ -537,8 +537,6 @@ def run_simulation(input_filename,
 
                 #n_light_det = light_inc.shape[-1]
                 n_light_det = op_channel.shape[0]
-                print("n_light_det",n_light_det)
-                print("n_light_ticks",n_light_ticks)
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                 light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
@@ -546,14 +544,6 @@ def run_simulation(input_filename,
                 TPB = (1,64)
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                #print("BPG",BPG)
-                #print("selected_tracks.shape",selected_tracks.shape)
-                #print("selected_track_id",selected_track_id)
-                #print("track_light_voxel.shape",track_light_voxel.shape)
-                #print("light_inc.shape",light_inc.shape)
-                #print("track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE]",track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE])
-                #print("op_channel.get()",op_channel.get())
-                #print("light_t_start",light_t_start)
                 light_sim.sum_light_signals[BPG, TPB](
                     selected_tracks, track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
@@ -593,9 +583,9 @@ def run_simulation(input_filename,
                 trigger_idx, trigger_op_channel_idx = light_sim.get_triggers(light_response, light_threshold, op_channel)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
-                BPG = (ceil(trigger_idx.shape[0] / TPB[0]),
-                       ceil(trigger_op_channel_idx.shape[1] / TPB[1]),
-                       ceil(digit_samples / TPB[2]))
+                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+                       max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
+                       max(ceil(digit_samples / TPB[2]),1))
 
                 light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
                     BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
