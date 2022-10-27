@@ -535,7 +535,6 @@ def run_simulation(input_filename,
                 n_light_ticks = min(n_light_ticks,int(5E4))
                 op_channel = light_sim.get_active_op_channel(light_inc)
 
-                #n_light_det = light_inc.shape[-1]
                 n_light_det = op_channel.shape[0]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                 light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
