@@ -21,7 +21,7 @@ true particle association data within the ``mc_packets_assn`` dataset. This
 dataset is a 2-dimensional array with the same first dimension as the
 ``packets`` dataset and a second dimension corresponding to the edep-sim track
 segment that contributed to the ADC value. The dataset has two fields;
-``track_ids``, the index into the full true edep-sim segment array for each
+``track_ids``, the index into the ``tracks`` dataset for each
 entry; and ``fraction``, the fraction of the ADC's value that can be attributed
 to that edep-sim segment. Because an arbitrary number of track segments can
 contribute to each trigger, this dataset is a "ragged" array with null entries
