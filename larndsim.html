@@ -928,7 +928,7 @@ during time interval <cite>time_tick</cite> to <cite>time_tick + 1</cite></p>
 
 <dl class="function">
 <dt id="larndsim.light_sim.sum_light_signals">
-<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">sum_light_signals</code><span class="sig-paren">(</span><em class="sig-param">segments</em>, <em class="sig-param">segment_voxel</em>, <em class="sig-param">segment_track_id</em>, <em class="sig-param">light_inc</em>, <em class="sig-param">lut</em>, <em class="sig-param">start_time</em>, <em class="sig-param">light_sample_inc</em>, <em class="sig-param">light_sample_inc_true_track_id</em>, <em class="sig-param">light_sample_inc_true_photons</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.sum_light_signals" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.light_sim.</code><code class="sig-name descname">sum_light_signals</code><span class="sig-paren">(</span><em class="sig-param">segments</em>, <em class="sig-param">segment_voxel</em>, <em class="sig-param">segment_track_id</em>, <em class="sig-param">light_inc</em>, <em class="sig-param">op_channel</em>, <em class="sig-param">lut</em>, <em class="sig-param">start_time</em>, <em class="sig-param">light_sample_inc</em>, <em class="sig-param">light_sample_inc_true_track_id</em>, <em class="sig-param">light_sample_inc_true_photons</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.light_sim.sum_light_signals" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sums the number of photons observed by each light detector at each time tick</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -937,7 +937,8 @@ during time interval <cite>time_tick</cite> to <cite>time_tick + 1</cite></p>
 <li><p><strong>segment_voxel</strong> (<em>array</em>) – shape <cite>(ntracks, 3)</cite>, LUT voxel for eack edep-sim track</p></li>
 <li><p><strong>segment_track_id</strong> (<em>array</em>) – shape <cite>(ntracks,)</cite>, unique id for each track segment (for MC truth backtracking)</p></li>
 <li><p><strong>light_inc</strong> (<em>array</em>) – shape <cite>(ntracks, ndet)</cite>, number of photons incident on each detector and voxel id</p></li>
-<li><p><strong>lut</strong> (<em>array</em>) – shape <cite>(nx,ny,nz)</cite>, light look up table</p></li>
+<li><p><strong>op_channel</strong> (<em>array</em>) – shape <cite>(ntracks, ndet_active)</cite>, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information</p></li>
+<li><p><strong>lut</strong> (<em>array</em>) – shape <cite>(nx,ny,nz,ndet_tpc)</cite>, light look up table</p></li>
 <li><p><strong>start_time</strong> (<em>float</em>) – start time of light simulation in microseconds</p></li>
 <li><p><strong>light_sample_inc</strong> (<em>array</em>) – output array, shape <cite>(ndet, nticks)</cite>, number of photons incident on each detector at each time tick (propogation delay only)</p></li>
 <li><p><strong>light_sample_inc_true_track_id</strong> (<em>array</em>) – output array, shape <cite>(ndet, nticks, maxtracks)</cite>, true track ids on each detector at each time tick (propogation delay only)</p></li>
