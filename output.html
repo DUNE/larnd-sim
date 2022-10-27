@@ -180,7 +180,7 @@ true particle association data within the <code class="docutils literal notransl
 dataset is a 2-dimensional array with the same first dimension as the
 <code class="docutils literal notranslate"><span class="pre">packets</span></code> dataset and a second dimension corresponding to the edep-sim track
 segment that contributed to the ADC value. The dataset has two fields;
-<code class="docutils literal notranslate"><span class="pre">track_ids</span></code>, the index into the full true edep-sim segment array for each
+<code class="docutils literal notranslate"><span class="pre">track_ids</span></code>, the index into the <code class="docutils literal notranslate"><span class="pre">tracks</span></code> dataset for each
 entry; and <code class="docutils literal notranslate"><span class="pre">fraction</span></code>, the fraction of the ADC’s value that can be attributed
 to that edep-sim segment. Because an arbitrary number of track segments can
 contribute to each trigger, this dataset is a “ragged” array with null entries
