@@ -81,10 +81,9 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             end_tick_time = start_tick_time + LIGHT_TICK_SIZE
 
             # find tracks that contribute light to this time tick
+            idet_lut = op_channel[idet] % lut.shape[3]
             for itrk in range(segments.shape[0]):
-                if light_inc[itrk,idet]['n_photons_det'] > 0:
-                    idet_lut = op_channel[idet] % lut.shape[3]
-                    
+                if light_inc[itrk,idet_lut]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
                     track_time = segments[itrk]['t0']
@@ -104,7 +103,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                         for iprof in range(time_profile.shape[0]):
                             profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
                             if profile_time < end_tick_time and profile_time > start_tick_time:
-                                photons = light_inc['n_photons_det'][itrk,idet] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
+                                photons = light_inc['n_photons_det'][itrk,idet_lut] * time_profile[iprof] / norm / LIGHT_TICK_SIZE
                                 light_sample_inc[idet,itick] += photons
 
                                 if photons > MC_TRUTH_THRESHOLD:
@@ -127,7 +126,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                         # add photons to time tick
                         profile_time = track_time + avg
                         if profile_time < end_tick_time and profile_time > start_tick_time:
-                            photons = light_inc['n_photons_det'][itrk,idet] / LIGHT_TICK_SIZE
+                            photons = light_inc['n_photons_det'][itrk,idet_lut] / LIGHT_TICK_SIZE
                             light_sample_inc[idet,itick] += photons
                             if photons > MC_TRUTH_THRESHOLD:
                                 # get truth information for time tick
