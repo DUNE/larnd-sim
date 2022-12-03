@@ -36,7 +36,8 @@ TAU_S = 0.001 # us
 TAU_T = 1.530
 
 #: Conversion from PE/microsecond to ADC
-LIGHT_GAIN = -2.30 # ADC * us/PE
+DEFAULT_LIGHT_GAIN = -2.30 # ADC * us/PE
+LIGHT_GAIN = np.zeros((0,))
 #: Set response model type (0=RLC response, 1=arbitrary input)
 SIPM_RESPONSE_MODEL = 0
 #: Response RC time [microseconds]
@@ -127,7 +128,7 @@ def set_light_properties(detprop_file):
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
         
-        LIGHT_GAIN = np.array(detprop.get('light_gain', np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)))
+        LIGHT_GAIN = np.array(detprop.get('light_gain', [DEFAULT_LIGHT_GAIN]))
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
         assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
