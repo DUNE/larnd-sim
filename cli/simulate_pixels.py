@@ -31,7 +31,7 @@ BATCH_SIZE = 4000 # track segments
 EVENT_BATCH_SIZE = 2 # tpcs
 #WRITE_BATCH_SIZE = 1000 # batches
 WRITE_BATCH_SIZE = 1000 # batches
-EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
+DEFAULT_EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
 
 LOGO = """
   _                      _            _
@@ -94,7 +94,8 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    bad_channels=None,
                    n_tracks=None,
-                   pixel_thresholds_file=None):
+                   pixel_thresholds_file=None,
+                   event_separator=DEFAULT_EVENT_SEPARATOR):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -284,10 +285,10 @@ def run_simulation(input_filename,
             output_file.create_dataset("vertices", data=vertices)
 
     # create a lookup table that maps between unique event ids and the segments in the file
-    tot_evids = np.unique(tracks[EVENT_SEPARATOR])
-    _, _, start_idx = np.intersect1d(tot_evids, tracks[EVENT_SEPARATOR], return_indices=True)
-    _, _, rev_idx = np.intersect1d(tot_evids, tracks[EVENT_SEPARATOR][::-1], return_indices=True)
-    end_idx = len(tracks[EVENT_SEPARATOR]) - 1 - rev_idx
+    tot_evids = np.unique(tracks[event_separator])
+    _, _, start_idx = np.intersect1d(tot_evids, tracks[event_separator], return_indices=True)
+    _, _, rev_idx = np.intersect1d(tot_evids, tracks[event_separator][::-1], return_indices=True)
+    end_idx = len(tracks[event_separator]) - 1 - rev_idx
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
