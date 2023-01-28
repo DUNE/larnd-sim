@@ -23,7 +23,7 @@ from numba.core.errors import NumbaPerformanceWarning
 from tqdm import tqdm
 
 from larndsim import consts
-from larndsim.util import CudaDict, batching
+from larndsim.util import CudaDict, batching, memory_logger
 
 SEED = int(time())
 #BATCH_SIZE = 4000 # track segments
@@ -85,6 +85,9 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
+
+
+
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -95,7 +98,8 @@ def run_simulation(input_filename,
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None,
-                   event_separator=DEFAULT_EVENT_SEPARATOR):
+                   event_separator=DEFAULT_EVENT_SEPARATOR,
+                   save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -117,7 +121,13 @@ def run_simulation(input_filename,
             (all tracks).
         pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
             to None.
+        event_separator: a string value used to define event separation
+        save_memory: a string value, if non-empty, this is used as a filename to store memory 
+            snapshot information
     """
+    logger = memory_logger(save_memory is None)
+    logger.start()
+    logger.take_snapshot()
     start_simulation = time()
 
     RangePush("run_simulation")
@@ -191,6 +201,8 @@ def run_simulation(input_filename,
     
     RangePop()
     end_load = time()
+    logger.take_snapshot()
+    logger.archive('loading')
     print(f" {end_load-start_load:.2f} s")
 
     response = cp.load(response_file)
@@ -199,6 +211,8 @@ def run_simulation(input_filename,
     BPG = max(ceil(tracks.shape[0] / TPB),1)
 
     print("******************\nRUNNING SIMULATION\n******************")
+    logger.start()
+    logger.take_snapshot()
     # Reduce dataset if not all tracks to be simulated
     if n_tracks:
         tracks = tracks[:n_tracks]
@@ -242,23 +256,36 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
+    logger.take_snapshot()
+    logger.archive('preparation')
+
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons..." , end="")
+    logger.start()
+    logger.take_snapshot()
     start_quenching = time()
     quenching.quench[BPG,TPB](tracks, physics.BIRKS)
     end_quenching = time()
+    logger.take_snapshot()
+    logger.archive('quenching')
     print(f" {end_quenching-start_quenching:.2f} s")
 
     print("Drifting electrons...", end="")
     start_drifting = time()
+    logger.start()
+    logger.take_snapshot()
     drifting.drift[BPG,TPB](tracks)
     end_drifting = time()
+    logger.take_snapshot()
+    logger.archive('drifting')
     print(f" {end_drifting-start_drifting:.2f} s")
 
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
+        logger.start()
+        logger.take_snapshot()
         lut = np.load(light_lut_filename)['arr']
         
         # clip LUT so that no voxel contains 0 visibility
@@ -272,8 +299,12 @@ def run_simulation(input_filename,
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
+        logger.take_snapshot()
+        logger.archive('light')
         print(f" {time()-start_light_time:.2f} s")
 
+    logger.start()
+    logger.take_snapshot()
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         output_file.create_dataset("tracks", data=tracks)
@@ -370,9 +401,14 @@ def run_simulation(input_filename,
 
         return event_times[-1]
 
+    logger.take_snapshot()
+    logger.archive('preparation2')
+
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
+    logger.start()
+    logger.take_snapshot([0])
     for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
@@ -604,9 +640,13 @@ def run_simulation(input_filename,
             last_time = save_results(event_times, is_first_event=last_time==0, results=results_acc)
             results_acc = defaultdict(list)
 
+        logger.take_snapshot([len(logger.log)])
+
     # Always save results after last iteration
     if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
         save_results(event_times, is_first_event=last_time==0, results=results_acc)
+
+    logger.take_snapshot([len(logger.log)])
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():
@@ -616,7 +656,10 @@ def run_simulation(input_filename,
 
     RangePop()
     end_simulation = time()
+    logger.take_snapshot([len(logger.log)])
     print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
+    logger.archive('loop',['loop'])
+    logger.savez(save_memory)
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
