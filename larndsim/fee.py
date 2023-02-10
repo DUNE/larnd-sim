@@ -22,7 +22,7 @@ from .consts.units import mV, e
 from .consts import units
 
 #: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 10
+MAX_ADC_VALUES = 20
 #: Discrimination threshold in e-
 DISCRIMINATION_THRESHOLD = 7e3 * e
 #: ADC hold delay in clock cycles
