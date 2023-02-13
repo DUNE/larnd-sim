@@ -134,6 +134,13 @@ def run_simulation(input_filename,
     print("Response file:", response_file)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
+
+    RangePush("set_random_seed")
+    cp.random.seed(SEED)
+    # pre-allocate some random number states for custom kernels
+    rng_states = maybe_create_rng_states(1024*256, seed=SEED)
+    RangePop()
+
     RangePush("load_detector_properties")
     consts.load_properties(detector_properties, pixel_layout)
     from larndsim.consts import light, detector, physics
@@ -369,8 +376,6 @@ def run_simulation(input_filename,
 
         return event_times[-1]
 
-    # pre-allocate some random number states
-    rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
     for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
