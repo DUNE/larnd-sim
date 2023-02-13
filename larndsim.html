@@ -182,7 +182,7 @@ Birks (Amoruso, et al NIM A 523 (2004) 275).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p></li>
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p></li>
 <li><p><strong>mode</strong> (<em>int</em>) – recombination model (physics.BOX or physics.BIRKS).</p></li>
 </ul>
 </dd>
@@ -210,7 +210,7 @@ the properties of the segments at the anode:</p>
 </div></blockquote>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p>
+<dd class="field-odd"><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tracks segment information</p>
 </dd>
 </dl>
 </dd></dl>
@@ -231,7 +231,7 @@ closest tabulated waveformm from the response array.</p>
 <li><p><strong>x</strong> (<em>float</em>) – x coordinate of the point</p></li>
 <li><p><strong>y</strong> (<em>float</em>) – y coordinate of the point</p></li>
 <li><p><strong>t</strong> (<em>float</em>) – time of the waveform</p></li>
-<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tabulated waveforms</p></li>
+<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the tabulated waveforms</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -257,10 +257,10 @@ an array with the track indeces associated to that pixel.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>track_pixel_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
+<li><p><strong>track_pixel_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
 association between the unique pixels array and the track indeces</p></li>
-<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the unique pixels</p></li>
-<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the pixels for each
+<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the unique pixels</p></li>
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the pixels for each
 track.</p></li>
 </ul>
 </dd>
@@ -321,19 +321,19 @@ with a circle centered at x,y</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
+<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain the
 summed signal for each pixel. First dimension is the pixel ID, second
 dimension is the time tick</p></li>
-<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x T,
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array with dimensions S x P x T,
 where S is the number of track segments, P is the number of pixels, and T is
 the number of time ticks.</p></li>
-<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the starting time of
+<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 1D array containing the starting time of
 each track</p></li>
-<li><p><strong>pixel_index_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the correspondence between
+<li><p><strong>pixel_index_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the correspondence between
 the track index and the pixel ID index.</p></li>
-<li><p><strong>track_pixel_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the association between
+<li><p><strong>track_pixel_map</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the association between
 the unique pixels array and the array containing the pixels for each track.</p></li>
-<li><p><strong>pixels_tracks_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array that will contain the waveforms
+<li><p><strong>pixels_tracks_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array that will contain the waveforms
 for each pixel and each track that induced current on the pixel.</p></li>
 </ul>
 </dd>
@@ -348,11 +348,11 @@ time of each segment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where
+<li><p><strong>track_starts</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where
 we store the segments start time</p></li>
-<li><p><strong>time_max</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
+<li><p><strong>time_max</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array where we store
 the longest signal time</p></li>
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the segment
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the segment
 information</p></li>
 </ul>
 </dd>
@@ -387,13 +387,13 @@ information</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
 where S is the number of track segments, P is the number of pixels, and T is
 the number of time ticks. The output is stored here.</p></li>
-<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
 the number of track segments, P is the number of pixels and contains the pixel ID number.</p></li>
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
-<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
+<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
 </ul>
 </dd>
 </dl>
@@ -407,14 +407,14 @@ MC method</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
+<li><p><strong>signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – empty 3D array with dimensions S x P x T,
 where S is the number of track segments, P is the number of pixels, and T is
 the number of time ticks. The output is stored here.</p></li>
-<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
+<li><p><strong>pixels</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array with dimensions S x P , where S is
 the number of track segments, P is the number of pixels and contains the pixel ID number.</p></li>
-<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
-<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
-<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
+<li><p><strong>tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the detector segments.</p></li>
+<li><p><strong>response</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 3D array containing the tabulated response.</p></li>
+<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
 generation</p></li>
 </ul>
 </dd>
@@ -561,13 +561,13 @@ the segment</p></li>
 ADC counts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>integral_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of charge collected by each pixel</p>
+<dd class="field-odd"><p><strong>integral_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of charge collected by each pixel</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>list of ADC values for each pixel</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -576,18 +576,18 @@ ADC counts.</p>
 <dt id="larndsim.fee.export_to_hdf5">
 <code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">export_to_hdf5</code><span class="sig-paren">(</span><em class="sig-param">event_id_list</em>, <em class="sig-param">adc_list</em>, <em class="sig-param">adc_ticks_list</em>, <em class="sig-param">unique_pix</em>, <em class="sig-param">current_fractions</em>, <em class="sig-param">track_ids</em>, <em class="sig-param">filename</em>, <em class="sig-param">event_start_times</em>, <em class="sig-param">is_first_event</em>, <em class="sig-param">light_trigger_times=None</em>, <em class="sig-param">light_trigger_event_id=None</em>, <em class="sig-param">light_trigger_modules=None</em>, <em class="sig-param">bad_channels=None</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.fee.export_to_hdf5" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the ADC counts in the LArPix HDF5 format.
-:Parameters: * <strong>event_id_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of event ids for each ADC value for each pixel</p>
+:Parameters: * <strong>event_id_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of event ids for each ADC value for each pixel</p>
 <blockquote>
 <div><ul class="simple">
-<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p></li>
-<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
-<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of pixel IDs</p></li>
-<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the fractional current
+<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of ADC values for each pixel</p></li>
+<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
+<li><p><strong>unique_pix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of pixel IDs</p></li>
+<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array containing the fractional current
 induced by each track on each pixel</p></li>
-<li><p><strong>track_ids</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the track IDs associated
+<li><p><strong>track_ids</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array containing the track IDs associated
 to each pixel</p></li>
 <li><p><strong>filename</strong> (<em>str</em>) – filename of HDF5 output file</p></li>
-<li><p><strong>event_times</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of timestamps for start each unique event [in microseconds]</p></li>
+<li><p><strong>event_times</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of timestamps for start each unique event [in microseconds]</p></li>
 <li><p><strong>is_first_event</strong> (<em>bool</em>) – <cite>True</cite> if this is the first event to save to the file</p></li>
 <li><p><strong>light_trigger_times</strong> (<em>array</em>) – 1D array of light trigger timestamps (relative to event t0) [in microseconds]</p></li>
 <li><p><strong>light_trigger_event_id</strong> (<em>array</em>) – 1D array of event id for each light trigger</p></li>
@@ -633,19 +633,19 @@ the chip key</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents for
+<li><p><strong>pixels_signals</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents for
 each pixel</p></li>
-<li><p><strong>pixels_signals_tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents
+<li><p><strong>pixels_signals_tracks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of induced currents
 for each track that induces current on each pixel</p></li>
-<li><p><strong>time_ticks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
-<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of integrated charges for each
+<li><p><strong>time_ticks</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of time ticks for each pixel</p></li>
+<li><p><strong>adc_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of integrated charges for each
 pixel</p></li>
-<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of the time ticks that
+<li><p><strong>adc_ticks_list</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – list of the time ticks that
 correspond to each integrated charge</p></li>
 <li><p><strong>time_padding</strong> (<em>float</em>) – time interval to add to each time tick.</p></li>
-<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
+<li><p><strong>rng_states</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – array of random states for noise
 generation</p></li>
-<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.23)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain
+<li><p><strong>current_fractions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.24)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>) – 2D array that will contain
 the fraction of current induced on the pixel by each track</p></li>
 <li><p><strong>pixel_thresholds(</strong> – obj: <cite>numpy.ndarray</cite>): list of discriminator
 thresholds for each pixel</p></li>
@@ -1250,6 +1250,12 @@ filename</p></li>
 
 <span class="target" id="module-larndsim.consts.light"></span><p>Sets ligth-related constants</p>
 <dl class="data">
+<dt id="larndsim.consts.light.DEFAULT_LIGHT_GAIN">
+<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">DEFAULT_LIGHT_GAIN</code><em class="property"> = -2.3</em><a class="headerlink" href="#larndsim.consts.light.DEFAULT_LIGHT_GAIN" title="Permalink to this definition">¶</a></dt>
+<dd><p>Conversion from PE/microsecond to ADC</p>
+</dd></dl>
+
+<dl class="data">
 <dt id="larndsim.consts.light.IMPULSE_MODEL">
 <code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">IMPULSE_MODEL</code><em class="property"> = array([1, 0])</em><a class="headerlink" href="#larndsim.consts.light.IMPULSE_MODEL" title="Permalink to this definition">¶</a></dt>
 <dd><p>Arbitrary input model (normalized to sum of 1)</p>
@@ -1271,12 +1277,6 @@ filename</p></li>
 <dt id="larndsim.consts.light.LIGHT_DIGIT_SAMPLE_SPACING">
 <code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_DIGIT_SAMPLE_SPACING</code><em class="property"> = 0.01</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_DIGIT_SAMPLE_SPACING" title="Permalink to this definition">¶</a></dt>
 <dd><p>Light waveform sample rate [microseconds]</p>
-</dd></dl>
-
-<dl class="data">
-<dt id="larndsim.consts.light.LIGHT_GAIN">
-<code class="sig-prename descclassname">larndsim.consts.light.</code><code class="sig-name descname">LIGHT_GAIN</code><em class="property"> = -2.3</em><a class="headerlink" href="#larndsim.consts.light.LIGHT_GAIN" title="Permalink to this definition">¶</a></dt>
-<dd><p>Conversion from PE/microsecond to ADC</p>
 </dd></dl>
 
 <dl class="data">
