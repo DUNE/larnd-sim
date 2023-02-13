@@ -25,11 +25,10 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.util import CudaDict, batching
 
+# krw fixing seed to test code changes
 SEED = int(time())
-#BATCH_SIZE = 4000 # track segments
-BATCH_SIZE = 4000 # track segments
-EVENT_BATCH_SIZE = 2 # tpcs
-#WRITE_BATCH_SIZE = 1000 # batches
+BATCH_SIZE = 10000 # track segments
+EVENT_BATCH_SIZE = 1 # tpcs
 WRITE_BATCH_SIZE = 1 # batches
 EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
 
@@ -395,7 +394,7 @@ def run_simulation(input_filename,
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
-    for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
+    for batch_mask in tqdm(batching.TPCBatcher(tracks, EVENT_SEPARATOR, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
         track_subset = tracks[batch_mask]

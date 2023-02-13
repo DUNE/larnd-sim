@@ -372,7 +372,7 @@ def run_simulation(input_filename,
     # pre-allocate some random number states
     rng_states = maybe_create_rng_states(1024*256, seed=0)
     last_time = 0
-    for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
+    for batch_mask in tqdm(batching.TPCBatcher(tracks, EVENT_SEPARATOR, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
         track_subset = tracks[batch_mask]
