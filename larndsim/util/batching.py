@@ -6,8 +6,9 @@ from ..active_volume import select_active_volume
 class TrackSegmentBatcher(object):
     """ Base class for LArND-sim simulation batching, implements an iterator that creates masks into an array of track segments """
     
-    def __init__(self, track_seg, **kwargs):
+    def __init__(self, track_seg, event_separator, **kwargs):
         self.track_seg = track_seg
+        self.EVENT_SEPARATOR = event_separator
 
     def __iter__(self):
         raise NotImplementedError
@@ -17,11 +18,10 @@ class TPCBatcher(TrackSegmentBatcher):
 
 
     def __init__(self, track_seg, event_separator ,tpc_batch_size=1, tpc_borders=np.empty((0,3,2), dtype='f4')):
-        super().__init__(track_seg)
+        super().__init__(track_seg, event_separator)
 
         self.tpc_batch_size = tpc_batch_size
         self.tpc_borders = np.sort(tpc_borders, axis=-1)
-        self.EVENT_SEPARATOR = event_separator
         
         self._simulated = np.zeros_like(self.track_seg['trackID'], dtype=bool)
         self._events = np.unique(self.track_seg[self.EVENT_SEPARATOR])
