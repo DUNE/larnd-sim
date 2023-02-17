@@ -15,7 +15,7 @@ class memory_logger():
           reset to an empty list. To allow access to the archived data, this function must be called
           with a string in the argument, which can be used to retrieve data anytime.
           
-        - Call "savez" to store the archived data into a npz file.
+        - Call "store" to store the archived data into HDF5 file with PyTable format OR npz file if Pandas/hdf5 is unavailable.
 
         - If constructed with "do_nothing=True", it doesn't do any of above :)
 
@@ -45,11 +45,11 @@ class memory_logger():
                 field_names
                     - a list of strings to name variables additionally stored in take_snapshot calls   
         
-        savez(filename)
-            - store the archived data into a numpy file using numpy.savez function
+        store(filename)
+            - store the archived data into a HDF5 file using PyTable or numpy file using numpy.savez function
             ARGS:
                 filename
-                    - string value to name a npz file
+                    - string value to name the data file
     '''
     lock=None
     
@@ -81,9 +81,19 @@ class memory_logger():
         self.reset_log()
         self._t0 = time.time()
         
-    def savez(self,filename='memory_logger.npz'):
+    def store(self,filename='memory_logger.h5'):
         if self._do_nothing: return
-        np.savez(filename,**self.data)
+
+        try:
+            import pandas as pd
+            for group_name in [n for n in self.data.keys() if not n.endswith('_fields')]:
+                data_dict=dict()
+                for i, field_name in enumerate(self.data[group_name+'_fields']):
+                    data_dict[field_name]=self.data[group_name][:,i]
+                df=pd.DataFrame(data_dict)
+                df.to_hdf(filename,group_name,format='table',mode='a')
+        except ImportError:
+            np.savez(filename,**self.data)
         self.data=dict()
         self.reset_log()
 

@@ -659,7 +659,7 @@ def run_simulation(input_filename,
     logger.take_snapshot([len(logger.log)])
     print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
     logger.archive('loop',['loop'])
-    logger.savez(save_memory)
+    logger.store(save_memory)
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
