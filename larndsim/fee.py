@@ -425,8 +425,9 @@ def get_adc_values(pixels_signals,
                 for itrk in range(current_fractions.shape[2]):
                     tot_backtracked += current_fractions[ip][iadc][itrk]
 
-                for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] /= tot_backtracked
+                if tot_backtracked != 0:
+                    for itrk in range(current_fractions.shape[2]):
+                        current_fractions[ip][iadc][itrk] /= tot_backtracked
 
                 adc_list[ip][iadc] = adc
 
