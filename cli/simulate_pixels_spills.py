@@ -25,12 +25,12 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.util import CudaDict, batching
 
-# krw fixing seed to test code changes
 SEED = int(time())
 BATCH_SIZE = 10000 # track segments
 EVENT_BATCH_SIZE = 1 # tpcs
 WRITE_BATCH_SIZE = 1 # batches
 EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
+SPILL_PERIOD = 1.2E6
 
 LOGO = """
   _                      _            _
@@ -205,18 +205,6 @@ def run_simulation(input_filename,
     # because of the different convention in larnd-sim wrt edep-sim
     tracks = swap_coordinates(tracks)
 
-    # Sub-select only segments in active volumes
-    #print("Skipping non-active volumes..." , end="")
-    #start_mask = time()
-    #active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
-    #track_len_before_mask = len(tracks)
-    #tracks = tracks[active_tracks]
-    #segment_ids = segment_ids[active_tracks]
-    #n_tracks_cut = track_len_before_mask - len(tracks)
-    #end_mask = time()
-    #print(f" {end_mask-start_mask:.2f} s")
-    #print('Active volume cut ',n_tracks_cut,'tracks.')
-
     # Set up light simulation data objects
     if light.LIGHT_SIMULATED:
         light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
@@ -243,17 +231,13 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
-    # "Reset" the 1Hz spill frequency so t0 is wrt the spill start.
+    # "Reset" the spill period in the event time so t0 is wrt the spill start.
     # This is to enable the use of the modules/methods "out-of-the-box" below.
-    # The 1 sec. space between spills will be accounted for in the
+    # The space between spills will be accounted for in the
     # packet timestamps through the event_times array below
-
-    #print('t0_start =',tracks['t0_start'])
-    #print('t_start =',tracks['t_start'])
-    tracks['t0_start'] = tracks['t0_start']%1e6
-    tracks['t0_end'] = tracks['t0_end']%1e6
-    tracks['t0'] = tracks['t0']%1e6
-    #print('t0_start =',tracks['t0_start'])
+    tracks['t0_start'] = tracks['t0_start']%SPILL_PERIOD
+    tracks['t0_end'] = tracks['t0_end']%SPILL_PERIOD
+    tracks['t0'] = tracks['t0']%SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -307,15 +291,7 @@ def run_simulation(input_filename,
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
     # create a lookup table for event timestamps
-    #event_times = fee.gen_event_times(tot_evids.max()+1, 0)
-    #event_times = [0.]*(tot_evids.max()+1)
-    #event_times = cp.array(np.zeros(tot_evids.max()+1),dtype='f8')
-    #event_times = cp.array(tracks['spillID']*1E6) # new event/spill every second
-    event_times = cp.arange(tracks[EVENT_SEPARATOR].max()+1) * 1e6
-
-    #print("event_times =",list(event_times))
-    #print("event_times.dtype =",event_times.dtype)
-    #print("len(event_times) =",len(event_times))
+    event_times = cp.arange(tracks[EVENT_SEPARATOR].max()+1) * SPILL_PERIOD
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
