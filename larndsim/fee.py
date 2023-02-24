@@ -309,7 +309,7 @@ def digitize(integral_list):
     """
     xp = cp.get_array_module(integral_list)
     adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN + V_PEDESTAL - V_CM), 0)
-                                * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
+                                * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS-1)
 
     return adcs
 
