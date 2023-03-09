@@ -384,7 +384,7 @@ def run_simulation(input_filename,
         track_subset = tracks[batch_mask]
         if len(track_subset) == 0:
             continue
-        ievd = int(track_subset[0]['eventID'])
+        ievd = int(track_subset[0][sim.EVENT_SEPARATOR])
         evt_tracks = track_subset
         first_trk_id = np.argmax(batch_mask) # first track in batch
 
@@ -395,7 +395,7 @@ def run_simulation(input_filename,
                 
             selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
             RangePush("event_id_map")
-            event_ids = selected_tracks['eventID']
+            event_ids = selected_tracks[sim.EVENT_SEPARATOR]
             unique_eventIDs = np.unique(event_ids)
             RangePop()
 
