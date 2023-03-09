@@ -291,10 +291,6 @@ def run_simulation(input_filename,
             output_file.create_dataset("vertices", data=vertices)
 
     # create a lookup table that maps between unique event ids and the segments in the file
-    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
-    _, _, start_idx = np.intersect1d(tot_evids, tracks[sim.EVENT_SEPARATOR], return_indices=True)
-    _, _, rev_idx = np.intersect1d(tot_evids, tracks[sim.EVENT_SEPARATOR][::-1], return_indices=True)
-    end_idx = len(tracks[sim.EVENT_SEPARATOR]) - 1 - rev_idx
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
