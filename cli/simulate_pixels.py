@@ -127,7 +127,7 @@ def run_simulation(input_filename,
     print("Random seed:", SEED)
     print("Event batch size:", EVENT_BATCH_SIZE)
     print("Batch size:", BATCH_SIZE)
-    print("Write batch size:", WRITE_BATCH_SIZE)    
+    print("Write batch size:", WRITE_BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
     print("edep-sim input file:", input_filename)
@@ -191,10 +191,24 @@ def run_simulation(input_filename,
             print("Input file does not have true vertices info")
             input_has_vertices = False
 
+        try:
+            genie_hdr = np.array(f['genie_hdr'])
+            input_has_genie_hdr = True
+        except KeyError:
+            print("Input file does not have GENIE event summary info")
+            input_has_genie_hdr = False
+
+        try:
+            genie_stack = np.array(f['genie_stack'])
+            input_has_genie_stack = True
+        except KeyError:
+            print("Input file does not have GENIE particle stack info")
+            input_has_genie_stack = False
+
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
-    
+
     RangePop()
     end_load = time()
     print(f" {end_load-start_load:.2f} s")
@@ -232,7 +246,7 @@ def run_simulation(input_filename,
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-        
+
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
         # in the input files, it is called 't'
@@ -266,15 +280,15 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)['arr']
-        
+
         # clip LUT so that no voxel contains 0 visibility
         mask = lut['vis'] > 0
         lut['vis'][~mask] = lut['vis'][mask].min()
 
         lut = to_device(lut)
-        
+
         light_noise = cp.load(light_det_noise_filename)
-        
+
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
@@ -289,6 +303,10 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
+        if input_has_genie_hdr:
+            output_file.create_dataset("genie_hdr", data=genie_hdr)
+        if input_has_genie_stack:
+            output_file.create_dataset("genie_stack", data=genie_stack)
 
     # create a lookup table that maps between unique event ids and the segments in the file
     tot_evids = np.unique(tracks[EVENT_SEPARATOR])
@@ -318,7 +336,7 @@ def run_simulation(input_filename,
          - track_pixel_map: map from track to active pixels
          - unique_pix: all unique pixels (per track?)
          - current_fractions: fraction of charge associated with each true track
-        
+
          for the light simulation (in addition to all keys for the charge simulation)
          - light_event_id: event_id for each light trigger
          - light_start_time: simulation start time for event
@@ -391,7 +409,7 @@ def run_simulation(input_filename,
                          delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
                 warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
-                
+
             selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
