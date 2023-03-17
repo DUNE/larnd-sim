@@ -508,7 +508,7 @@ the segment</p></li>
 
 <dl class="data">
 <dt id="larndsim.fee.MAX_ADC_VALUES">
-<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">MAX_ADC_VALUES</code><em class="property"> = 10</em><a class="headerlink" href="#larndsim.fee.MAX_ADC_VALUES" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">larndsim.fee.</code><code class="sig-name descname">MAX_ADC_VALUES</code><em class="property"> = 20</em><a class="headerlink" href="#larndsim.fee.MAX_ADC_VALUES" title="Permalink to this definition">¶</a></dt>
 <dd><p>Maximum number of ADC values stored per pixel</p>
 </dd></dl>
 
@@ -973,15 +973,16 @@ distributed number)</p>
 <p>Set global variables with detector and physics properties</p>
 <dl class="function">
 <dt id="larndsim.consts.load_properties">
-<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">load_properties</code><span class="sig-paren">(</span><em class="sig-param">detprop_file</em>, <em class="sig-param">pixel_file</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.consts.load_properties" title="Permalink to this definition">¶</a></dt>
-<dd><p>The function loads the detector properties and
-the pixel geometry YAML files and stores the constants
-as global variables</p>
+<code class="sig-prename descclassname">larndsim.consts.</code><code class="sig-name descname">load_properties</code><span class="sig-paren">(</span><em class="sig-param">detprop_file</em>, <em class="sig-param">pixel_file</em>, <em class="sig-param">sim_file</em><span class="sig-paren">)</span><a class="headerlink" href="#larndsim.consts.load_properties" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function loads the detector properties,
+the pixel geometry, and the simulation YAML files
+and stores the constants as global variables</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>detprop_file</strong> (<em>str</em>) – detector properties YAML filename</p></li>
 <li><p><strong>pixel_file</strong> (<em>str</em>) – pixel layout YAML filename</p></li>
+<li><p><strong>sim_file</strong> (<em>str</em>) – simulation properties YAML filename</p></li>
 </ul>
 </dd>
 </dl>
