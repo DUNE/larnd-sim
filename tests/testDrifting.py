@@ -8,7 +8,9 @@ from math import ceil
 from larndsim import consts
 
 consts.load_properties("larndsim/detector_properties/module0.yaml",
-                       "larndsim/pixel_layouts/multi_tile_layout-2.3.16.yaml")
+                       "larndsim/pixel_layouts/multi_tile_layout-2.3.16.yaml",
+                       "larndsim/simulation_properties/singles_sim.yaml")
+
 from larndsim.consts import detector, physics
 
 from larndsim import drifting
