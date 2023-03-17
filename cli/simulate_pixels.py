@@ -391,7 +391,7 @@ def run_simulation(input_filename,
         for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                          delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
-                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
+                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
                 
             selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
             RangePush("event_id_map")
