@@ -41,7 +41,8 @@ vertices_dtype = np.dtype([("eventID","u4"),("x_vert","f4"),("y_vert","f4"),("z_
 
 genie_stack_dtype = np.dtype([("eventID", "u4"), ("part_4mom", "f4", (4,)), ("part_pdg", "i4"), ("part_status", "i4")], align=True)
 
-genie_hdr_dtype = np.dtype([("eventID", "u4"), ("vertex", "f4", (4,)), ("isCC", "?"), ("target", "u4"),
+genie_hdr_dtype = np.dtype([("eventID", "u4"), ("vertex", "f4", (4,)), ("target", "u4"), ("isCC", "?"),
+                            ("isQES", "?"), ("isMEC", "?"), ("isRES", "?"), ("isDIS", "?"), ("isCOH", "?"),
                             ("Enu", "f4"), ("nu_4mom", "f4", (4,)), ("nu_pdg", "i4"),
                             ("Elep", "f4"), ("lep_pdg", "i4"),
                             ("q0", "f4"), ("q3", "f4"), ("Q2", "f4"),
@@ -357,13 +358,22 @@ def dump(input_file, output_file):
 
                 genie_idx += 1
 
+        #Shrink the array to remove used space
         genie_stack.resize((genie_idx,))
         genie_stack_list.append(genie_stack)
+
+        #Fun fact: EvtCode is a TObjString. Use GetString and Data methods to get Python string
+        genie_str = genieTree.EvtCode.GetString().Data()
 
         #Create GENIE header/summary dataset
         genie_hdr = np.empty(1, dtype=genie_hdr_dtype)
         genie_hdr["eventID"] = event.EventId
         genie_hdr["isCC"] = True if lep_pdg in [11, 13, 15] else False
+        genie_hdr["isQES"] = "QES" in genie_str
+        genie_hdr["isMEC"] = "MEC" in genie_str
+        genie_hdr["isRES"] = "RES" in genie_str
+        genie_hdr["isDIS"] = "DIS" in genie_str
+        genie_hdr["isCOH"] = "COH" in genie_str
         genie_hdr["vertex"] = np.array([genieTree.EvtVtx[0], genieTree.EvtVtx[1], genieTree.EvtVtx[2], genieTree.EvtVtx[3]])
         genie_hdr["target"] = int((target_pdg % 10000000) / 10000) #Extract Z value from PDG code
         genie_hdr["Enu"]  = nu_4mom[3]
