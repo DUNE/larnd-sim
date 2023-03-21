@@ -303,6 +303,7 @@ def run_simulation(input_filename,
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
     # create a lookup table for event timestamps
+    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(tracks[sim.EVENT_SEPARATOR].max()+1) * sim.SPILL_PERIOD
     else:
