@@ -251,9 +251,9 @@ def run_simulation(input_filename,
         # This is to enable the use of the modules/methods "out-of-the-box" below.
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start']%sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end']%sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0']%sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -289,7 +289,18 @@ def run_simulation(input_filename,
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
+        if sim.IS_SPILL_SIM:
+            # We do want to keep the spill timing in the truth information
+            tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
         output_file.create_dataset("tracks", data=tracks)
+        if sim.IS_SPILL_SIM:
+            # But the code below works best assuming a t0 where the initial interaction
+            # began at t_int = 0 
+            tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
         if light.LIGHT_SIMULATED:
             output_file.create_dataset('light_dat', data=light_sim_dat)
         if input_has_trajectories:
