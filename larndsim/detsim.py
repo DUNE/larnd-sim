@@ -36,8 +36,8 @@ def time_intervals(track_starts, time_max, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(TIME_INTERVAL[1], round((track["t_end"] + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
-        t_start = max(TIME_INTERVAL[0], round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+        t_end = min(TIME_INTERVAL[1], round(((track["t_end"]-track["t0_end"]) + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+        t_start = max(TIME_INTERVAL[0], round(((track["t_start"]-track["t0_start"] )- detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
         t_length = t_end - t_start
         track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, ceil(t_length / detector.TIME_SAMPLING))
@@ -297,7 +297,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 end = (t["x_start"], t["y_start"], t["z_start"])
                 start = (t["x_end"], t["y_end"], t["z_end"])
 
-            t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+            t_start = max(TIME_INTERVAL[0], round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
             time_tick = t_start + it * detector.TIME_SAMPLING
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -412,7 +412,7 @@ def tracks_current(signals, pixels, tracks, response):
                 z_steps = max(detector.SAMPLED_POINTS, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(TIME_INTERVAL[0], round((t["t_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+                t_start = max(TIME_INTERVAL[0], round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
 
                 total_current = 0
 
