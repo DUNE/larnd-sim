@@ -246,24 +246,14 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
-    # prep output file with truth datasets
-    with h5py.File(output_filename, 'a') as output_file:
-        output_file.create_dataset("tracks", data=tracks)
-        if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat)
-        if input_has_trajectories:
-            output_file.create_dataset("trajectories", data=trajectories)
-        if input_has_vertices:
-            output_file.create_dataset("vertices", data=vertices)
-
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period in the event time so t0 is wrt the spill start.
         # This is to enable the use of the modules/methods "out-of-the-box" below.
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start']%sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end']%sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0']%sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -296,6 +286,27 @@ def run_simulation(input_filename,
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
+
+    # prep output file with truth datasets
+    with h5py.File(output_filename, 'a') as output_file:
+        if sim.IS_SPILL_SIM:
+            # We do want to keep the spill timing in the truth information
+            tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
+        output_file.create_dataset("tracks", data=tracks)
+        if sim.IS_SPILL_SIM:
+            # But the code below works best assuming a t0 where the initial interaction
+            # began at t_int = 0 
+            tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+            tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+        if light.LIGHT_SIMULATED:
+            output_file.create_dataset('light_dat', data=light_sim_dat)
+        if input_has_trajectories:
+            output_file.create_dataset("trajectories", data=trajectories)
+        if input_has_vertices:
+            output_file.create_dataset("vertices", data=vertices)
 
     # create a lookup table that maps between unique event ids and the segments in the file
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
