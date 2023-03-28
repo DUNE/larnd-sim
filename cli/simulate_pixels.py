@@ -246,14 +246,14 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
-#    if sim.IS_SPILL_SIM:
-#        # "Reset" the spill period in the event time so t0 is wrt the spill start.
-#        # This is to enable the use of the modules/methods "out-of-the-box" below.
-#        # The space between spills will be accounted for in the
-#        # packet timestamps through the event_times array below
-#        tracks['t0_start'] = tracks['t0_start']%sim.SPILL_PERIOD
-#        tracks['t0_end'] = tracks['t0_end']%sim.SPILL_PERIOD
-#        tracks['t0'] = tracks['t0']%sim.SPILL_PERIOD
+    if sim.IS_SPILL_SIM:
+        # "Reset" the spill period so t0 is wrt the corresponding spill start time.
+        # The spill starts are marking the start of 
+        # The space between spills will be accounted for in the
+        # packet timestamps through the event_times array below
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -287,6 +287,12 @@ def run_simulation(input_filename,
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
+    if sim.IS_SPILL_SIM:
+        # write the true timing structure to the file, not t0 wrt event time .....
+        tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
+
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         output_file.create_dataset("tracks", data=tracks)
@@ -296,6 +302,14 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
+
+    if sim.IS_SPILL_SIM:
+        # ..... even thought larnd-sim does expect t0 to be given with respect to
+        # the event time
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+
 
     # create a lookup table that maps between unique event ids and the segments in the file
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
