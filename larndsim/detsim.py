@@ -36,8 +36,8 @@ def time_intervals(track_starts, time_max, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = min(TIME_INTERVAL[1], round(((track["t_end"]-track["t0_end"]) + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
-        t_start = max(TIME_INTERVAL[0], round(((track["t_start"]-track["t0_start"] )- detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+        t_end = round((track["t_end"] + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
+        t_start = round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
         t_length = t_end - t_start
         track_starts[itrk] = t_start
         cuda.atomic.max(time_max, 0, ceil(t_length / detector.TIME_SAMPLING))
@@ -297,8 +297,10 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 end = (t["x_start"], t["y_start"], t["z_start"])
                 start = (t["x_end"], t["y_end"], t["z_end"])
 
-            t_start = max(TIME_INTERVAL[0], round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+            t_start = round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
             time_tick = t_start + it * detector.TIME_SAMPLING
+            if time_tick < 0:
+                return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
             length = sqrt(segment[0]**2 + segment[1]**2 + segment[2]**2)
@@ -412,11 +414,13 @@ def tracks_current(signals, pixels, tracks, response):
                 z_steps = max(detector.SAMPLED_POINTS, ceil(abs(z_end_int-z_start_int) / z_sampling))
 
                 z_step = (z_end_int-z_start_int) / (z_steps-1)
-                t_start = max(TIME_INTERVAL[0], round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING)
+                t_start = round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
 
                 total_current = 0
 
                 time_tick = t_start + it * detector.TIME_SAMPLING
+                if time_tick < 0.:
+                    return
 
                 for iz in range(z_steps):
 
@@ -503,7 +507,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
 
             if itick < signals.shape[2]:
                 itime = start_tick + itick
-                if itime < pixels_signals.shape[1]:
+                if itime < pixels_signals.shape[1] and itime > -1:
                     cuda.atomic.add(pixels_signals,
                                     (pixel_index, itime),
                                     signals[itrk][ipix][itick])
