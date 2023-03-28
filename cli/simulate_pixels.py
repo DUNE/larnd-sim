@@ -89,7 +89,8 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    bad_channels=None,
                    n_tracks=None,
-                   pixel_thresholds_file=None):
+                   pixel_thresholds_file=None,
+                   pixel_gains_file=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -113,6 +114,7 @@ def run_simulation(input_filename,
             (all tracks).
         pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
             to None.
+        pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
     """
     start_simulation = time()
 
@@ -159,6 +161,12 @@ def run_simulation(input_filename,
         pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
 
+    RangePush("load_pixel_gains")
+    if pixel_gains_file is not None:
+        print("Pixel gains file:", pixel_gains_file)
+        pixel_gains_lut = CudaDict.load(pixel_gains_file, 256)
+    RangePop()
+    
     RangePush("load_hd5_file")
     print("Loading track segments..." , end="")
     start_load = time()
@@ -514,7 +522,7 @@ def run_simulation(input_filename,
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-
+            
             fee.get_adc_values[BPG, TPB](pixels_signals,
                                          pixels_tracks_signals,
                                          time_ticks,
@@ -524,8 +532,15 @@ def run_simulation(input_filename,
                                          rng_states,
                                          current_fractions,
                                          pixel_thresholds)
-
-            adc_list = fee.digitize(integral_list)
+            
+            # get list of adc values
+            if pixel_gains_file is not None:
+                pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
+                gain_list = cp.tile(pixel_gains, (fee.MAX_ADC_VALUES, 1)).T # makes array the same size as integral_list
+                adc_list = fee.digitize(integral_list, gain_list)
+            else:
+                adc_list = fee.digitize(integral_list, fee.GAIN)
+            
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
 
