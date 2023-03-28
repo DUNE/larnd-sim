@@ -296,7 +296,7 @@ def export_to_hdf5(event_id_list,
     return packets, packets_mc_ds
 
 
-def digitize(integral_list, gain):
+def digitize(integral_list, GAIN):
     """
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
@@ -309,7 +309,7 @@ def digitize(integral_list, gain):
         :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.around(xp.maximum((integral_list * gain + V_PEDESTAL - V_CM), 0)
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN + V_PEDESTAL - V_CM), 0)
                                 * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS-1)
 
     return adcs
