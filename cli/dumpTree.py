@@ -44,7 +44,7 @@ genie_stack_dtype = np.dtype([("eventID", "u4"), ("part_4mom", "f4", (4,)), ("pa
 genie_hdr_dtype = np.dtype([("eventID", "u4"), ("vertex", "f4", (4,)), ("target", "u4"), ("isCC", "?"),
                             ("isQES", "?"), ("isMEC", "?"), ("isRES", "?"), ("isDIS", "?"), ("isCOH", "?"),
                             ("Enu", "f4"), ("nu_4mom", "f4", (4,)), ("nu_pdg", "i4"),
-                            ("Elep", "f4"), ("lep_pdg", "i4"),
+                            ("Elep", "f4"), ("lep_mom", "f4"), ("lep_ang", "f4"), ("lep_pdg", "i4"),
                             ("q0", "f4"), ("q3", "f4"), ("Q2", "f4"),
                             ("x", "f4"), ("y", "f4")], align=True)
 
@@ -54,6 +54,11 @@ edep2us = 0.001 # convert to microseconds
 
 # Convert GENIE to common units
 gev2mev = 1000  # convert to MeV
+
+# Needed for event kinematics calculation
+nucleon_mass = 938.272
+beam_dir  = np.asarray([0.0, -0.05836, 1.0]) # -3.34 degrees in the y-direction
+beam_norm = np.linalg.norm(beam_dir)
 
 # Print the fields in a TG4PrimaryParticle object
 def printPrimaryParticle(depth, primaryParticle):
@@ -318,7 +323,6 @@ def dump(input_file, output_file):
 
         # Save truth information from GENIE
         genie_idx = 0
-        nucleon_mass = 938.272
         nu_4mom = np.empty((4,), dtype='f4')
         lep_4mom = np.empty((4,), dtype='f4')
 
@@ -329,10 +333,10 @@ def dump(input_file, output_file):
             #Get only initial and final state particles
             if genieTree.StdHepStatus[p] == 0 or genieTree.StdHepStatus[p] == 1:
                 genie_stack[genie_idx]["eventID"] = event.EventId
-                genie_stack[genie_idx]["part_4mom"] = (genieTree.StdHepP4[p*4 + 0]*gev2mev,
+                genie_stack[genie_idx]["part_4mom"] = np.array([genieTree.StdHepP4[p*4 + 0]*gev2mev,
                                                        genieTree.StdHepP4[p*4 + 1]*gev2mev,
                                                        genieTree.StdHepP4[p*4 + 2]*gev2mev,
-                                                       genieTree.StdHepP4[p*4 + 3]*gev2mev)
+                                                       genieTree.StdHepP4[p*4 + 3]*gev2mev])
                 genie_stack[genie_idx]["part_pdg"] = genieTree.StdHepPdg[p]
                 genie_stack[genie_idx]["part_status"] = genieTree.StdHepStatus[p]
 
@@ -380,6 +384,8 @@ def dump(input_file, output_file):
         genie_hdr["nu_4mom"] = nu_4mom
         genie_hdr["nu_pdg"] = nu_pdg
         genie_hdr["Elep"] = lep_4mom[3]
+        genie_hdr["lep_mom"] = np.linalg.norm(lep_4mom[0:2])
+        genie_hdr["lep_ang"] = np.arccos(lep_4mom[0:2].dot(beam_dir) / (beam_norm * genie_hdr["plep"])) * (180.0 / np.pi)
         genie_hdr["lep_pdg"] = lep_pdg
         genie_hdr["q0"]   = nu_4mom[3] - lep_4mom[3]
         genie_hdr["q3"]   = np.linalg.norm(nu_4mom[0:3] - lep_4mom[0:3])
