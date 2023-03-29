@@ -26,12 +26,6 @@ from larndsim import consts
 from larndsim.util import CudaDict, batching
 
 SEED = int(time())
-#BATCH_SIZE = 4000 # track segments
-BATCH_SIZE = 4000 # track segments
-EVENT_BATCH_SIZE = 2 # tpcs
-#WRITE_BATCH_SIZE = 1000 # batches
-WRITE_BATCH_SIZE = 1000 # batches
-EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
 
 LOGO = """
   _                      _            _
@@ -88,6 +82,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
+                   simulation_properties,
                    output_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npz',
@@ -104,6 +99,8 @@ def run_simulation(input_filename,
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
+        simulation_properties (str): path of the YAML file containing
+            the simulation properties
         output_filename (str): path of the HDF5 output file. If not specified
             the output is added to the input file.
         response_file (str, optional): path of the Numpy array containing the pre-calculated
@@ -130,6 +127,7 @@ def run_simulation(input_filename,
     print("Write batch size:", WRITE_BATCH_SIZE)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
+    print("Simulation properties file:", simulation_properties)
     print("edep-sim input file:", input_filename)
     print("Response file:", response_file)
     if bad_channels:
@@ -142,9 +140,12 @@ def run_simulation(input_filename,
     RangePop()
 
     RangePush("load_detector_properties")
-    consts.load_properties(detector_properties, pixel_layout)
-    from larndsim.consts import light, detector, physics
+    consts.load_properties(detector_properties, pixel_layout, simulation_properties)
+    from larndsim.consts import light, detector, physics, sim
     RangePop()
+    print("Event batch size:", sim.EVENT_BATCH_SIZE)
+    print("Batch size:", sim.BATCH_SIZE)
+    print("Write batch size:", sim.WRITE_BATCH_SIZE)
 
     RangePush("load_larndsim_modules")
     # Here we load the modules after loading the detector properties
@@ -262,6 +263,15 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
+    if sim.IS_SPILL_SIM:
+        # "Reset" the spill period so t0 is wrt the corresponding spill start time.
+        # The spill starts are marking the start of 
+        # The space between spills will be accounted for in the
+        # packet timestamps through the event_times array below
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons..." , end="")
@@ -294,6 +304,12 @@ def run_simulation(input_filename,
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
+    if sim.IS_SPILL_SIM:
+        # write the true timing structure to the file, not t0 wrt event time .....
+        tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
+
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         output_file.create_dataset("tracks", data=tracks)
@@ -308,17 +324,25 @@ def run_simulation(input_filename,
         if input_has_genie_stack:
             output_file.create_dataset("genie_stack", data=genie_stack)
 
+    if sim.IS_SPILL_SIM:
+        # ..... even thought larnd-sim does expect t0 to be given with respect to
+        # the event time
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+
+
     # create a lookup table that maps between unique event ids and the segments in the file
-    tot_evids = np.unique(tracks[EVENT_SEPARATOR])
-    _, _, start_idx = np.intersect1d(tot_evids, tracks[EVENT_SEPARATOR], return_indices=True)
-    _, _, rev_idx = np.intersect1d(tot_evids, tracks[EVENT_SEPARATOR][::-1], return_indices=True)
-    end_idx = len(tracks[EVENT_SEPARATOR]) - 1 - rev_idx
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
     # create a lookup table for event timestamps
-    event_times = fee.gen_event_times(tot_evids.max()+1, 0)
+    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+    if sim.IS_SPILL_SIM:
+        event_times = cp.arange(tracks[sim.EVENT_SEPARATOR].max()+1) * sim.SPILL_PERIOD
+    else:
+        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
@@ -381,7 +405,7 @@ def run_simulation(input_filename,
                            bad_channels=bad_channels) # defined earlier in script
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],
+            light_sim.export_to_hdf5(results['light_event_id'],rry, you can still create the pull req
                                      results['light_start_time'],
                                      results['light_trigger_idx'],
                                      results['light_op_channel_idx'],
@@ -395,24 +419,25 @@ def run_simulation(input_filename,
         return event_times[-1]
 
     last_time = 0
-    for batch_mask in tqdm(batching.TPCBatcher(tracks, tpc_batch_size=EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
+    for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
         track_subset = tracks[batch_mask]
         if len(track_subset) == 0:
             continue
-        ievd = int(track_subset[0]['eventID'])
+        ievd = int(track_subset[0][sim.EVENT_SEPARATOR])
         evt_tracks = track_subset
         first_trk_id = np.argmax(batch_mask) # first track in batch
 
-        for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE),
+        for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                          delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
-                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
+                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
+                
+            selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
 
-            selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
-            event_ids = selected_tracks['eventID']
+            event_ids = selected_tracks[sim.EVENT_SEPARATOR]
             unique_eventIDs = np.unique(event_ids)
             RangePop()
 
@@ -552,8 +577,8 @@ def run_simulation(input_filename,
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals")
-                light_inc = light_sim_dat[batch_mask][itrk:itrk+BATCH_SIZE]
-                selected_track_id = track_ids[batch_mask][itrk:itrk+BATCH_SIZE]
+                light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
+                selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                 n_light_ticks = min(n_light_ticks,int(5E4))
                 op_channel = light_sim.get_active_op_channel(light_inc)
@@ -567,7 +592,7 @@ def run_simulation(input_filename,
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
                 light_sim.sum_light_signals[BPG, TPB](
-                    selected_tracks, track_light_voxel[batch_mask][itrk:itrk+BATCH_SIZE], selected_track_id,
+                    selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
                 RangePop()
@@ -622,7 +647,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-        if len(results_acc['event_id']) > WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+        if len(results_acc['event_id']) > sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             last_time = save_results(event_times, is_first_event=last_time==0, results=results_acc)
             results_acc = defaultdict(list)
 
