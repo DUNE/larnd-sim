@@ -89,7 +89,8 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    bad_channels=None,
                    n_tracks=None,
-                   pixel_thresholds_file=None):
+                   pixel_thresholds_file=None,
+                   rand_seed=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -118,10 +119,12 @@ def run_simulation(input_filename,
 
     RangePush("run_simulation")
 
+    if not rand_seed: rand_seed = SEED
+
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
-    print("Random seed:", SEED)
+    print("Random seed:", rand_seed)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
     print("Simulation properties file:", simulation_properties)
@@ -131,9 +134,9 @@ def run_simulation(input_filename,
         print("Disabled channel list: ", bad_channels)
 
     RangePush("set_random_seed")
-    cp.random.seed(SEED)
+    cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
-    rng_states = maybe_create_rng_states(1024*256, seed=SEED)
+    rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
     RangePush("load_detector_properties")
@@ -461,7 +464,7 @@ def run_simulation(input_filename,
             BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
             BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
@@ -510,7 +513,7 @@ def run_simulation(input_filename,
 
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
@@ -573,7 +576,7 @@ def run_simulation(input_filename,
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                     seed=SEED+ievd+itrk, rng_states=rng_states)
+                                                     seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
