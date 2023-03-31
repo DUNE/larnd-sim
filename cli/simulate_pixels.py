@@ -124,6 +124,7 @@ def run_simulation(input_filename,
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
+
     print("Random seed:", rand_seed)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
@@ -192,10 +193,24 @@ def run_simulation(input_filename,
             print("Input file does not have true vertices info")
             input_has_vertices = False
 
+        try:
+            genie_hdr = np.array(f['genie_hdr'])
+            input_has_genie_hdr = True
+        except KeyError:
+            print("Input file does not have GENIE event summary info")
+            input_has_genie_hdr = False
+
+        try:
+            genie_stack = np.array(f['genie_stack'])
+            input_has_genie_stack = True
+        except KeyError:
+            print("Input file does not have GENIE particle stack info")
+            input_has_genie_stack = False
+
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
-    
+
     RangePop()
     end_load = time()
     print(f" {end_load-start_load:.2f} s")
@@ -233,7 +248,7 @@ def run_simulation(input_filename,
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-        
+
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
         # in the input files, it is called 't'
@@ -250,13 +265,13 @@ def run_simulation(input_filename,
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
     if sim.IS_SPILL_SIM:
-        # "Reset" the spill period in the event time so t0 is wrt the spill start.
-        # This is to enable the use of the modules/methods "out-of-the-box" below.
+        # "Reset" the spill period so t0 is wrt the corresponding spill start time.
+        # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start']%sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end']%sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0']%sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -276,19 +291,25 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)['arr']
-        
+
         # clip LUT so that no voxel contains 0 visibility
         mask = lut['vis'] > 0
         lut['vis'][~mask] = lut['vis'][mask].min()
 
         lut = to_device(lut)
-        
+
         light_noise = cp.load(light_det_noise_filename)
-        
+
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
+
+    if sim.IS_SPILL_SIM:
+        # write the true timing structure to the file, not t0 wrt event time .....
+        tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
@@ -299,6 +320,18 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
+        if input_has_genie_hdr:
+            output_file.create_dataset("genie_hdr", data=genie_hdr)
+        if input_has_genie_stack:
+            output_file.create_dataset("genie_stack", data=genie_stack)
+
+    if sim.IS_SPILL_SIM:
+        # ..... even thought larnd-sim does expect t0 to be given with respect to
+        # the event time
+        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+
 
     # create a lookup table that maps between unique event ids and the segments in the file
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
@@ -328,7 +361,7 @@ def run_simulation(input_filename,
          - track_pixel_map: map from track to active pixels
          - unique_pix: all unique pixels (per track?)
          - current_fractions: fraction of charge associated with each true track
-        
+
          for the light simulation (in addition to all keys for the charge simulation)
          - light_event_id: event_id for each light trigger
          - light_start_time: simulation start time for event
@@ -373,7 +406,7 @@ def run_simulation(input_filename,
                            bad_channels=bad_channels) # defined earlier in script
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],
+            light_sim.export_to_hdf5(results['light_event_id'],rry, you can still create the pull req
                                      results['light_start_time'],
                                      results['light_trigger_idx'],
                                      results['light_op_channel_idx'],
@@ -403,6 +436,7 @@ def run_simulation(input_filename,
                 warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
                 
             selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
+
             RangePush("event_id_map")
             event_ids = selected_tracks[sim.EVENT_SEPARATOR]
             unique_eventIDs = np.unique(event_ids)
