@@ -53,10 +53,11 @@ edep2cm = 0.1   # convert to cm
 edep2us = 0.001 # convert to microseconds
 
 # Convert GENIE to common units
-gev2mev = 1000  # convert to MeV
+gev2mev  = 1000 # convert to MeV
+meter2cm = 100  # convert to cm
 
 # Needed for event kinematics calculation
-nucleon_mass = 938.272
+nucleon_mass = 938.272 # MeV
 beam_dir  = np.asarray([0.0, -0.05836, 1.0]) # -3.34 degrees in the y-direction
 beam_norm = np.linalg.norm(beam_dir)
 
@@ -267,8 +268,8 @@ def dump(input_file, output_file):
             trajectories[iTraj]["parentID"] = trajectory.GetParentId()
             trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
             trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
-            trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
-            trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
+            trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
+            trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
             trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() * edep2us
             trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() * edep2us
             trajectories[iTraj]["start_process"] = start_pt.GetProcess()
@@ -378,14 +379,14 @@ def dump(input_file, output_file):
         genie_hdr["isRES"] = "RES" in genie_str
         genie_hdr["isDIS"] = "DIS" in genie_str
         genie_hdr["isCOH"] = "COH" in genie_str
-        genie_hdr["vertex"] = np.array([genieTree.EvtVtx[0], genieTree.EvtVtx[1], genieTree.EvtVtx[2], genieTree.EvtVtx[3]])
+        genie_hdr["vertex"] = np.array([genieTree.EvtVtx[0], genieTree.EvtVtx[1], genieTree.EvtVtx[2], genieTree.EvtVtx[3]]) * meter2cm
         genie_hdr["target"] = int((target_pdg % 10000000) / 10000) #Extract Z value from PDG code
         genie_hdr["Enu"]  = nu_4mom[3]
         genie_hdr["nu_4mom"] = nu_4mom
         genie_hdr["nu_pdg"] = nu_pdg
         genie_hdr["Elep"] = lep_4mom[3]
-        genie_hdr["lep_mom"] = np.linalg.norm(lep_4mom[0:2])
-        genie_hdr["lep_ang"] = np.arccos(lep_4mom[0:2].dot(beam_dir) / (beam_norm * genie_hdr["plep"])) * (180.0 / np.pi)
+        genie_hdr["lep_mom"] = np.linalg.norm(lep_4mom[0:3])
+        genie_hdr["lep_ang"] = np.arccos(lep_4mom[0:3].dot(beam_dir) / (beam_norm * genie_hdr["lep_mom"])) * (180.0 / np.pi) # degrees
         genie_hdr["lep_pdg"] = lep_pdg
         genie_hdr["q0"]   = nu_4mom[3] - lep_4mom[3]
         genie_hdr["q3"]   = np.linalg.norm(nu_4mom[0:3] - lep_4mom[0:3])
