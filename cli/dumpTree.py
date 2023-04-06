@@ -233,8 +233,8 @@ def dump(input_file, output_file):
                 np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
                 np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
                 np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)),
-                np.concatenate(genie_hdr_list, axis=0) if genie_hdr_list else np.empty((0,)),
-                np.concatenate(genie_stack_list, axis=0) if genie_stack_list else np.empty((0,)))
+                np.concatenate(genie_stack_list, axis=0) if genie_stack_list else np.empty((0,)),
+                np.concatenate(genie_hdr_list, axis=0) if genie_hdr_list else np.empty((0,)))
 
             trajectories_list = list()
             segments_list = list()
@@ -373,7 +373,7 @@ def dump(input_file, output_file):
         #Create GENIE header/summary dataset
         genie_hdr = np.empty(1, dtype=genie_hdr_dtype)
         genie_hdr["eventID"] = event.EventId
-        genie_hdr["isCC"] = True if lep_pdg in [11, 13, 15] else False
+        genie_hdr["isCC"]  = "CC" in genie_str
         genie_hdr["isQES"] = "QES" in genie_str
         genie_hdr["isMEC"] = "MEC" in genie_str
         genie_hdr["isRES"] = "RES" in genie_str
