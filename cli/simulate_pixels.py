@@ -313,7 +313,13 @@ def run_simulation(input_filename,
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
+        # We previously called swap_coordinates(tracks), but we want to write
+        # all truth info in the edep-sim convention (z = beam coordinate). So
+        # temporarily undo the swap. It's easier than reorganizing the code!
+        swap_coordinates(tracks)
         output_file.create_dataset("tracks", data=tracks)
+        swap_coordinates(tracks)
+
         if light.LIGHT_SIMULATED:
             output_file.create_dataset('light_dat', data=light_sim_dat)
         if input_has_trajectories:
