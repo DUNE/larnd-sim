@@ -12,7 +12,7 @@ from .units import mm, cm, V, kV
 BATCH_SIZE = 10000    # units = track segments
 EVENT_BATCH_SIZE = 1  # units = N tpcs
 WRITE_BATCH_SIZE = 1  # units = N batches
-EVENT_SEPARATOR = 'spillID'  # 'spillID' or 'eventID'
+EVENT_SEPARATOR = 'vertexID'  # 'spillID' or 'vertexID'
 
 IS_SPILL_SIM = True
 SPILL_PERIOD = 1.2e6  # units = microseconds
