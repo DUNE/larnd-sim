@@ -318,6 +318,8 @@ def run_simulation(input_filename,
         # temporarily undo the swap. It's easier than reorganizing the code!
         swap_coordinates(tracks)
         output_file.create_dataset("tracks", data=tracks)
+        # To distinguish from the "old" files that had z=drift in 'tracks':
+        output_file['tracks'].attrs['zbeam'] = True
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
