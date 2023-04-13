@@ -349,7 +349,7 @@ def run_simulation(input_filename,
     # create a lookup table for event timestamps
     tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
     if sim.IS_SPILL_SIM:
-        event_times = cp.arange(tracks[sim.EVENT_SEPARATOR].max()+1) * sim.SPILL_PERIOD
+        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
     else:
         event_times = fee.gen_event_times(tot_evids.max()+1, 0)
 
