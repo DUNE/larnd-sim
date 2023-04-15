@@ -269,9 +269,10 @@ def run_simulation(input_filename,
         # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+        localSpillIDs = tracks['spillID'] - tracks[0]['spillID']
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -307,9 +308,9 @@ def run_simulation(input_filename,
 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
@@ -336,9 +337,9 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         # ..... even thought larnd-sim does expect t0 to be given with respect to
         # the event time
-        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
 
     # create a lookup table that maps between unique event ids and the segments in the file
