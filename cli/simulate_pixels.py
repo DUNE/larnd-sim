@@ -306,6 +306,16 @@ def run_simulation(input_filename,
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
+    # create a lookup table for event timestamps
+    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+    if sim.IS_SPILL_SIM:
+        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
+    else:
+        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
+
+    if input_has_vertices:
+        vertices['t_spill'] = event_times
+
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
         tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
@@ -347,12 +357,15 @@ def run_simulation(input_filename,
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
-    # create a lookup table for event timestamps
-    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
-    if sim.IS_SPILL_SIM:
-        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
-    else:
-        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
+#    # create a lookup table for event timestamps
+#    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+#    if sim.IS_SPILL_SIM:
+#        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
+#    else:
+#        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
+#    
+#    try:
+#        vertices['t_spill'] = event_times
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
