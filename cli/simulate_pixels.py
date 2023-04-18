@@ -313,8 +313,9 @@ def run_simulation(input_filename,
     else:
         event_times = fee.gen_event_times(tot_evids.max()+1, 0)
 
-    if input_has_vertices:
-        vertices['t_spill'] = event_times
+    if input_has_vertices and not sim.IS_SPILL_SIM:
+        uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
+        vertices['t_event'] = np.repeat(event_times.get(),counts) 
 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
@@ -356,16 +357,6 @@ def run_simulation(input_filename,
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
-#    # create a lookup table for event timestamps
-#    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
-#    if sim.IS_SPILL_SIM:
-#        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
-#    else:
-#        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
-#    
-#    try:
-#        vertices['t_spill'] = event_times
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
