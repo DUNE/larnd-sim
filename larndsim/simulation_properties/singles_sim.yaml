@@ -3,4 +3,4 @@ event_batch_size: 2          # tpcs
 write_batch_size: 1000       # batches
 is_spill_sim: 0              # boolean
 spill_period: 1.2e6          # microseconds
-event_separator: 'vertexID'  # 'spillID' or 'vertexID'
+event_separator: 'eventID'   # 'eventID'
