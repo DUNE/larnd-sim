@@ -87,6 +87,7 @@ def run_simulation(input_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npz',
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
+                   light_simulated=None,
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None,
@@ -237,6 +238,11 @@ def run_simulation(input_filename,
     segment_ids = segment_ids[active_tracks]
     end_mask = time()
     print(f" {end_mask-start_mask:.2f} s")
+
+    if light_simulated is not None:
+        light.LIGHT_SIMULATED = light_simulated
+
+    RangePush("run_simulation")
 
     # Set up light simulation data objects
     if light.LIGHT_SIMULATED:
