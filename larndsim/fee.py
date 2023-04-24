@@ -22,7 +22,7 @@ from .consts.units import mV, e
 from .consts import units
 
 #: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 10
+MAX_ADC_VALUES = 20
 #: Discrimination threshold in e-
 DISCRIMINATION_THRESHOLD = 7e3 * e
 #: ADC hold delay in clock cycles
@@ -309,7 +309,7 @@ def digitize(integral_list):
     """
     xp = cp.get_array_module(integral_list)
     adcs = xp.minimum(xp.around(xp.maximum((integral_list * GAIN + V_PEDESTAL - V_CM), 0)
-                                * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS)
+                                * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS-1)
 
     return adcs
 
@@ -425,8 +425,9 @@ def get_adc_values(pixels_signals,
                 for itrk in range(current_fractions.shape[2]):
                     tot_backtracked += current_fractions[ip][iadc][itrk]
 
-                for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] /= tot_backtracked
+                if tot_backtracked != 0:
+                    for itrk in range(current_fractions.shape[2]):
+                        current_fractions[ip][iadc][itrk] /= tot_backtracked
 
                 adc_list[ip][iadc] = adc
 
