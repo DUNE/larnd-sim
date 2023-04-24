@@ -138,6 +138,11 @@ def run_simulation(input_filename,
     print("Response file:", response_file)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
+    if save_memory:
+        print('Recording the process resource log:', save_memory)
+    else:
+        print('Memory resource log will not be recorded')
+
 
     RangePush("set_random_seed")
     cp.random.seed(SEED)

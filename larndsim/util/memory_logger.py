@@ -56,20 +56,22 @@ class memory_logger():
     def __init__(self, do_nothing=False):
         if self.__class__.lock:
             raise RuntimeError(f'Only one instance is allowed for {self.__class__.__name__}')
+        self.log=[]
+        self.log=[]
         self._do_nothing = bool(do_nothing)
+        self.data=dict()
         if self._do_nothing:
             return
         pynvml.nvmlInit()
         tracemalloc.start()
-        self.log=[]
-        self.data=dict()
         self._h = pynvml.nvmlDeviceGetHandleByIndex(0)
         self._t0=None
         self.__class__.lock = True
         
     def __del__(self):
-        self.__class__.lock = False
-        pynvml.nvmlShutdown()
+        if self.__class__.lock:
+            pynvml.nvmlShutdown()
+            self.__class__.lock=None
 
     def reset_log(self):
         if self._do_nothing: return
