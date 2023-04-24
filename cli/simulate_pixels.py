@@ -93,7 +93,6 @@ def run_simulation(input_filename,
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None,
-                   event_separator=DEFAULT_EVENT_SEPARATOR,
                    save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
@@ -118,7 +117,6 @@ def run_simulation(input_filename,
             (all tracks).
         pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
             to None.
-        event_separator: a string value used to define event separation
         save_memory: a string value, if non-empty, this is used as a filename to store memory 
             snapshot information
     """
