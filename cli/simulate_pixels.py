@@ -89,7 +89,8 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    bad_channels=None,
                    n_tracks=None,
-                   pixel_thresholds_file=None):
+                   pixel_thresholds_file=None,
+                   rand_seed=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -118,10 +119,13 @@ def run_simulation(input_filename,
 
     RangePush("run_simulation")
 
+    if not rand_seed: rand_seed = SEED
+
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
-    print("Random seed:", SEED)
+
+    print("Random seed:", rand_seed)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
     print("Simulation properties file:", simulation_properties)
@@ -131,9 +135,9 @@ def run_simulation(input_filename,
         print("Disabled channel list: ", bad_channels)
 
     RangePush("set_random_seed")
-    cp.random.seed(SEED)
+    cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
-    rng_states = maybe_create_rng_states(1024*256, seed=SEED)
+    rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
     RangePush("load_detector_properties")
@@ -189,10 +193,24 @@ def run_simulation(input_filename,
             print("Input file does not have true vertices info")
             input_has_vertices = False
 
+        try:
+            genie_hdr = np.array(f['genie_hdr'])
+            input_has_genie_hdr = True
+        except KeyError:
+            print("Input file does not have GENIE event summary info")
+            input_has_genie_hdr = False
+
+        try:
+            genie_stack = np.array(f['genie_stack'])
+            input_has_genie_stack = True
+        except KeyError:
+            print("Input file does not have GENIE particle stack info")
+            input_has_genie_stack = False
+
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
-    
+
     RangePop()
     end_load = time()
     print(f" {end_load-start_load:.2f} s")
@@ -230,7 +248,7 @@ def run_simulation(input_filename,
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-        
+
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
         # in the input files, it is called 't'
@@ -247,13 +265,14 @@ def run_simulation(input_filename,
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
     if sim.IS_SPILL_SIM:
-        # "Reset" the spill period in the event time so t0 is wrt the spill start.
-        # This is to enable the use of the modules/methods "out-of-the-box" below.
+        # "Reset" the spill period so t0 is wrt the corresponding spill start time.
+        # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start']%sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end']%sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0']%sim.SPILL_PERIOD
+        localSpillIDs = tracks['spillID'] - tracks[0]['spillID']
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
@@ -273,29 +292,55 @@ def run_simulation(input_filename,
         print("Calculating optical responses...", end="")
         start_light_time = time()
         lut = np.load(light_lut_filename)['arr']
-        
+
         # clip LUT so that no voxel contains 0 visibility
         mask = lut['vis'] > 0
         lut['vis'][~mask] = lut['vis'][mask].min()
 
         lut = to_device(lut)
-        
+
         light_noise = cp.load(light_det_noise_filename)
-        
+
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
         print(f" {time()-start_light_time:.2f} s")
 
+    if sim.IS_SPILL_SIM:
+        # write the true timing structure to the file, not t0 wrt event time .....
+        tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
+        # We previously called swap_coordinates(tracks), but we want to write
+        # all truth info in the edep-sim convention (z = beam coordinate). So
+        # temporarily undo the swap. It's easier than reorganizing the code!
+        swap_coordinates(tracks)
         output_file.create_dataset("tracks", data=tracks)
+        # To distinguish from the "old" files that had z=drift in 'tracks':
+        output_file['tracks'].attrs['zbeam'] = True
+        swap_coordinates(tracks)
+
         if light.LIGHT_SIMULATED:
             output_file.create_dataset('light_dat', data=light_sim_dat)
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
+        if input_has_genie_hdr:
+            output_file.create_dataset("genie_hdr", data=genie_hdr)
+        if input_has_genie_stack:
+            output_file.create_dataset("genie_stack", data=genie_stack)
+
+    if sim.IS_SPILL_SIM:
+        # ..... even thought larnd-sim does expect t0 to be given with respect to
+        # the event time
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
+
 
     # create a lookup table that maps between unique event ids and the segments in the file
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
@@ -305,7 +350,7 @@ def run_simulation(input_filename,
     # create a lookup table for event timestamps
     tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
     if sim.IS_SPILL_SIM:
-        event_times = cp.arange(tracks[sim.EVENT_SEPARATOR].max()+1) * sim.SPILL_PERIOD
+        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
     else:
         event_times = fee.gen_event_times(tot_evids.max()+1, 0)
 
@@ -325,7 +370,7 @@ def run_simulation(input_filename,
          - track_pixel_map: map from track to active pixels
          - unique_pix: all unique pixels (per track?)
          - current_fractions: fraction of charge associated with each true track
-        
+
          for the light simulation (in addition to all keys for the charge simulation)
          - light_event_id: event_id for each light trigger
          - light_start_time: simulation start time for event
@@ -400,6 +445,7 @@ def run_simulation(input_filename,
                 warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
                 
             selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
+
             RangePush("event_id_map")
             event_ids = selected_tracks[sim.EVENT_SEPARATOR]
             unique_eventIDs = np.unique(event_ids)
@@ -461,7 +507,7 @@ def run_simulation(input_filename,
             BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
             BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
@@ -510,7 +556,7 @@ def run_simulation(input_filename,
 
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
@@ -573,7 +619,7 @@ def run_simulation(input_filename,
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                     seed=SEED+ievd+itrk, rng_states=rng_states)
+                                                     seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
