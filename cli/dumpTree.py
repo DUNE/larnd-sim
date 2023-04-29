@@ -234,7 +234,7 @@ def dump(input_file, output_file):
 
         no_active_hits = True
         for containerName, hitSegments in event.SegmentDetectors:
-            if not containerName == 'volLArActive':
+            if not containerName == 'volLArActive' and not containerName == 'TPCActive_shape': # 2x2 and ND active volume respectively
                 continue
             no_active_hits = False
         if no_active_hits:
@@ -295,7 +295,7 @@ def dump(input_file, output_file):
         # Dump the segment containers
         #print("Number of segment containers:", event.SegmentDetectors.size())
         for containerName, hitSegments in event.SegmentDetectors:
-            if not containerName == 'volLArActive':
+            if not containerName == 'volLArActive' and not containerName == 'TPCActive_shape': # 2x2 and ND active volume respectively
                 continue
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
