@@ -103,6 +103,7 @@ def set_light_properties(detprop_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
+        LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
         MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',0)
 
         N_OP_CHANNEL = detprop['n_op_channel']
