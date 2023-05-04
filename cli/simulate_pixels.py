@@ -295,7 +295,7 @@ def run_simulation(input_filename,
         # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        localSpillIDs = tracks['eventID'] - tracks[0]['eventID']
+        localSpillIDs = tracks[sim.EVENT_SEPARATOR] - tracks[0][sim.EVENT_SEPARATOR]
         tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
