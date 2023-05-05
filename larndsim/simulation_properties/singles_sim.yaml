@@ -4,3 +4,4 @@ write_batch_size: 1000       # batches
 is_spill_sim: 0              # boolean
 spill_period: 1.2e6          # microseconds
 event_separator: 'eventID'   # 'eventID'
+max_events_per_file: 1000
