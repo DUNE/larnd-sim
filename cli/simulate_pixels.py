@@ -351,12 +351,20 @@ def run_simulation(input_filename,
     logger.start()
     logger.take_snapshot()
 
-    # create a lookup table for event timestamps
-    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+    # Create a lookup table for event timestamps.
+
+    # Event IDs may have some offset (e.g. to make them globally unique within
+    # an MC production), which we assume to be a multiple of
+    # sim.MAX_EVENTS_PER_FILE. We remove this offset by taking the modulus with
+    # sim.MAX_EVENTS_PER_FILE, which gives us zero-based "local" event IDs that
+    # we can use when indexing into event_times. Note that num_evids is actually
+    # an upper bound on the number of events, since there may be gaps due to
+    # events that didn't deposit any energy in the LAr. Such gaps are harmless.
+    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
     if sim.IS_SPILL_SIM:
-        event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
+        event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = fee.gen_event_times(len(tot_evids), 0)
+        event_times = fee.gen_event_times(num_evids, 0)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
         uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
@@ -437,7 +445,7 @@ def run_simulation(input_filename,
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
         uniq_events = cp.asnumpy(np.unique(results['event_id']))
-        uniq_event_times = cp.asnumpy(event_times[uniq_events])
+        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
