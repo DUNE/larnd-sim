@@ -21,6 +21,8 @@ from .pixels_from_track import id2pixel
 from .consts.units import mV, e
 from .consts import units
 
+#: Number of back-tracked segments to be recorded
+ASSOCIATION_COUNT_TO_STORE = 10
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 20
 #: Discrimination threshold in e-
@@ -141,7 +143,6 @@ def export_to_hdf5(event_id_list,
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
-    dtype = np.dtype([('track_ids', f'({track_ids.shape[1]},)i8'), ('fraction', f'({current_fractions.shape[2]},)f8')])
 
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
     packets = []
@@ -276,9 +277,33 @@ def export_to_hdf5(event_id_list,
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
+
+        dtype = np.dtype([('track_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
-        packets_mc_ds['track_ids'] = packets_mc
-        packets_mc_ds['fraction'] = packets_frac
+
+        # First, sort the back-tracking information by the magnitude of the fraction
+        packets_frac = np.array(packets_frac)
+        packets_mc   = np.array(packets_mc)
+        
+        frac_order = np.flip(np.argsort(np.abs(packets_frac),axis=1),axis=1)
+        ass_track_ids = np.take_along_axis(packets_mc,   frac_order, axis=1)
+        ass_fractions = np.take_along_axis(packets_frac, frac_order, axis=1)
+
+        # Second, only store the relevant portion.
+        if ass_track_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
+            packets_mc_ds['track_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
+            packets_mc_ds['fraction' ] = ass_fractions[:,:ASSOCIATION_COUNT_TO_STORE]
+        else:
+            num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
+            packets_mc_ds['track_ids'] = np.pad(ass_track_ids,
+                pad_width=((0,0),(0,num_to_pad)),
+                mode='constant',
+                constant_values=-1)
+            packets_mc_ds['fraction' ] = np.pad(ass_fractions,
+                pad_width=((0,0),(0,num_to_pad)),
+                mode='constant',
+                constant_values=0.)
 
         with h5py.File(filename, 'a') as f:
             if is_first_event:
@@ -425,9 +450,9 @@ def get_adc_values(pixels_signals,
                 for itrk in range(current_fractions.shape[2]):
                     tot_backtracked += current_fractions[ip][iadc][itrk]
 
-                if tot_backtracked != 0:
+                if q_sum > 0:
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] /= tot_backtracked
+                        current_fractions[ip][iadc][itrk] /= q_sum
 
                 adc_list[ip][iadc] = adc
 
