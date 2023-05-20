@@ -14,7 +14,7 @@ from .consts.detector import TPC_BORDERS, TIME_INTERVAL
 from .consts import detector
 from .pixels_from_track import id2pixel
 
-MAX_TRACKS_PER_PIXEL = 100
+MAX_TRACKS_PER_PIXEL = 20
 MIN_STEP_SIZE = 0.001 # cm
 MC_SAMPLE_MULTIPLIER = 1
 
