@@ -251,13 +251,14 @@ def run_simulation(input_filename,
     tracks = swap_coordinates(tracks)
 
     # Sub-select only segments in active volumes
-    print("Skipping non-active volumes..." , end="")
-    start_mask = time()
-    active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
-    tracks = tracks[active_tracks]
-    segment_ids = segment_ids[active_tracks]
-    end_mask = time()
-    print(f" {end_mask-start_mask:.2f} s")
+    if sim.IF_ACTIVE_VOLUME_CHECK:
+        print("Skipping non-active volumes..." , end="")
+        start_mask = time()
+        active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
+        tracks = tracks[active_tracks]
+        segment_ids = segment_ids[active_tracks]
+        end_mask = time()
+        print(f" {end_mask-start_mask:.2f} s")
 
     if light_simulated is not None:
         light.LIGHT_SIMULATED = light_simulated
