@@ -353,7 +353,11 @@ def run_simulation(input_filename,
     logger.take_snapshot()
 
     # create a lookup table for event timestamps
-    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+    if input_has_vertices:
+        tot_evids = np.unique(vertices[sim.EVENT_SEPARATOR])
+    else:
+        tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
+
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(len(tot_evids)) * sim.SPILL_PERIOD
     else:
