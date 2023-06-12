@@ -90,9 +90,9 @@ def run_simulation(input_filename,
                    bad_channels=None,
                    n_tracks=None,
                    pixel_thresholds_file=None,
+                   pixel_gains_file=None,
                    rand_seed=None,
-                   save_memory=None,
-                   pixel_gains_file=None):
+                   save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -116,11 +116,11 @@ def run_simulation(input_filename,
             (all tracks).
         pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
             to None.
+        pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
         rand_seed (int, optional): the random number generator seed that can be set through 
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
-        pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
     """
     start_simulation = time()
 
