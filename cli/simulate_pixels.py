@@ -646,7 +646,7 @@ def run_simulation(input_filename,
             # get list of adc values
             if pixel_gains_file is not None:
                 pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                gain_list = cp.tile(pixel_gains, (fee.MAX_ADC_VALUES, 1)).T # makes array the same size as integral_list
+                gain_list = pixel_gains[:, np.newaxis] * np.ones((1, MAX_ADC_VALUES)) # makes array the same shape as integral_list
                 adc_list = fee.digitize(integral_list, gain_list)
             else:
                 adc_list = fee.digitize(integral_list, fee.GAIN)
