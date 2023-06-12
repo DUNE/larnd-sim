@@ -11,7 +11,6 @@ MAX_MC_TRUTH_IDS = 0 #256
 MC_TRUTH_THRESHOLD = 0.1 # pe/us
 ENABLE_LUT_SMEARING = False
 
-LUT_VOX_DIV = np.zeros(0)
 N_OP_CHANNEL = 0
 LIGHT_SIMULATED = True
 OP_CHANNEL_EFFICIENCY = np.zeros(0)
@@ -72,7 +71,6 @@ def set_light_properties(detprop_file):
 
     """
     global MAX_MC_TRUTH_IDS
-    global LUT_VOX_DIV
     global N_OP_CHANNEL
     global LIGHT_SIMULATED
     global OP_CHANNEL_EFFICIENCY
@@ -82,11 +80,11 @@ def set_light_properties(detprop_file):
     global ENABLE_LUT_SMEARING
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
-    
+
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
-    
+
     global LIGHT_GAIN
     global SIPM_RESPONSE_MODEL
     global LIGHT_RESPONSE_TIME
@@ -105,12 +103,12 @@ def set_light_properties(detprop_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
+        LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
         MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',0)
-        
-        LUT_VOX_DIV = np.array(detprop['lut_vox_div'])
+
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
-        
+
         tpc_to_op_channel = detprop['tpc_to_op_channel']
         OP_CHANNEL_TO_TPC = np.zeros((N_OP_CHANNEL,), int)
         TPC_TO_OP_CHANNEL = np.zeros((len(tpc_to_op_channel), len(tpc_to_op_channel[0])), int)
@@ -123,11 +121,11 @@ def set_light_properties(detprop_file):
         LIGHT_TICK_SIZE = float(detprop.get('light_tick_size', LIGHT_TICK_SIZE))
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
-        
+
         SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
-        
+
         LIGHT_GAIN = np.array(detprop.get('light_gain', [DEFAULT_LIGHT_GAIN]))
         if LIGHT_GAIN.size == 1:
             LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
@@ -161,7 +159,7 @@ def set_light_properties(detprop_file):
         LIGHT_DIGIT_SAMPLE_SPACING = float(detprop.get('light_digit_sample_spacing', LIGHT_DIGIT_SAMPLE_SPACING))
         LIGHT_NBIT = int(detprop.get('light_nbit', LIGHT_NBIT))
 
-        
+
 
     except KeyError:
         LIGHT_SIMULATED = False
