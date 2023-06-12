@@ -649,7 +649,7 @@ def run_simulation(input_filename,
                 gain_list = pixel_gains[:, np.newaxis] * np.ones((1, MAX_ADC_VALUES)) # makes array the same shape as integral_list
                 adc_list = fee.digitize(integral_list, gain_list)
             else:
-                adc_list = fee.digitize(integral_list, fee.GAIN)
+                adc_list = fee.digitize(integral_list)
             
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
