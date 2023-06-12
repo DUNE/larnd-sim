@@ -177,7 +177,7 @@ def run_simulation(input_filename,
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
         print("Pixel thresholds file:", pixel_thresholds_file)
-        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 256)
+        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
     else:
         pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
@@ -185,7 +185,7 @@ def run_simulation(input_filename,
     RangePush("load_pixel_gains")
     if pixel_gains_file is not None:
         print("Pixel gains file:", pixel_gains_file)
-        pixel_gains_lut = CudaDict.load(pixel_gains_file, 256)
+        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
     RangePop()
     
     RangePush("load_hd5_file")
@@ -646,7 +646,7 @@ def run_simulation(input_filename,
             # get list of adc values
             if pixel_gains_file is not None:
                 pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                gain_list = pixel_gains[:, np.newaxis] * np.ones((1, MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
                 adc_list = fee.digitize(integral_list, gain_list)
             else:
                 adc_list = fee.digitize(integral_list)
