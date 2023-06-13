@@ -25,6 +25,8 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.util import CudaDict, batching, memory_logger
 
+import os
+
 SEED = int(time())
 
 LOGO = """
@@ -124,6 +126,12 @@ def run_simulation(input_filename,
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
     """
+    
+    if not os.path.exists(input_filename):
+        raise Exception(f'Input file {input_filename} does not exist.')
+    if os.path.exists(output_filename):
+        raise Exception(f'Output file {output_filename} already exists.')
+    
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
