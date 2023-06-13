@@ -231,8 +231,8 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
     Simulates Poisson fluctuations in the number of PE per time tick.
     
     Args:
-        light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
-        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, number PE in each time interval
+        light_sample_inc(array): shape `(ndet, ntick)`, effective photocurrent on each detector
+        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stocastic fluctuations)
         rng_states(array): shape `(>ndet*ntick,)`, random number states
     """
     idet,itick = cuda.grid(2)
@@ -240,8 +240,8 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
             if light_sample_inc[idet,itick] > 0:
-                light_sample_inc_disc[idet,itick] = 1. * xoroshiro128p_poisson_int32(
-                    light_sample_inc[idet,itick], rng_states, idet*light_sample_inc.shape[1] + itick)
+                light_sample_inc_disc[idet,itick] = 1. / LIGHT_TICK_SIZE * xoroshiro128p_poisson_int32(
+                    light_sample_inc[idet,itick] * LIGHT_TICK_SIZE, rng_states, idet*light_sample_inc.shape[1] + itick)
             else:
                 light_sample_inc_disc[idet,itick] = 0.
 

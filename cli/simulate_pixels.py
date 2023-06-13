@@ -23,7 +23,7 @@ from numba.core.errors import NumbaPerformanceWarning
 from tqdm import tqdm
 
 from larndsim import consts
-from larndsim.util import CudaDict, batching
+from larndsim.util import CudaDict, batching, memory_logger
 
 SEED = int(time())
 
@@ -79,6 +79,9 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
+
+
+
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -87,9 +90,12 @@ def run_simulation(input_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npz',
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
+                   light_simulated=None,
                    bad_channels=None,
                    n_tracks=None,
-                   pixel_thresholds_file=None):
+                   pixel_thresholds_file=None,
+                   rand_seed=None,
+                   save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -113,18 +119,25 @@ def run_simulation(input_filename,
             (all tracks).
         pixel_thresholds_file (str): path to npz file containing pixel thresholds. Defaults
             to None.
+        rand_seed (int, optional): the random number generator seed that can be set through 
+            a command-line
+        save_memory (string path, optional): if non-empty, this is used as a filename to 
+            store memory snapshot information
     """
+    logger = memory_logger(save_memory is None)
+    logger.start()
+    logger.take_snapshot()
     start_simulation = time()
 
     RangePush("run_simulation")
 
+    if not rand_seed: rand_seed = SEED
+
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
-    print("Random seed:", SEED)
-    print("Event batch size:", EVENT_BATCH_SIZE)
-    print("Batch size:", BATCH_SIZE)
-    print("Write batch size:", WRITE_BATCH_SIZE)
+
+    print("Random seed:", rand_seed)
     print("Pixel layout file:", pixel_layout)
     print("Detector properties file:", detector_properties)
     print("Simulation properties file:", simulation_properties)
@@ -132,11 +145,16 @@ def run_simulation(input_filename,
     print("Response file:", response_file)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
+    if save_memory:
+        print('Recording the process resource log:', save_memory)
+    else:
+        print('Memory resource log will not be recorded')
+
 
     RangePush("set_random_seed")
-    cp.random.seed(SEED)
+    cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
-    rng_states = maybe_create_rng_states(1024*256, seed=SEED)
+    rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
     RangePush("load_detector_properties")
@@ -212,6 +230,8 @@ def run_simulation(input_filename,
 
     RangePop()
     end_load = time()
+    logger.take_snapshot()
+    logger.archive('loading')
     print(f" {end_load-start_load:.2f} s")
 
     response = cp.load(response_file)
@@ -220,6 +240,8 @@ def run_simulation(input_filename,
     BPG = max(ceil(tracks.shape[0] / TPB),1)
 
     print("******************\nRUNNING SIMULATION\n******************")
+    logger.start()
+    logger.take_snapshot()
     # Reduce dataset if not all tracks to be simulated
     if n_tracks:
         tracks = tracks[:n_tracks]
@@ -229,13 +251,19 @@ def run_simulation(input_filename,
     tracks = swap_coordinates(tracks)
 
     # Sub-select only segments in active volumes
-    print("Skipping non-active volumes..." , end="")
-    start_mask = time()
-    active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
-    tracks = tracks[active_tracks]
-    segment_ids = segment_ids[active_tracks]
-    end_mask = time()
-    print(f" {end_mask-start_mask:.2f} s")
+    if sim.IF_ACTIVE_VOLUME_CHECK:
+        print("Skipping non-active volumes..." , end="")
+        start_mask = time()
+        active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
+        tracks = tracks[active_tracks]
+        segment_ids = segment_ids[active_tracks]
+        end_mask = time()
+        print(f" {end_mask-start_mask:.2f} s")
+
+    if light_simulated is not None:
+        light.LIGHT_SIMULATED = light_simulated
+
+    RangePush("run_simulation")
 
     # Set up light simulation data objects
     if light.LIGHT_SIMULATED:
@@ -268,27 +296,41 @@ def run_simulation(input_filename,
         # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+        localSpillIDs = tracks[sim.EVENT_SEPARATOR] - tracks[0][sim.EVENT_SEPARATOR]
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
+
+    logger.take_snapshot()
+    logger.archive('preparation')
 
     # We calculate the number of electrons after recombination (quenching module)
     # and the position and number of electrons after drifting (drifting module)
     print("Quenching electrons..." , end="")
+    logger.start()
+    logger.take_snapshot()
     start_quenching = time()
     quenching.quench[BPG,TPB](tracks, physics.BIRKS)
     end_quenching = time()
+    logger.take_snapshot()
+    logger.archive('quenching')
     print(f" {end_quenching-start_quenching:.2f} s")
 
     print("Drifting electrons...", end="")
     start_drifting = time()
+    logger.start()
+    logger.take_snapshot()
     drifting.drift[BPG,TPB](tracks)
     end_drifting = time()
+    logger.take_snapshot()
+    logger.archive('drifting')
     print(f" {end_drifting-start_drifting:.2f} s")
 
     if light.LIGHT_SIMULATED:
         print("Calculating optical responses...", end="")
         start_light_time = time()
+        logger.start()
+        logger.take_snapshot()
         lut = np.load(light_lut_filename)['arr']
 
         # clip LUT so that no voxel contains 0 visibility
@@ -302,17 +344,50 @@ def run_simulation(input_filename,
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
         lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
+        logger.take_snapshot()
+        logger.archive('light')
         print(f" {time()-start_light_time:.2f} s")
+
+    # Restart the memory logger for the electronics simulation loop
+    logger.start()
+    logger.take_snapshot()
+
+    # Create a lookup table for event timestamps.
+
+    # Event IDs may have some offset (e.g. to make them globally unique within
+    # an MC production), which we assume to be a multiple of
+    # sim.MAX_EVENTS_PER_FILE. We remove this offset by taking the modulus with
+    # sim.MAX_EVENTS_PER_FILE, which gives us zero-based "local" event IDs that
+    # we can use when indexing into event_times. Note that num_evids is actually
+    # an upper bound on the number of events, since there may be gaps due to
+    # events that didn't deposit any energy in the LAr. Such gaps are harmless.
+    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
+    if sim.IS_SPILL_SIM:
+        event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
+    else:
+        event_times = fee.gen_event_times(num_evids, 0)
+
+    if input_has_vertices and not sim.IS_SPILL_SIM:
+        uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
+        vertices['t_event'] = np.repeat(event_times.get(),counts) 
 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        tracks['t0_start'] = tracks['t0_start'] + tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] + tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] + tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
+        # We previously called swap_coordinates(tracks), but we want to write
+        # all truth info in the edep-sim convention (z = beam coordinate). So
+        # temporarily undo the swap. It's easier than reorganizing the code!
+        swap_coordinates(tracks)
         output_file.create_dataset("tracks", data=tracks)
+        # To distinguish from the "old" files that had z=drift in 'tracks':
+        output_file['tracks'].attrs['zbeam'] = True
+        swap_coordinates(tracks)
+
         if light.LIGHT_SIMULATED:
             output_file.create_dataset('light_dat', data=light_sim_dat)
         if input_has_trajectories:
@@ -327,22 +402,15 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         # ..... even thought larnd-sim does expect t0 to be given with respect to
         # the event time
-        tracks['t0_start'] = tracks['t0_start'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - tracks['spillID']*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - tracks['spillID']*sim.SPILL_PERIOD
+        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
 
     # create a lookup table that maps between unique event ids and the segments in the file
     track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
     # copy to device
     track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
-    # create a lookup table for event timestamps
-    tot_evids = np.unique(tracks[sim.EVENT_SEPARATOR])
-    if sim.IS_SPILL_SIM:
-        event_times = cp.arange(tracks[sim.EVENT_SEPARATOR].max()+1) * sim.SPILL_PERIOD
-    else:
-        event_times = fee.gen_event_times(tot_evids.max()+1, 0)
 
     # We divide the sample in portions that can be processed by the GPU
     step = 1
@@ -378,7 +446,7 @@ def run_simulation(input_filename,
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
         uniq_events = cp.asnumpy(np.unique(results['event_id']))
-        uniq_event_times = cp.asnumpy(event_times[uniq_events])
+        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
@@ -405,7 +473,7 @@ def run_simulation(input_filename,
                            bad_channels=bad_channels) # defined earlier in script
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],rry, you can still create the pull req
+            light_sim.export_to_hdf5(results['light_event_id'],
                                      results['light_start_time'],
                                      results['light_trigger_idx'],
                                      results['light_op_channel_idx'],
@@ -418,7 +486,13 @@ def run_simulation(input_filename,
 
         return event_times[-1]
 
+    logger.take_snapshot()
+    logger.archive('preparation2')
+
+
     last_time = 0
+    logger.start()
+    logger.take_snapshot([0])
     for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                            desc='Simulating batches...', ncols=80, smoothing=0):
         # grab only tracks from current batch
@@ -497,7 +571,7 @@ def run_simulation(input_filename,
             BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
             BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
             BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
             RangePop()
 
@@ -546,7 +620,7 @@ def run_simulation(input_filename,
 
             TPB = 128
             BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=SEED+ievd+itrk, rng_states=rng_states)
+            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
@@ -609,7 +683,7 @@ def run_simulation(input_filename,
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                     seed=SEED+ievd+itrk, rng_states=rng_states)
+                                                     seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
@@ -651,9 +725,13 @@ def run_simulation(input_filename,
             last_time = save_results(event_times, is_first_event=last_time==0, results=results_acc)
             results_acc = defaultdict(list)
 
+        logger.take_snapshot([len(logger.log)])
+
     # Always save results after last iteration
     if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
         save_results(event_times, is_first_event=last_time==0, results=results_acc)
+
+    logger.take_snapshot([len(logger.log)])
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():
@@ -663,7 +741,10 @@ def run_simulation(input_filename,
 
     RangePop()
     end_simulation = time()
+    logger.take_snapshot([len(logger.log)])
     print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
+    logger.archive('loop',['loop'])
+    logger.store(save_memory)
 
 if __name__ == "__main__":
     fire.Fire(run_simulation)
