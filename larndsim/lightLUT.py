@@ -8,18 +8,19 @@ import numba as nb
 from numba import cuda
 
 from .consts import light
-from .consts.light import LUT_VOX_DIV, OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
+from .consts.light import OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
 from .consts.detector import TPC_BORDERS
 from .consts import units, detector
 
 @nb.njit
-def get_voxel(pos, itpc):
+def get_voxel(pos, itpc, lut_vox_div):
     """
     Finds and returns the indices of the voxel in which the edep occurs.
 
     Args:
         pos (tuple): x, y, z coordinates within a generic TPC volume
         itpc (int): index of the tpc corresponding to this position (calculated in drift)
+        lut_vox_div (tuple): number of lut voxels in x,y,z direction
     Returns:
         tuple: indices (in x, y, z dimensions) of the voxel containing the input position
     """
@@ -46,14 +47,14 @@ def get_voxel(pos, itpc):
     # based on the fractional dstance the event takes place in the volume
     # for the x, y, and z dimensions
     if is_even:
-        i = int((pos[0] - x_min)/(x_max - x_min) * LUT_VOX_DIV[0])
+        i = int((pos[0] - x_min)/(x_max - x_min) * lut_vox_div[0])
     else:
         # if is_even, is false we measure i from the xMax side
         # rather than the xMin side as means of rotating the x component
-        i = int((x_max - pos[0])/(x_max - x_min) * LUT_VOX_DIV[0])
+        i = int((x_max - pos[0])/(x_max - x_min) * lut_vox_div[0])
 
-    j = int((y_max - pos[1])/(y_max - y_min) * LUT_VOX_DIV[1])
-    k = int((pos[2] - z_min)/(z_max - z_min) * LUT_VOX_DIV[2])
+    j = int((y_max - pos[1])/(y_max - y_min) * lut_vox_div[1])
+    k = int((pos[2] - z_min)/(z_max - z_min) * lut_vox_div[2])
 
     return i, j, k
 
@@ -92,14 +93,15 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
         if itpc != detector.DEFAULT_PLANE_INDEX:
 
             # Voxel containing LUT position
-            i_voxel = get_voxel(pos, itpc)
+            lut_vox_div = lut.shape[:-1]
+            i_voxel = get_voxel(pos, itpc,lut_vox_div)
             voxel[itrk,0] = i_voxel[0]
             voxel[itrk,1] = i_voxel[1]
             voxel[itrk,2] = i_voxel[2]
 
             # Calls data from voxel
             lut_vox = lut[i_voxel[0], i_voxel[1], i_voxel[2]]
-            
+
             # Calls visibility data for the voxel
             vis_dat = lut_vox['vis']
 
@@ -110,7 +112,7 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
             for output_i in range(light.N_OP_CHANNEL):
                 op_channel_index = output_i
                 lut_index = output_i % vis_dat.shape[0]
-            
+
                 eff = OP_CHANNEL_EFFICIENCY[output_i]
                 vis = vis_dat[lut_index] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
                 t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
