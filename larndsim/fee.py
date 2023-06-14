@@ -116,7 +116,7 @@ def export_to_hdf5(event_id_list,
                    track_ids,
                    filename,
                    event_start_times,
-                   is_first_event,
+                   is_first_batch,
                    light_trigger_times=None,
                    light_trigger_event_id=None,
                    light_trigger_modules=None,
@@ -134,7 +134,7 @@ def export_to_hdf5(event_id_list,
             to each pixel
         filename (str): filename of HDF5 output file
         event_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
-        is_first_event (bool): `True` if this is the first event to save to the file
+        is_first_batch (bool): `True` if this is the first batch to save to the file
         light_trigger_times (array): 1D array of light trigger timestamps (relative to event t0) [in microseconds]
         light_trigger_event_id (array): 1D array of event id for each light trigger
         light_trigger_modules (array): 1D array of module id for each light trigger
@@ -149,7 +149,7 @@ def export_to_hdf5(event_id_list,
     packets_mc = []
     packets_frac = []
 
-    if is_first_event:
+    if is_first_batch:
         for io_group in io_groups:
             packets.append(TimestampPacket(timestamp=0))
             packets[-1].chip_key = Key(io_group,0,0)
@@ -306,7 +306,7 @@ def export_to_hdf5(event_id_list,
                 constant_values=0.)
 
         with h5py.File(filename, 'a') as f:
-            if is_first_event:
+            if is_first_batch:
                 f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
