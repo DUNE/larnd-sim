@@ -368,6 +368,14 @@ def run_simulation(input_filename,
         event_times = fee.gen_event_times(num_evids, 0)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
+        # create "t_event" in vertices dataset in case it doesn't exist
+        if 't_event' not in vertices.dtype.names:
+            dtype = vertices.dtype.descr
+            dtype = [("t_event","f4")] + dtype
+            new_vertices = np.empty(vertices.shape, dtype=np.dtype(dtype, align=True))
+            for field in dtype[1:]:
+                new_vertices[field[0]] = vertices[field[0]]
+            vertices = new_vertices
         uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
         vertices['t_event'] = np.repeat(event_times.get(),counts) 
 

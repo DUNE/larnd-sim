@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
 from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
 from .consts import units as units
@@ -34,7 +34,7 @@ def get_nticks(light_incidence):
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
     mask = light_incidence['n_photons_det'] > 0
-    if np.any(mask):
+    if np.any(mask) and not LIGHT_TRIG_MODE == 1:
         start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
         end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
         return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
@@ -433,7 +433,10 @@ def get_triggers(signal, group_threshold, op_channel_idx):
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
-            next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+            if last_trigger == 0 and LIGHT_TRIG_MODE == 1:
+                next_idx = cp.asarray(0)
+            else:
+                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
             op_channel_idx_list.append(op_channels)
