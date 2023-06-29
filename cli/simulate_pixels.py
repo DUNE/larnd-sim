@@ -186,8 +186,10 @@ def run_simulation(input_filename,
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
-        if 'segment_id' in tracks.dtype.names:
-            segment_ids = tracks['segment_id']
+        if 'segmentID' in tracks.dtype.names:
+            segment_ids = tracks['segmentID']
+        elif 'segment_id' in tracks.dtype.names:
+            segment_ids = tracks['segmentID']
         else:
             dtype = tracks.dtype.descr
             dtype = [('segment_id','u4')] + dtype
@@ -391,9 +393,9 @@ def run_simulation(input_filename,
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
         swap_coordinates(tracks)
-        output_file.create_dataset("tracks", data=tracks)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=tracks)
         # To distinguish from the "old" files that had z=drift in 'tracks':
-        output_file['tracks'].attrs['zbeam'] = True
+        output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
