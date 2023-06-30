@@ -23,7 +23,7 @@ class TPCBatcher(TrackSegmentBatcher):
         self.tpc_batch_size = tpc_batch_size
         self.tpc_borders = np.sort(tpc_borders, axis=-1)
         
-        self._simulated = np.zeros_like(self.track_seg['trajID'], dtype=bool)
+        self._simulated = np.zeros_like(self.track_seg['traj_id'], dtype=bool)
         self._events = np.unique(self.track_seg[self.EVENT_SEPARATOR])
         self._curr_event = 0
         self._curr_tpc = 0
