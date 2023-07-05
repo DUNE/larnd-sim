@@ -211,18 +211,18 @@ def run_simulation(input_filename,
             input_has_vertices = False
 
         try:
-            genie_hdr = np.array(f['genie_hdr'])
-            input_has_genie_hdr = True
+            mc_hdr = np.array(f['mc_hdr'])
+            input_has_mc_hdr = True
         except KeyError:
-            print("Input file does not have GENIE event summary info")
-            input_has_genie_hdr = False
+            print("Input file does not have MC event summary info")
+            input_has_mc_hdr = False
 
         try:
-            genie_stack = np.array(f['genie_stack'])
-            input_has_genie_stack = True
+            mc_stack = np.array(f['mc_stack'])
+            input_has_mc_stack = True
         except KeyError:
-            print("Input file does not have GENIE particle stack info")
-            input_has_genie_stack = False
+            print("Input file does not have MC particle stack info")
+            input_has_mc_stack = False
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -376,7 +376,7 @@ def run_simulation(input_filename,
             for field in dtype[1:]:
                 new_vertices[field[0]] = vertices[field[0]]
             vertices = new_vertices
-        uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
+        uniq_ev, counts = np.unique(vertices['event_id'], return_counts=True)
         vertices['t_event'] = np.repeat(event_times.get(),counts) 
 
     if sim.IS_SPILL_SIM:
@@ -391,9 +391,9 @@ def run_simulation(input_filename,
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
         swap_coordinates(tracks)
-        output_file.create_dataset("tracks", data=tracks)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=tracks)
         # To distinguish from the "old" files that had z=drift in 'tracks':
-        output_file['tracks'].attrs['zbeam'] = True
+        output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
@@ -402,10 +402,10 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
-        if input_has_genie_hdr:
-            output_file.create_dataset("genie_hdr", data=genie_hdr)
-        if input_has_genie_stack:
-            output_file.create_dataset("genie_stack", data=genie_stack)
+        if input_has_mc_hdr:
+            output_file.create_dataset("mc_hdr", data=mc_hdr)
+        if input_has_mc_stack:
+            output_file.create_dataset("mc_stack", data=mc_stack)
 
     if sim.IS_SPILL_SIM:
         # ..... even thought larnd-sim does expect t0 to be given with respect to
