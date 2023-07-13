@@ -248,7 +248,7 @@ def export_to_hdf5(event_id_list,
                 try:
                     io_group_io_channel = detector.TILE_CHIP_TO_IO[tile_id][chip]
                 except KeyError:
-                    logger.info(f"Chip {chip} on tile {tile_id} not found")
+                    logger.warning(f"Chip {chip} on tile {tile_id} not found")
                     continue
 
                 io_group, io_channel = io_group_io_channel // 1000, io_group_io_channel % 1000
