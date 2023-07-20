@@ -373,10 +373,10 @@ def gen_light_detector_noise(shape, light_det_noise):
     noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
     if shape[1] < 2:
         # special case where inverse FFT does not exist - just generate one sample
-        noise = cp.real(noise)
+        noise = cp.round(cp.real(noise)) * 2**(16-LIGHT_NBIT)
     else:
         # invert FFT to create a noise waveform
-        noise = cp.fft.irfft(noise, axis=-1)
+        noise = cp.round(cp.fft.irfft(noise, axis=-1)) * 2**(16-LIGHT_NBIT)
 
     if noise.shape[1] < shape[1]:
         # FFT must have even samples, so append 0 if an odd number of samples is requested
