@@ -487,7 +487,8 @@ def run_simulation(input_filename,
                                      results['light_op_channel_idx'],
                                      results['light_waveforms'],
                                      output_filename,
-                                     cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
+                                     #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
+                                     uniq_event_times,
                                      results['light_waveforms_true_track_id'],
                                      results['light_waveforms_true_photons'])
 
