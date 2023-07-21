@@ -477,7 +477,6 @@ def run_simulation(input_filename,
                            output_filename, # defined earlier in script
                            uniq_event_times,
                            is_first_event=is_first_event,
-                           light_trigger_types=results['trigger_type'],
                            light_trigger_times=light_trigger_times,
                            light_trigger_event_id=light_trigger_event_ids,
                            light_trigger_modules=light_trigger_modules,
