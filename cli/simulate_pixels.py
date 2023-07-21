@@ -458,6 +458,8 @@ def run_simulation(input_filename,
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if detector.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type']+1)
             light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
             light_trigger_event_ids = results['light_event_id']
         else:
@@ -475,6 +477,7 @@ def run_simulation(input_filename,
                            output_filename, # defined earlier in script
                            uniq_event_times,
                            is_first_event=is_first_event,
+                           light_trigger_types=results['trigger_type'],
                            light_trigger_times=light_trigger_times,
                            light_trigger_event_id=light_trigger_event_ids,
                            light_trigger_modules=light_trigger_modules,
@@ -710,7 +713,7 @@ def run_simulation(input_filename,
                 light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                trigger_idx, trigger_op_channel_idx = light_sim.get_triggers(light_response, light_threshold, op_channel)
+                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
@@ -725,6 +728,7 @@ def run_simulation(input_filename,
                 results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
                 results_acc['light_trigger_idx'].append(trigger_idx)
+                results_acc['trigger_type'].append(trigger_type)
                 results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
                 results_acc['light_waveforms'].append(light_digit_signal)
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
