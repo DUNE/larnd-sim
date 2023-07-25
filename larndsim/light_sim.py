@@ -431,23 +431,25 @@ def get_triggers(signal, group_threshold, op_channel_idx):
         op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
         #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
         module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
-
         last_trigger = 0
-        while cp.any(module_above_thresh):
-            # find next time signal goes above threshold
-            if last_trigger == 0 and LIGHT_TRIG_MODE == 1:
-                next_idx = cp.asarray(0)
-                next_trig_type = cp.asarray(1)
-            else:
-                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
-                next_trig_type = cp.asarray(0)
-            # keep track of trigger time
+        if LIGHT_TRIG_MODE == 1:
+            next_idx = cp.asarray(0)
+            next_trig_type = cp.asarray(1)
             trigger_idx_list.append(next_idx)
             trigger_type_list.append(next_trig_type)
             op_channel_idx_list.append(op_channels)
-            # ignore samples during digitization window
-            module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
-            last_trigger = next_idx + digit_ticks
+        else: 
+            while cp.any(module_above_thresh):
+                # find next time signal goes above threshold
+                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+                next_trig_type = cp.asarray(0)
+                # keep track of trigger time
+                trigger_idx_list.append(next_idx)
+                trigger_type_list.append(next_trig_type)
+                op_channel_idx_list.append(op_channels)
+                # ignore samples during digitization window
+                module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
+                last_trigger = next_idx + digit_ticks
 
     if len(trigger_idx_list):
         return cp.array(trigger_idx_list), cp.array(op_channel_idx_list), cp.array(trigger_type_list)
