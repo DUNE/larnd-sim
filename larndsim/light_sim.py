@@ -397,6 +397,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     Returns:
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
     """
+    
     shape = signal.shape
     # sum over all signals on a single detector (shape: (ndet, nticks) -> (ngrp, ndetpergrp, nticks) -> (ngrp, 1, nticks))
     signal_sum = signal.reshape(shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, shape[-1]).sum(axis=1, keepdims=True)
@@ -422,6 +423,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     
     trigger_idx_list = []
     op_channel_idx_list = []
+    trigger_type_list = [] # 0 --> threshold, # 1 --> beam
     # treat each module independently
     for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
         # get active channels for the module
@@ -435,18 +437,22 @@ def get_triggers(signal, group_threshold, op_channel_idx):
             # find next time signal goes above threshold
             if last_trigger == 0 and LIGHT_TRIG_MODE == 1:
                 next_idx = cp.asarray(0)
+                next_trig_type = cp.asarray(1)
             else:
                 next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+                next_trig_type = cp.asarray(0)
+                print("seondary trigger")
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
+            trigger_type_list.append(next_trig_type)
             op_channel_idx_list.append(op_channels)
             # ignore samples during digitization window
             module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
             last_trigger = next_idx + digit_ticks
 
     if len(trigger_idx_list):
-        return cp.array(trigger_idx_list), cp.array(op_channel_idx_list)
-    return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int)
+        return cp.array(trigger_idx_list), cp.array(op_channel_idx_list), cp.array(trigger_type_list)
+    return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int), cp.empty((0,), dtype=int)
 
 
 @cuda.jit
