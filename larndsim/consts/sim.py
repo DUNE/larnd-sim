@@ -12,12 +12,12 @@ from .units import mm, cm, V, kV
 BATCH_SIZE = 10000    # units = track segments
 EVENT_BATCH_SIZE = 1  # units = N tpcs
 WRITE_BATCH_SIZE = 1  # units = N batches
-EVENT_SEPARATOR = 'vertexID'  # 'spillID' or 'vertexID'
+EVENT_SEPARATOR = 'event_id'  # 'spillID' or 'vertexID'
 
 IS_SPILL_SIM = True
 IF_ACTIVE_VOLUME_CHECK = False
 SPILL_PERIOD = 1.2e6  # units = microseconds
-TRACKS_DSET_NAME = 'tracks'
+TRACKS_DSET_NAME = 'segments'
 
 # We mod event IDs by MAX_EVENTS_PER_FILE to get zero-based IDs for indexing
 # purposes; see comments in simulate_pixels.py
