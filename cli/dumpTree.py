@@ -14,11 +14,11 @@ import glob
 from ROOT import TG4Event, TFile, TMap
 
 # Output array datatypes
-segments_dtype = np.dtype([("eventID","u4"),("vertexID", "u8"), ("segment_id", "u4"),
-                           ("z_end", "f4"),("trackID", "u4"), ("tran_diff", "f4"),
+segments_dtype = np.dtype([("event_id","u4"),("vertex_id", "u8"), ("segment_id", "u4"),
+                           ("z_end", "f4"),("traj_id", "u4"), ("tran_diff", "f4"),
                            ("z_start", "f4"), ("x_end", "f4"),
                            ("y_end", "f4"), ("n_electrons", "u4"),
-                           ("pdgId", "i4"), ("x_start", "f4"),
+                           ("pdg_id", "i4"), ("x_start", "f4"),
                            ("y_start", "f4"), ("t_start", "f4"),
                            ("t0_start", "f8"), ("t0_end", "f8"), ("t0", "f8"),
                            ("dx", "f4"), ("long_diff", "f4"),
@@ -27,17 +27,17 @@ segments_dtype = np.dtype([("eventID","u4"),("vertexID", "u8"), ("segment_id", "
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
                            ("n_photons","f4")], align=True)
 
-trajectories_dtype = np.dtype([("eventID","u4"), ("vertexID", "u8"),
-                               ("trackID", "u4"), ("local_trackID", "u4"), ("parentID", "i4"),
+trajectories_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"),
+                               ("traj_id", "u4"), ("local_traj_id", "u4"), ("parent_id", "i4"),
                                ("pxyz_start", "f4", (3,)),
                                ("xyz_start", "f4", (3,)), ("t_start", "f4"),
                                ("pxyz_end", "f4", (3,)),
                                ("xyz_end", "f4", (3,)), ("t_end", "f4"),
-                               ("pdgId", "i4"), ("start_process", "u4"),
+                               ("pdg_id", "i4"), ("start_process", "u4"),
                                ("start_subprocess", "u4"), ("end_process", "u4"),
                                ("end_subprocess", "u4")], align=True)
 
-vertices_dtype = np.dtype([("eventID","u4"), ("vertexID","u8"),
+vertices_dtype = np.dtype([("event_id","u4"), ("vertex_id","u8"),
                            ("x_vert","f4"), ("y_vert","f4"), ("z_vert","f4"),
                            ("t_vert","f4"), ("t_event","f4")], align=True)
 
@@ -249,8 +249,8 @@ def dump(input_file, output_file):
         vertices = np.empty(len(event.Primaries), dtype=vertices_dtype)
         for iVtx, primaryVertex in enumerate(event.Primaries):
             #printPrimaryVertex("PP", primaryVertex)
-            vertices[iVtx]["eventID"] = event.EventId
-            vertices[iVtx]["vertexID"] = iVtx
+            vertices[iVtx]["event_id"] = event.EventId
+            vertices[iVtx]["vertex_id"] = iVtx
             vertices[iVtx]["x_vert"] = primaryVertex.GetPosition().X() * edep2cm
             vertices[iVtx]["y_vert"] = primaryVertex.GetPosition().Y() * edep2cm
             vertices[iVtx]["z_vert"] = primaryVertex.GetPosition().Z() * edep2cm
@@ -270,12 +270,12 @@ def dump(input_file, output_file):
             trackMap[trajectory.GetTrackId()] = fileTrackID
 
             start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
-            trajectories[iTraj]["eventID"] = event.EventId
-            trajectories[iTraj]["vertexID"] = globalVertexID
+            trajectories[iTraj]["event_id"] = event.EventId
+            trajectories[iTraj]["vertex_id"] = globalVertexID
 
-            trajectories[iTraj]["trackID"] = fileTrackID
-            trajectories[iTraj]["local_trackID"] = trajectory.GetTrackId()
-            trajectories[iTraj]["parentID"] = -1 if trajectory.GetParentId() == -1 \
+            trajectories[iTraj]["traj_id"] = fileTrackID
+            trajectories[iTraj]["local_traj_id"] = trajectory.GetTrackId()
+            trajectories[iTraj]["parent_id"] = -1 if trajectory.GetParentId() == -1 \
                 else trackMap[trajectory.GetParentId()]
 
             trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
@@ -288,7 +288,7 @@ def dump(input_file, output_file):
             trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
             trajectories[iTraj]["end_process"] = end_pt.GetProcess()
             trajectories[iTraj]["end_subprocess"] = end_pt.GetSubprocess()
-            trajectories[iTraj]["pdgId"] = trajectory.GetPDGCode()
+            trajectories[iTraj]["pdg_id"] = trajectory.GetPDGCode()
 
         trajectories_list.append(trajectories)
 
@@ -299,12 +299,12 @@ def dump(input_file, output_file):
                 continue
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
-                segment[iHit]["eventID"] = event.EventId
-                segment[iHit]["vertexID"] = globalVertexID
+                segment[iHit]["event_id"] = event.EventId
+                segment[iHit]["vertex_id"] = globalVertexID
                 segment[iHit]["segment_id"] = segment_id
                 segment_id += 1
                 try:
-                    segment[iHit]["trackID"] = trackMap[hitSegment.Contrib[0]]
+                    segment[iHit]["traj_id"] = trackMap[hitSegment.Contrib[0]]
                 except IndexError as e:
                     print(e)
                     print("iHit:",iHit)
@@ -333,7 +333,7 @@ def dump(input_file, output_file):
                 segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
                 segment[iHit]["t"] = 0
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
-                segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
+                segment[iHit]["pdg_id"] = trajectories[hitSegment.Contrib[0]]["pdg_id"]
                 segment[iHit]["n_electrons"] = 0
                 segment[iHit]["long_diff"] = 0
                 segment[iHit]["tran_diff"] = 0
