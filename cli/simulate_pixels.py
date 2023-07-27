@@ -453,7 +453,7 @@ def run_simulation(input_filename,
         for key in list(results.keys()):
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
-        uniq_events = cp.asnumpy(np.unique(results[sim.EVENT_SEPARATOR]))
+        uniq_events = cp.asnumpy(np.unique(results['event_id']))
         uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
@@ -468,7 +468,7 @@ def run_simulation(input_filename,
             light_trigger_times = np.zeros_like(uniq_event_times)
             light_trigger_event_ids = uniq_events
 
-        fee.export_to_hdf5(results[sim.EVENT_SEPARATOR],
+        fee.export_to_hdf5(results['event_id'],
                            results['adc_tot'],
                            results['adc_tot_ticks'],
                            results['unique_pix'],
@@ -650,7 +650,7 @@ def run_simulation(input_filename,
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
 
-            results_acc[sim.EVENT_SEPARATOR].append(adc_event_ids)
+            results_acc['event_id'].append(adc_event_ids)
             results_acc['adc_tot'].append(adc_list)
             results_acc['adc_tot_ticks'].append(adc_ticks_list)
             results_acc['unique_pix'].append(unique_pix)
@@ -733,14 +733,14 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
         
-        if len(results_acc[sim.EVENT_SEPARATOR]) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc[sim.EVENT_SEPARATOR], axis=0)) > 0:
+        if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             last_time = save_results(event_times, is_first_event=last_time==0, results=results_acc)
             results_acc = defaultdict(list)
 
         logger.take_snapshot([len(logger.log)])
 
     # Always save results after last iteration
-    if len(results_acc[sim.EVENT_SEPARATOR]) >0 and len(np.concatenate(results_acc[sim.EVENT_SEPARATOR], axis=0)) > 0:
+    if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
         save_results(event_times, is_first_event=last_time==0, results=results_acc)
 
     logger.take_snapshot([len(logger.log)])
