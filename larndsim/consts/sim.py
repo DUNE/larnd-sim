@@ -17,6 +17,7 @@ EVENT_SEPARATOR = 'vertexID'  # 'spillID' or 'vertexID'
 IS_SPILL_SIM = True
 IF_ACTIVE_VOLUME_CHECK = False
 SPILL_PERIOD = 1.2e6  # units = microseconds
+TRACKS_DSET_NAME = 'tracks'
 
 # We mod event IDs by MAX_EVENTS_PER_FILE to get zero-based IDs for indexing
 # purposes; see comments in simulate_pixels.py
@@ -41,7 +42,7 @@ def set_simulation_properties(simprop_file):
     global IF_ACTIVE_VOLUME_CHECK
     global SPILL_PERIOD
     global MAX_EVENTS_PER_FILE
-    
+    global TRACKS_DSET_NAME
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -54,3 +55,4 @@ def set_simulation_properties(simprop_file):
     IF_ACTIVE_VOLUME_CHECK = simprop['if_active_volume_check']
     SPILL_PERIOD = float(simprop['spill_period'])
     MAX_EVENTS_PER_FILE = simprop['max_events_per_file']
+    TRACKS_DSET_NAME = simprop['tracks_dset_name']

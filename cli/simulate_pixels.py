@@ -25,6 +25,8 @@ from tqdm import tqdm
 from larndsim import consts
 from larndsim.util import CudaDict, batching, memory_logger
 
+import os
+
 SEED = int(time())
 
 LOGO = """
@@ -124,6 +126,12 @@ def run_simulation(input_filename,
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
     """
+    
+    if not os.path.exists(input_filename):
+        raise Exception(f'Input file {input_filename} does not exist.')
+    if os.path.exists(output_filename):
+        raise Exception(f'Output file {output_filename} already exists.')
+    
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -211,18 +219,18 @@ def run_simulation(input_filename,
             input_has_vertices = False
 
         try:
-            genie_hdr = np.array(f['genie_hdr'])
-            input_has_genie_hdr = True
+            mc_hdr = np.array(f['mc_hdr'])
+            input_has_mc_hdr = True
         except KeyError:
-            print("Input file does not have GENIE event summary info")
-            input_has_genie_hdr = False
+            print("Input file does not have MC event summary info")
+            input_has_mc_hdr = False
 
         try:
-            genie_stack = np.array(f['genie_stack'])
-            input_has_genie_stack = True
+            mc_stack = np.array(f['mc_stack'])
+            input_has_mc_stack = True
         except KeyError:
-            print("Input file does not have GENIE particle stack info")
-            input_has_genie_stack = False
+            print("Input file does not have MC particle stack info")
+            input_has_mc_stack = False
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
@@ -308,7 +316,7 @@ def run_simulation(input_filename,
         # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        localSpillIDs = tracks[sim.EVENT_SEPARATOR] - tracks[0][sim.EVENT_SEPARATOR]
+        localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
         tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
@@ -380,7 +388,15 @@ def run_simulation(input_filename,
         event_times = fee.gen_event_times(num_evids, 0)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
-        uniq_ev, counts = np.unique(vertices['eventID'], return_counts=True)
+        # create "t_event" in vertices dataset in case it doesn't exist
+        if 't_event' not in vertices.dtype.names:
+            dtype = vertices.dtype.descr
+            dtype = [("t_event","f4")] + dtype
+            new_vertices = np.empty(vertices.shape, dtype=np.dtype(dtype, align=True))
+            for field in dtype[1:]:
+                new_vertices[field[0]] = vertices[field[0]]
+            vertices = new_vertices
+        uniq_ev, counts = np.unique(vertices['event_id'], return_counts=True)
         vertices['t_event'] = np.repeat(event_times.get(),counts) 
 
     if sim.IS_SPILL_SIM:
@@ -395,9 +411,9 @@ def run_simulation(input_filename,
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
         swap_coordinates(tracks)
-        output_file.create_dataset("tracks", data=tracks)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=tracks)
         # To distinguish from the "old" files that had z=drift in 'tracks':
-        output_file['tracks'].attrs['zbeam'] = True
+        output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
@@ -406,10 +422,10 @@ def run_simulation(input_filename,
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
             output_file.create_dataset("vertices", data=vertices)
-        if input_has_genie_hdr:
-            output_file.create_dataset("genie_hdr", data=genie_hdr)
-        if input_has_genie_stack:
-            output_file.create_dataset("genie_stack", data=genie_stack)
+        if input_has_mc_hdr:
+            output_file.create_dataset("mc_hdr", data=mc_hdr)
+        if input_has_mc_stack:
+            output_file.create_dataset("mc_stack", data=mc_stack)
 
     if sim.IS_SPILL_SIM:
         # ..... even thought larnd-sim does expect t0 to be given with respect to
@@ -462,6 +478,8 @@ def run_simulation(input_filename,
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if light.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type']+1)
             light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
             light_trigger_event_ids = results['light_event_id']
         else:
@@ -491,7 +509,8 @@ def run_simulation(input_filename,
                                      results['light_op_channel_idx'],
                                      results['light_waveforms'],
                                      output_filename,
-                                     cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
+                                     #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
+                                     uniq_event_times,
                                      results['light_waveforms_true_track_id'],
                                      results['light_waveforms_true_photons'])
         if is_first_batch:
@@ -712,7 +731,7 @@ def run_simulation(input_filename,
                 light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                trigger_idx, trigger_op_channel_idx = light_sim.get_triggers(light_response, light_threshold, op_channel)
+                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
@@ -727,13 +746,14 @@ def run_simulation(input_filename,
                 results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
                 results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
                 results_acc['light_trigger_idx'].append(trigger_idx)
+                results_acc['trigger_type'].append(trigger_type)
                 results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
                 results_acc['light_waveforms'].append(light_digit_signal)
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-
-        if len(results_acc['event_id']) > sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+        
+        if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+            last_time = save_results(event_times, is_first_event=last_time==0, results=results_acc)
             results_acc = defaultdict(list)
 
         logger.take_snapshot([len(logger.log)])

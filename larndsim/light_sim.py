@@ -14,7 +14,7 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 from .consts import light
-from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
+from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, OP_CHANNEL_PER_TRIG, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
 from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
 from .consts import units as units
@@ -34,7 +34,7 @@ def get_nticks(light_incidence):
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
     mask = light_incidence['n_photons_det'] > 0
-    if np.any(mask):
+    if np.any(mask) and not LIGHT_TRIG_MODE == 1:
         start_time = np.min(light_incidence['t0_det'][mask]) - LIGHT_WINDOW[0]
         end_time = np.max(light_incidence['t0_det'][mask]) + LIGHT_WINDOW[1]
         return int(np.ceil((end_time - start_time)/LIGHT_TICK_SIZE)), start_time
@@ -373,10 +373,10 @@ def gen_light_detector_noise(shape, light_det_noise):
     noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
     if shape[1] < 2:
         # special case where inverse FFT does not exist - just generate one sample
-        noise = cp.real(noise)
+        noise = cp.round(cp.real(noise)) * 2**(16-LIGHT_NBIT)
     else:
         # invert FFT to create a noise waveform
-        noise = cp.fft.irfft(noise, axis=-1)
+        noise = cp.round(cp.fft.irfft(noise, axis=-1)) * 2**(16-LIGHT_NBIT)
 
     if noise.shape[1] < shape[1]:
         # FFT must have even samples, so append 0 if an odd number of samples is requested
@@ -397,6 +397,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     Returns:
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
     """
+    
     shape = signal.shape
     # sum over all signals on a single detector (shape: (ndet, nticks) -> (ngrp, ndetpergrp, nticks) -> (ngrp, 1, nticks))
     signal_sum = signal.reshape(shape[0]//OP_CHANNEL_PER_TRIG, OP_CHANNEL_PER_TRIG, shape[-1]).sum(axis=1, keepdims=True)
@@ -422,6 +423,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     
     trigger_idx_list = []
     op_channel_idx_list = []
+    trigger_type_list = [] # 0 --> threshold, # 1 --> beam
     # treat each module independently
     for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
         # get active channels for the module
@@ -433,17 +435,24 @@ def get_triggers(signal, group_threshold, op_channel_idx):
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
-            next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+            if last_trigger == 0 and LIGHT_TRIG_MODE == 1:
+                next_idx = cp.asarray(0)
+                next_trig_type = cp.asarray(1)
+            else:
+                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+                next_trig_type = cp.asarray(0)
+                print("seondary trigger")
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
+            trigger_type_list.append(next_trig_type)
             op_channel_idx_list.append(op_channels)
             # ignore samples during digitization window
             module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
             last_trigger = next_idx + digit_ticks
 
     if len(trigger_idx_list):
-        return cp.array(trigger_idx_list), cp.array(op_channel_idx_list)
-    return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int)
+        return cp.array(trigger_idx_list), cp.array(op_channel_idx_list), cp.array(trigger_type_list)
+    return cp.empty((0,), dtype=int), cp.empty((0,len(TPC_TO_OP_CHANNEL[list(MODULE_TO_TPCS.values())[0]].ravel())), dtype=int), cp.empty((0,), dtype=int)
 
 
 @cuda.jit

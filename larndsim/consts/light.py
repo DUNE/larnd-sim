@@ -52,6 +52,8 @@ IMPULSE_TICK_SIZE = 0.001
 
 #: Number of SiPMs per detector (used by trigger)
 OP_CHANNEL_PER_TRIG = 6
+#: Light trigger mode (0: threshold each module, 1: beam and threshold)
+LIGHT_TRIG_MODE = 0
 #: Total detector light threshold [ADC] (one value for every OP_CHANNEL_PER_TRIG detector sum)
 LIGHT_TRIG_THRESHOLD = np.zeros((0,))
 #: Light digitization window [microseconds]
@@ -94,6 +96,7 @@ def set_light_properties(detprop_file):
     global IMPULSE_TICK_SIZE
 
     global OP_CHANNEL_PER_TRIG
+    global LIGHT_TRIG_MODE
     global LIGHT_TRIG_THRESHOLD
     global LIGHT_TRIG_WINDOW
     global LIGHT_DIGIT_SAMPLE_SPACING
@@ -150,6 +153,8 @@ def set_light_properties(detprop_file):
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         OP_CHANNEL_PER_TRIG = int(detprop.get('op_channel_per_det', OP_CHANNEL_PER_TRIG))
+        LIGHT_TRIG_MODE = int(detprop.get('light_trig_mode', LIGHT_TRIG_MODE))
+        assert LIGHT_TRIG_MODE in (0,1)
         if isinstance(detprop['light_trig_threshold'], (float, int)):
             LIGHT_TRIG_THRESHOLD = np.full(N_OP_CHANNEL // OP_CHANNEL_PER_TRIG, float(detprop['light_trig_threshold']))
         else:
