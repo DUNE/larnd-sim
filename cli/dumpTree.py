@@ -149,7 +149,9 @@ def initHDF5File(output_file, module_offsets=None):
         f.create_dataset('segments', (0,), dtype=segments_dtype, maxshape=(None,))
         f.create_dataset('vertices', (0,), dtype=vertices_dtype, maxshape=(None,))
         if module_offsets is not None:
-            f['segments'].attrs['module_offsets'] = np.array(module_offsets)
+            f['segments'].attrs['module_offsets'] = np.array(module_offsets)/10
+        else:
+            f['segments'].attrs['module_offsets'] = np.zeros((0,))
 
 # Resize HDF5 file and save output arrays
 def updateHDF5File(output_file, trajectories, segments, vertices):
@@ -189,12 +191,7 @@ def get_module_offsets(input_file):
     elif foundTGeoManager:
         # Convert the result to a Python list
         global_origins_list = [[global_origins.at(i).at(j) for j in range(global_origins.at(i).size())] for i in range(global_origins.size())]
-        #Print the global origins
-        #for i, global_origin in enumerate(global_origins_list):
-        #    print(f'Global origin of volume {i}: {global_origin}')
         return global_origins_list
-    else:
-        return []
 
 # Read a file and dump it.
 def dump(input_file, output_file):
