@@ -143,12 +143,13 @@ def printSegmentContainer(depth, containerName, hitSegments):
     for hitSegment in hitSegments: printHitSegment(depth, hitSegment)
 
 # Prep HDF5 file for writing
-def initHDF5File(output_file, module_offsets):
+def initHDF5File(output_file, module_offsets=None):
     with h5py.File(output_file, 'w') as f:
         f.create_dataset('trajectories', (0,), dtype=trajectories_dtype, maxshape=(None,))
         f.create_dataset('segments', (0,), dtype=segments_dtype, maxshape=(None,))
         f.create_dataset('vertices', (0,), dtype=vertices_dtype, maxshape=(None,))
-        f['segments'].attrs['module_offsets'] = module_offsets
+        if module_offsets is not None:
+            f['segments'].attrs['module_offsets'] = np.array(module_offsets)
 
 # Resize HDF5 file and save output arrays
 def updateHDF5File(output_file, trajectories, segments, vertices):
@@ -209,11 +210,11 @@ def dump(input_file, output_file):
 
     # Get module offsets for larnd-sim to use later
     module_offsets_GDML = get_module_offsets(input_file)
-    if len(module_offsets_GDML) == 0 and module_offsets_GDML is not None:
+    if module_offsets_GDML is not None and len(module_offsets_GDML) == 0:
         print(f'Active volume not found in TGeoManager of input file, check volume name in cpp file.')
     
     # Prep output file
-    initHDF5File(output_file, np.array(module_offsets_GDML))
+    initHDF5File(output_file, module_offsets_GDML)
     
     segment_id = 0
 
