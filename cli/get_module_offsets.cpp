@@ -1,4 +1,7 @@
-// This is a script to get the TGeoManager from the edep-sim ROOT file and extract the module (TPC) offsets for use in larnd-sim. To get the module offsets, we need to recursively traverse the geometry tree until we encounter the LAr volumes, taking account of the translations and rotations along the way.
+// This is a script to get the TGeoManager from the edep-sim ROOT file and 
+// extract the module offsets for use in larnd-sim. To get the module offsets, 
+// we need to recursively traverse the geometry tree until we encounter the LAr volumes, 
+// taking account of the translations and rotations along the way.
 
 #include <TGeoManager.h>
 #include <TFile.h>
@@ -40,7 +43,7 @@ std::pair<bool, std::vector<std::vector<double>>> get_module_offsets(const char*
         }
 
         // The volume names we're looking for. Note that you may need to add
-        // new names that correspond to new geometries (e.g. FSD, ndlar)
+        // new names that correspond to new geometries (e.g. updated 2x2, FSD, ndlar)
         std::vector<std::string> targetVolumes = {"volTPCActive_PV"}; // single module or SingleCube
         // for 2x2, get the module wall volumes for the offsets
         for (int i = 0; i < 2; ++i) { 
