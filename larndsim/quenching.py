@@ -26,19 +26,25 @@ def quench(tracks, mode):
         dEdx = tracks[itrk]["dEdx"]
         dE = tracks[itrk]["dE"]
 
+        dEdx_nonIonizing = tracks[itrk]["dEdx_secondary"]
+        dE_nonIonizing = tracks[itrk]["dE_secondary"]
+
+        dEdx_ionizing = dEdx - dEdx_nonIonizing
+        dE_ionizing = dE - dE_nonIonizing
+
         recomb = 0
         if mode == physics.BOX:
             # Baller, 2013 JINST 8 P08005
-            csi = physics.BOX_BETA * dEdx / (detector.E_FIELD * detector.LAR_DENSITY)
+            csi = physics.BOX_BETA * dEdx_ionizing / (detector.E_FIELD * detector.LAR_DENSITY)
             recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
         elif mode == physics.BIRKS:
             # Amoruso, et al NIM A 523 (2004) 275
-            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx_ionizing / (detector.E_FIELD * detector.LAR_DENSITY))
         else:
             raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
 
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
+        tracks[itrk]["n_electrons"] = recomb * dE_ionizing / physics.W_ION
         tracks[itrk]["n_photons"] = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

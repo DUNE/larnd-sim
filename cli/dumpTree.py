@@ -23,6 +23,7 @@ segments_dtype = np.dtype([("vertexID", "u4"), ("segment_id", "u4"), ("z_end", "
                            ("dx", "f4"), ("long_diff", "f4"),
                            ("pixel_plane", "i4"), ("t_end", "f4"),
                            ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
+                           ("dEdx_nonIonizing", "f4"), ("dE_nonIonizing", "f4"),
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
                            ("n_photons","f4")], align=True)
 
@@ -302,6 +303,7 @@ def dump(input_file, output_file):
                 segment[iHit]["t0_end"] = hitSegment.GetStop().T() * edep2us
                 segment[iHit]["t_end"] = 0
                 segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
+                segment[iHit]["dE_nonIonizing"] = hitSegment.GetSecondaryDeposit()
                 xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
                 yd = segment[iHit]["y_end"] - segment[iHit]["y_start"]
                 zd = segment[iHit]["z_end"] - segment[iHit]["z_start"]
@@ -313,6 +315,7 @@ def dump(input_file, output_file):
                 segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
                 segment[iHit]["t"] = 0
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
+                segment[iHit]["dEdx_nonIonizing"] = hitSegment.GetSecondaryDeposit() / dx if dx > 0 else 0
                 segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
                 segment[iHit]["n_electrons"] = 0
                 segment[iHit]["long_diff"] = 0
