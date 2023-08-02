@@ -1,3 +1,5 @@
+// This is a script to get the TGeoManager from the edep-sim ROOT file and extract the module (TPC) offsets for use in larnd-sim. To get the module offsets, we need to recursively traverse the geometry tree until we encounter the LAr volumes, taking account of the translations and rotations along the way.
+
 #include <TGeoManager.h>
 #include <TFile.h>
 #include <iostream>
@@ -7,22 +9,21 @@
 #include <functional>
 
 std::pair<bool, std::vector<std::vector<double>>> get_module_offsets(const char* fileName) {
-    // Open the ROOT file
+    
     TFile file(fileName);
 
-    // Check if the file has a TGeoManager
+    // If the file does not have a TGeoManager, return false
     if (!file.Get("EDepSimGeometry")) {
-        // If the file does not have a TGeoManager, return false
         return {false, {}};
     }
 
     // Import the TGeoManager
     TGeoManager* geoManager = TGeoManager::Import(fileName);
 
-    // Get the top volume
+    // Get the top node of the geometry
     TGeoNode* topVolume = geoManager->GetTopNode();
 
-    // The global origins of the target volumes
+    // The global origins of the target volumes, to be determined below
     std::vector<std::vector<double>> globalOrigins;
 
     // Define a recursive function to traverse the geometry tree
@@ -38,20 +39,20 @@ std::pair<bool, std::vector<std::vector<double>>> get_module_offsets(const char*
             globalMatrix = std::make_unique<TGeoHMatrix>(localMatrix);
         }
 
-        // The volume names we're looking for
-        std::vector<std::string> targetVolumes = {"volTPCActive_PV"};
-        //for (int i = 0; i < 5; ++i) {
-        //    for (int j = 0; j < 7; ++j) {
-        //        targetVolumes.push_back("volLArActiveModWall" + std::to_string(i) + std::to_string(j) + "_PV");
-        //    }
-        //}
+        // The volume names we're looking for. Note that you may need to add
+        // new names that correspond to new geometries (e.g. FSD, ndlar)
+        std::vector<std::string> targetVolumes = {"volTPCActive_PV"}; // single module or SingleCube
+        // for 2x2, get the module wall volumes for the offsets
+        for (int i = 0; i < 2; ++i) { 
+            for (int j = 0; j < 2; ++j) {
+                targetVolumes.push_back("volLArActiveModWall" + std::to_string(i) + std::to_string(j) + "_PV");
+            }
+        }
 
         // Check if the node's volume is one of the volumes we're looking for
         for (const auto& volumeName : targetVolumes) {
-            if (volumeName == node->GetVolume()->GetName()) {
-                // The local origin coordinates
+            if (volumeName == node->GetVolume()->GetName()) { 
                 Double_t localOrigin[3] = {0., 0., 0.};
-                // The array to store the global origin coordinates
                 Double_t globalOrigin[3];
                 // Convert local coordinates to global coordinates
                 globalMatrix->LocalToMaster(localOrigin, globalOrigin);
@@ -69,10 +70,8 @@ std::pair<bool, std::vector<std::vector<double>>> get_module_offsets(const char*
 
     // Start the traversal from the top volume
     traverse(topVolume, nullptr);
-
-    // Close the file when you're done
+    
     file.Close();
-
-    // Return true and the global origins
+    
     return {true, globalOrigins};
 }

@@ -169,23 +169,30 @@ def updateHDF5File(output_file, trajectories, segments, vertices):
                 f['vertices'][nvert:] = vertices
 
 def get_module_offsets(input_file):
+    """
+    Function that calls a ROOT cpp macro that calculates the module offsets from
+    the edep-sim ROOT file. Only looks for the module offsets if there is a TGeoManager
+    in the edep-sim ROOT file. Will return an empty list if the active LAr volumes are not found.
+    Note that the cpp script has a handful of hard-coded volume names in order to find the module
+    offsets. So if the script isn't finding the offsets, you should check the cpp script and the
+    GDML and make sure it's looking for the right volumes.
+    Args:
+        input_file (str): path to an input ROOT file
+    """
     ROOT.gROOT.ProcessLine('.L get_module_offsets.cpp')
     foundTGeoManager, global_origins = ROOT.get_module_offsets(input_file)
     if not foundTGeoManager:
         print(f'No TGeoManager found in {input_file}, cannot get module offsets.')
         return None
-    #elif foundTGeoManager and not foundActiveVol:
-    #    print(f'Active volume not found in TGeoManager of input file, check volume name in cpp file.')
-    #    return None
     elif foundTGeoManager:
         # Convert the result to a Python list
         global_origins_list = [[global_origins.at(i).at(j) for j in range(global_origins.at(i).size())] for i in range(global_origins.size())]
-        # Print the global origins
-        for i, global_origin in enumerate(global_origins_list):
-            print(f'Global origin of volume {i}: {global_origin}')
+        #Print the global origins
+        #for i, global_origin in enumerate(global_origins_list):
+        #    print(f'Global origin of volume {i}: {global_origin}')
         return global_origins_list
     else:
-        return None
+        return []
 
 # Read a file and dump it.
 def dump(input_file, output_file):
@@ -201,9 +208,12 @@ def dump(input_file, output_file):
 
     # Prep output file
     initHDF5File(output_file)
+    
+    # Get module offsets for larnd-sim to use later
     module_offsets_GDML = get_module_offsets(input_file)
-    if len(module_offsets_GDML) == 0:
+    if len(module_offsets_GDML) == 0 and module_offsets_GDML is not None:
         print(f'Active volume not found in TGeoManager of input file, check volume name in cpp file.')
+    
     segment_id = 0
 
     # Get the input tree out of the file.
