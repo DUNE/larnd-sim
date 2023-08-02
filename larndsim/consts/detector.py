@@ -102,7 +102,7 @@ def electron_mobility(efield, temperature):
 
     return mu
 
-def set_detector_properties(detprop_file, pixel_file):
+def set_detector_properties(detprop_file, pixel_file, module_offsets_GDML=None):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -112,6 +112,7 @@ def set_detector_properties(detprop_file, pixel_file):
         detprop_file (str): detector properties YAML
             filename
         pixel_file (str): pixel layout YAML filename
+        module_offsets_GDML (:obj:`numpy.ndarray`): module offsets from the GDML geometry
     """
     global PIXEL_PITCH
     global TPC_BORDERS
@@ -145,7 +146,39 @@ def set_detector_properties(detprop_file, pixel_file):
 
     DRIFT_LENGTH = detprop['drift_length']
 
-    TPC_OFFSETS = np.array(detprop['tpc_offsets'])
+    TPC_OFFSETS = np.around(np.array(detprop['tpc_offsets']), decimals = 8)
+    if module_offsets_GDML is not None or np.size(module_offsets_GDML) > 0:
+        module_offsets_GDML = np.around(module_offsets_GDML, decimals = 8)
+
+        # check YAML TPC offsets against GDML TPC offsets
+        if len(TPC_OFFSETS) == 4 and len(module_offsets_GDML) == 4: # 2x2
+                isEqual_1 = np.array_equal(TPC_OFFSETS[0], module_offsets_GDML[3])
+                isEqual_2 = np.array_equal(TPC_OFFSETS[1], module_offsets_GDML[1])
+                isEqual_3 = np.array_equal(TPC_OFFSETS[2], module_offsets_GDML[2])
+                isEqual_4 = np.array_equal(TPC_OFFSETS[3], module_offsets_GDML[0])
+                if isEqual_1 and isEqual_2 and isEqual_3 and isEqual_4:
+                    print("YAML TPC offsets match GDML.")
+                else:
+                    print(f"Warning: YAML and GDML TPC offsets do not match \n YAML: \n {TPC_OFFSETS}, \n GDML: \n {module_offsets_GDML[[3, 1, 2, 0]]}")
+        elif len(TPC_OFFSETS) == 1 and len(module_offsets_GDML) == 2: # single module
+            GDML_offset = (module_offsets_GDML[0] + module_offsets_GDML[1])/2
+            isEqual = np.array_equal(GDML_offset, TPC_OFFSETS[0])
+            if isEqual:
+                print("YAML TPC offsets match GDML.")
+            else:
+                print(f"Warning: YAML and GDML TPC offsets do not match \n YAML: \n {TPC_OFFSETS[0]}, \n GDML: \n {GDML_offset}")
+        elif len(TPC_OFFSETS) == 1 and len(module_offsets_GDML) == 1: # SingleCube
+            isEqual = np.array_equal(GDML_offset, TPC_OFFSETS[0])
+            if isEqual:
+                print("YAML TPC offsets match GDML.")
+            else:
+                print(f"Warning: YAML and GDML TPC offsets do not match \n YAML: \n {TPC_OFFSETS[0]}, \n GDML: \n {module_offsets_GDML}")
+        else:
+            print("Warning: Not checking YAML TPC offsets.")
+    else:
+        print("Warning: Not checking YAML TPC offsets.")
+        
+    
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
 
