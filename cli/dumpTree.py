@@ -12,6 +12,7 @@ from tqdm import tqdm
 import glob
 
 from ROOT import TG4Event, TFile, TMap
+import ROOT
 
 # Output array datatypes
 segments_dtype = np.dtype([("eventID","u4"),("vertexID", "u8"), ("segment_id", "u4"),
@@ -167,6 +168,25 @@ def updateHDF5File(output_file, trajectories, segments, vertices):
                 f['vertices'].resize((nvert+len(vertices),))
                 f['vertices'][nvert:] = vertices
 
+def get_module_offsets(input_file):
+    ROOT.gROOT.ProcessLine('.L get_module_offsets.cpp')
+    foundTGeoManager, global_origins = ROOT.get_module_offsets(input_file)
+    if not foundTGeoManager:
+        print(f'No TGeoManager found in {input_file}, cannot get module offsets.')
+        return None
+    #elif foundTGeoManager and not foundActiveVol:
+    #    print(f'Active volume not found in TGeoManager of input file, check volume name in cpp file.')
+    #    return None
+    elif foundTGeoManager:
+        # Convert the result to a Python list
+        global_origins_list = [[global_origins.at(i).at(j) for j in range(global_origins.at(i).size())] for i in range(global_origins.size())]
+        # Print the global origins
+        for i, global_origin in enumerate(global_origins_list):
+            print(f'Global origin of volume {i}: {global_origin}')
+        return global_origins_list
+    else:
+        return None
+
 # Read a file and dump it.
 def dump(input_file, output_file):
 
@@ -181,7 +201,9 @@ def dump(input_file, output_file):
 
     # Prep output file
     initHDF5File(output_file)
-
+    module_offsets_GDML = get_module_offsets(input_file)
+    if len(module_offsets_GDML) == 0:
+        print(f'Active volume not found in TGeoManager of input file, check volume name in cpp file.')
     segment_id = 0
 
     # Get the input tree out of the file.
