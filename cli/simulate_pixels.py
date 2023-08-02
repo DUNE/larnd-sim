@@ -167,41 +167,13 @@ def run_simulation(input_filename,
     rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
-    RangePush("load_detector_properties")
-    consts.load_properties(detector_properties, pixel_layout, simulation_properties)
-    from larndsim.consts import light, detector, physics, sim
-    RangePop()
-    print("Event batch size:", sim.EVENT_BATCH_SIZE)
-    print("Batch size:", sim.BATCH_SIZE)
-    print("Write batch size:", sim.WRITE_BATCH_SIZE)
-
-    RangePush("load_larndsim_modules")
-    # Here we load the modules after loading the detector properties
-    # maybe can be implemented in a better way?
-    from larndsim import (active_volume, quenching, drifting, detsim, pixels_from_track, fee,
-        lightLUT, light_sim)
-    RangePop()
-
-    RangePush("load_pixel_thresholds")
-    if pixel_thresholds_file is not None:
-        print("Pixel thresholds file:", pixel_thresholds_file)
-        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
-    else:
-        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
-    RangePop()
-
-    RangePush("load_pixel_gains")
-    if pixel_gains_file is not None:
-        print("Pixel gains file:", pixel_gains_file)
-        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
-    RangePop()
-    
     RangePush("load_hd5_file")
     print("Loading track segments..." , end="")
     start_load = time()
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
+        module_offsets_GDML = f['segments'].attrs['module_offsets']
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
         else:
@@ -243,6 +215,37 @@ def run_simulation(input_filename,
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
+    
+    RangePush("load_detector_properties")
+    consts.load_properties(detector_properties, pixel_layout, simulation_properties, module_offsets_GDML)
+    from larndsim.consts import light, detector, physics, sim
+    RangePop()
+    print("Event batch size:", sim.EVENT_BATCH_SIZE)
+    print("Batch size:", sim.BATCH_SIZE)
+    print("Write batch size:", sim.WRITE_BATCH_SIZE)
+
+    RangePush("load_larndsim_modules")
+    # Here we load the modules after loading the detector properties
+    # maybe can be implemented in a better way?
+    from larndsim import (active_volume, quenching, drifting, detsim, pixels_from_track, fee,
+        lightLUT, light_sim)
+    RangePop()
+
+    RangePush("load_pixel_thresholds")
+    if pixel_thresholds_file is not None:
+        print("Pixel thresholds file:", pixel_thresholds_file)
+        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
+    else:
+        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
+    RangePop()
+
+    RangePush("load_pixel_gains")
+    if pixel_gains_file is not None:
+        print("Pixel gains file:", pixel_gains_file)
+        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+    RangePop()
+    
+
 
     RangePop()
     end_load = time()
