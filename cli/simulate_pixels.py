@@ -404,7 +404,7 @@ def run_simulation(input_filename,
             for field in dtype[1:]:
                 new_vertices[field[0]] = vertices[field[0]]
             vertices = new_vertices
-        uniq_ev, counts = np.unique(vertices['event_id'], return_counts=True)
+        uniq_ev, counts = np.unique(vertices[sim.EVENT_SEPARATOR], return_counts=True)
         vertices['t_event'] = np.repeat(event_times.get(),counts) 
 
     if sim.IS_SPILL_SIM:
