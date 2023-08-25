@@ -14699,7 +14699,7 @@ chip_channel_to_position:
   110063:
   - 66
   - 6
-multitile_layout_version: 2.2.16
+multitile_layout_version: 2.3.16
 pixel_pitch: 4.434
 tile_chip_to_io:
   1:
