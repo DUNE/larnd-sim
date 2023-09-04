@@ -269,10 +269,10 @@ def run_simulation(input_filename,
             trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
         if input_has_vertices:
             vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_genie_hdr:
-            genie_hdr = genie_hdr[genie_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
+        if input_has_mc_hdr:
+            mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
         if input_has_genie_stack:
-            genie_stack = genie_stack[genie_stack[sim.EVENT_SEPARATOR] <= max_eventID]
+            mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
