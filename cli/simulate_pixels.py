@@ -31,7 +31,7 @@ BATCH_SIZE = 4000 # track segments
 EVENT_BATCH_SIZE = 2 # tpcs
 #WRITE_BATCH_SIZE = 1000 # batches
 WRITE_BATCH_SIZE = 1000 # batches
-EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
+EVENT_SEPARATOR = 'eventID' # can be 'eventID' or 'spillID'
 
 LOGO = """
   _                      _            _
