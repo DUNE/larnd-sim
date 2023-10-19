@@ -1,0 +1,21 @@
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
+lifetime: 2.2e+3 # us
+time_interval: [0, 200.] # us
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+drift_length: 30.27225 # cm
+response_sampling: 0.1 # us
+response_bin_size: 0.04434 # cm
+time_padding: 190 # us
+time_window: 189.1 # us
+tpc_offsets: # cm
+  - [0, 15.13, 0]
+tile_map:
+  - [[1]]
+module_to_io_groups:
+  1: [1]
+
+module_to_tpcs:
+  1: [0]
+
