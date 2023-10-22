@@ -424,24 +424,40 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     trigger_idx_list = []
     op_channel_idx_list = []
     trigger_type_list = [] # 0 --> threshold, # 1 --> beam
-    # treat each module independently
-    for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
-        # get active channels for the module
-        op_channels = TPC_TO_OP_CHANNEL[tpc_ids].ravel()
-        op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
-        #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
-        module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
+    if LIGHT_TRIG_MODE == 0:
+        # treat each module independently
+        for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
+            # get active channels for the module
+            op_channels = TPC_TO_OP_CHANNEL[tpc_ids].ravel()
+            op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
+            #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
+            module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
 
+            last_trigger = 0
+            while cp.any(module_above_thresh):
+                # find next time signal goes above threshold
+                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+                next_trig_type = cp.asarray(0)
+                # keep track of trigger time
+                trigger_idx_list.append(next_idx)
+                trigger_type_list.append(next_trig_type)
+                op_channel_idx_list.append(op_channels)
+                # ignore samples during digitization window
+                module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
+                last_trigger = next_idx + digit_ticks
+
+    elif LIGHT_TRIG_MODE == 1:
+        module_above_thresh = np.any(sample_above_thresh, axis=0)
+        op_channels = TPC_TO_OP_CHANNEL[:].ravel()
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
-            if last_trigger == 0 and LIGHT_TRIG_MODE == 1:
+            if last_trigger == 0:
                 next_idx = cp.asarray(0)
                 next_trig_type = cp.asarray(1)
             else:
                 next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
                 next_trig_type = cp.asarray(0)
-                print("seondary trigger")
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
             trigger_type_list.append(next_trig_type)
