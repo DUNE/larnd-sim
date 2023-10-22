@@ -21,6 +21,8 @@ from .pixels_from_track import id2pixel
 from .consts.units import mV, e
 from .consts import units
 
+from .consts.light import LIGHT_TRIG_MODE
+
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 10
 #: Maximum number of ADC values stored per pixel
@@ -57,6 +59,10 @@ UNCORRELATED_NOISE_CHARGE = 500 * e
 DISCRIMINATOR_NOISE = 650 * e 
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
+#: Beam trig io group
+BEAM_TRIG_IO = 4
+#: Threshold/LRS trig io group
+THRES_TRIG_IO = 5
 
 import logging
 logging.basicConfig()
@@ -226,7 +232,16 @@ def export_to_hdf5(event_id_list,
                     if any(trig_mask):
                         for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
                             t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
-                            for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                            if LIGHT_TRIG_MODE == 0:
+                                for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                                    packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+                                    packets_mc.append([-1] * track_ids.shape[1])
+                                    packets_frac.append([0] * current_fractions.shape[2])
+                            elif LIGHT_TRIG_MODE == 1:
+                                if module_trig == 0: #beam trigger
+                                    io_group = BEAM_TRIG_IO
+                                elif module_trig == 1: #threshold trigger
+                                    io_group = THRES_TRIG_IO
                                 packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                 packets_mc.append([-1] * track_ids.shape[1])
                                 packets_frac.append([0] * current_fractions.shape[2])
