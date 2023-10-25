@@ -52,9 +52,9 @@ ADC_COUNTS = 2**8
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900 * e
 #: Uncorrelated noise in e-
-UNCORRELATED_NOISE_CHARGE = 500 * e 
+UNCORRELATED_NOISE_CHARGE = 500 * e
 #: Discriminator noise in e-
-DISCRIMINATOR_NOISE = 650 * e 
+DISCRIMINATOR_NOISE = 650 * e
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
 
@@ -287,7 +287,7 @@ def export_to_hdf5(event_id_list,
         # First, sort the back-tracking information by the magnitude of the fraction
         packets_frac = np.array(packets_frac)
         packets_mc   = np.array(packets_mc)
-        
+
         frac_order = np.flip(np.argsort(np.abs(packets_frac),axis=1),axis=1)
         ass_track_ids = np.take_along_axis(packets_mc,   frac_order, axis=1)
         ass_fractions = np.take_along_axis(packets_frac, frac_order, axis=1)

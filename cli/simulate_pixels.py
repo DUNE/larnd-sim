@@ -123,17 +123,17 @@ def run_simulation(input_filename,
         pixel_thresholds_file (str, optional): path to npz file containing pixel thresholds. Defaults
             to None.
         pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
-        rand_seed (int, optional): the random number generator seed that can be set through 
+        rand_seed (int, optional): the random number generator seed that can be set through
             a command-line
-        save_memory (string path, optional): if non-empty, this is used as a filename to 
+        save_memory (string path, optional): if non-empty, this is used as a filename to
             store memory snapshot information
     """
-    
+
     if not os.path.exists(input_filename):
         raise Exception(f'Input file {input_filename} does not exist.')
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
-    
+
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -195,7 +195,7 @@ def run_simulation(input_filename,
         print("Pixel gains file:", pixel_gains_file)
         pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
     RangePop()
-    
+
     RangePush("load_hd5_file")
     print("Loading track segments..." , end="")
     start_load = time()
@@ -264,7 +264,7 @@ def run_simulation(input_filename,
         max_eventID = np.unique(tracks[sim.EVENT_SEPARATOR])[n_events-1]
         segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
-        
+
         if input_has_trajectories:
             trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
         if input_has_vertices:
@@ -321,7 +321,7 @@ def run_simulation(input_filename,
 
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period so t0 is wrt the corresponding spill start time.
-        # The spill starts are marking the start of 
+        # The spill starts are marking the start of
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
         localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
@@ -405,7 +405,7 @@ def run_simulation(input_filename,
                 new_vertices[field[0]] = vertices[field[0]]
             vertices = new_vertices
         uniq_ev, counts = np.unique(vertices[sim.EVENT_SEPARATOR], return_counts=True)
-        vertices['t_event'] = np.repeat(event_times.get(),counts) 
+        vertices['t_event'] = np.repeat(event_times.get(),counts)
 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
@@ -473,9 +473,9 @@ def run_simulation(input_filename,
          - light_waveforms: waveforms of each light trigger
          - light_waveforms_true_track_id: true track ids for each tick in each waveform
          - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
-        
+
         returns is_first_batch = False
-        
+
         Note: can't handle empty inputs
         '''
         for key in list(results.keys()):
@@ -548,7 +548,7 @@ def run_simulation(input_filename,
                          delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
                 warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
-                
+
             selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
 
             RangePush("event_id_map")
@@ -665,7 +665,7 @@ def run_simulation(input_filename,
             pixel_thresholds_lut.tpb = TPB
             pixel_thresholds_lut.bpg = BPG
             pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-            
+
             fee.get_adc_values[BPG, TPB](pixels_signals,
                                          pixels_tracks_signals,
                                          time_ticks,
@@ -675,7 +675,7 @@ def run_simulation(input_filename,
                                          rng_states,
                                          current_fractions,
                                          pixel_thresholds)
-            
+
             # get list of adc values
             if pixel_gains_file is not None:
                 pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
@@ -683,7 +683,7 @@ def run_simulation(input_filename,
                 adc_list = fee.digitize(integral_list, gain_list)
             else:
                 adc_list = fee.digitize(integral_list)
-            
+
             adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
             RangePop()
 
@@ -769,7 +769,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms'].append(light_digit_signal)
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-        
+
         if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             is_first_batch = save_results(
                 event_times, is_first_batch, results=results_acc, last_event=last_event
