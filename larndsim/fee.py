@@ -120,7 +120,8 @@ def export_to_hdf5(event_id_list,
                    light_trigger_times=None,
                    light_trigger_event_id=None,
                    light_trigger_modules=None,
-                   bad_channels=None):
+                   bad_channels=None,
+                   last_event=[-1]):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -140,6 +141,8 @@ def export_to_hdf5(event_id_list,
         light_trigger_modules (array): 1D array of module id for each light trigger
         bad_channels (dict): dictionary containing as value a list of bad channels and as
             the chip key
+        last_event (list): list of single int (mutability) of the last event processed by this
+            function. Prevents duplication of trigger packets when light simulation is off
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
@@ -161,7 +164,6 @@ def export_to_hdf5(event_id_list,
             packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
-    last_event = -1
 
     if bad_channels:
         with open(bad_channels, 'r') as bad_channels_file:
@@ -215,7 +217,7 @@ def export_to_hdf5(event_id_list,
                 time_tick = time_tick % ROLLOVER_CYCLES
 
                 # new event, insert light triggers and timestamp flag
-                if event != last_event:
+                if event != last_event[0]:
                     for io_group in io_groups:
                         packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
                         packets[-1].chip_key = Key(io_group,0,0)
@@ -230,7 +232,7 @@ def export_to_hdf5(event_id_list,
                                 packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                 packets_mc.append([-1] * track_ids.shape[1])
                                 packets_frac.append([0] * current_fractions.shape[2])
-                    last_event = event
+                    last_event[0] = event
 
                 p = Packet_v2()
 

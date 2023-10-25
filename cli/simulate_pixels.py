@@ -453,7 +453,7 @@ def run_simulation(input_filename,
 
     # accumulate results for periodic file saving
     results_acc = defaultdict(list)
-    def save_results(event_times, is_first_batch, results):
+    def save_results(event_times, is_first_batch, results, last_event=[-1]):
         '''
         results is a dictionary with the following keys
 
@@ -508,7 +508,9 @@ def run_simulation(input_filename,
                            light_trigger_times=light_trigger_times,
                            light_trigger_event_id=light_trigger_event_ids,
                            light_trigger_modules=light_trigger_modules,
-                           bad_channels=bad_channels) # defined earlier in script
+                           bad_channels=bad_channels, # defined earlier in script
+                           last_event=[-1] if light.LIGHT_SIMULATED else last_event)
+
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             light_sim.export_to_hdf5(results['light_event_id'],
@@ -529,6 +531,7 @@ def run_simulation(input_filename,
 
 
     is_first_batch = True
+    last_event = [-1]
     logger.start()
     logger.take_snapshot([0])
     for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
@@ -768,14 +771,18 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
         
         if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+            is_first_batch = save_results(
+                event_times, is_first_batch, results=results_acc, last_event=last_event
+            )
             results_acc = defaultdict(list)
 
         logger.take_snapshot([len(logger.log)])
 
     # Always save results after last iteration
     if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-        is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+        is_first_batch = save_results(
+            event_times, is_first_batch, results=results_acc, last_event=last_event
+        )
 
     logger.take_snapshot([len(logger.log)])
 
