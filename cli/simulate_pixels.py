@@ -405,7 +405,8 @@ def run_simulation(input_filename,
                 new_vertices[field[0]] = vertices[field[0]]
             vertices = new_vertices
         uniq_ev, counts = np.unique(vertices[sim.EVENT_SEPARATOR], return_counts=True)
-        vertices['t_event'] = np.repeat(event_times.get(),counts)
+        event_times_in_use = cp.take(event_times, uniq_ev)
+        vertices['t_event'] = np.repeat(event_times_in_use.get(),counts)
 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
