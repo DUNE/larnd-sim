@@ -40,7 +40,7 @@ ROLLOVER_CYCLES =  2**31
 # PPS reset time  
 PPS_CYCLES = 10**7
 #: True if using PPS reset / false for clock rollover
-USE_PPS_ROLLOVER = False 
+USE_PPS_ROLLOVER = False #True 
 #: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
@@ -202,11 +202,11 @@ def export_to_hdf5(event_id_list,
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
-                    print('time_tick is', time_tick, 'event_t0 is', event_t0)
+                    #print('time_tick is', time_tick, 'event_t0 is', event_t0)
                     if USE_PPS_ROLLOVER:
                         if event_t0 > PPS_CYCLES-1 or time_tick > PPS_CYCLES -1:
-                            print('PPS Rollover count', rollover_count)
-                            print('Rolling over at time tick ', time_tick, "and event_t0", event_t0)                            
+                            #print('PPS Rollover count', rollover_count)
+                            #print('Rolling over at time tick ', time_tick, "and event_t0", event_t0)                            
                             # rollover every 1E7 ticks
                             rollover_count +=1
                             for io_group in io_groups:
@@ -220,8 +220,8 @@ def export_to_hdf5(event_id_list,
                     else:
                         if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:                        
                             # 31-bit rollover
-                            print('Cycles Rollover count', rollover_count)
-                            print('Rolling over at time tick ', time_tick, "and event_t0", event_t0)                     
+                            #print('Cycles Rollover count', rollover_count)
+                            #print('Rolling over at time tick ', time_tick, "and event_t0", event_t0)                     
                             rollover_count += 1
                             for io_group in io_groups:
                                 packets.append(SyncPacket(sync_type=b'S',
@@ -272,7 +272,7 @@ def export_to_hdf5(event_id_list,
 
                 p.dataword = int(adc)
                 p.timestamp = time_tick
-                print('saved timestamp as ', time_tick)
+                #print('saved timestamp as ', time_tick)
 
                 try:
                     io_group_io_channel = detector.TILE_CHIP_TO_IO[tile_id][chip]
