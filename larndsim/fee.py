@@ -38,7 +38,11 @@ RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
 #: Clock rollover / reset time in larpix clock ticks
-ROLLOVER_CYCLES = 2**31
+ROLLOVER_CYCLES =  2**31
+# PPS reset time  
+PPS_CYCLES = 10**7
+#: True if using PPS reset / false for clock rollover
+USE_PPS_ROLLOVER = False 
 #: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
@@ -204,22 +208,38 @@ def export_to_hdf5(event_id_list,
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
-
-                    if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:
-                        # 31-bit rollover
-                        rollover_count += 1
-                        for io_group in io_groups:
-                            packets.append(SyncPacket(sync_type=b'S',
-                                                      timestamp=ROLLOVER_CYCLES-1, io_group=io_group))
-                            packets_mc.append([-1] * track_ids.shape[1])
-                            packets_frac.append([0] * current_fractions.shape[2])
-                        event_start_time_list[itick:] -= ROLLOVER_CYCLES
+                    if USE_PPS_ROLLOVER:
+                        if event_t0 > PPS_CYCLES-1 or time_tick > PPS_CYCLES -1:
+                            # rollover every 1E7 ticks
+                            rollover_count +=1
+                            for io_group in io_groups:
+                                packets.append(SyncPacket(sync_type=b'S',
+                                                          timestamp=PPS_CYCLES-1, io_group=io_group))
+                                packets_mc.append([-1] * track_ids.shape[1])
+                                packets_frac.append([0] * current_fractions.shape[2])
+                            event_start_time_list[itick:] -= PPS_CYCLES
+                        else:
+                            break
                     else:
-                        break
-
-                event_t0 = event_t0 % ROLLOVER_CYCLES
-                time_tick = time_tick % ROLLOVER_CYCLES
-
+                        if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:                        
+                            # 31-bit rollover
+                            rollover_count += 1
+                            for io_group in io_groups:
+                                packets.append(SyncPacket(sync_type=b'S',
+                                                          timestamp=ROLLOVER_CYCLES-1, io_group=io_group))
+                                packets_mc.append([-1] * track_ids.shape[1])
+                                packets_frac.append([0] * current_fractions.shape[2])
+                            event_start_time_list[itick:] -= ROLLOVER_CYCLES
+                        else:
+                            break
+                
+                if USE_PPS_ROLLOVER:                            
+                    event_t0 = event_t0 % PPS_CYCLES
+                    time_tick = time_tick % PPS_CYCLES
+                else:
+                    event_t0 = event_t0 % ROLLOVER_CYCLES
+                    time_tick = time_tick % ROLLOVER_CYCLES
+                    
                 # new event, insert light triggers and timestamp flag
                 if event != last_event:
                     for io_group in io_groups:
@@ -231,7 +251,11 @@ def export_to_hdf5(event_id_list,
                     trig_mask = light_trigger_event_id == event
                     if any(trig_mask):
                         for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
-                            t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
+                            if USE_PPS_ROLLOVER:       
+                                t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % PPS_CYCLES
+                            else:
+                                t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
+
                             if LIGHT_TRIG_MODE == 0:
                                 for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
