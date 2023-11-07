@@ -19,7 +19,7 @@ from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S
 from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
 from .consts import units as units
 
-from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES
+from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES, PPS_CYCLES, USE_PPS_ROLLOVER
 
 
 def get_nticks(light_incidence):
@@ -628,13 +628,19 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
-    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
-    
+    if USE_PPS_ROLLOVER:
+        event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % PPS_CYCLES
+    else:
+        event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
+
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
         trig_data['op_channel'] = op_channel_idx
         trig_data['ts_s'] = ((start_times + trigger_idx * LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
-        trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES)
+        if USE_PPS_ROLLOVER:
+            trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % PPS_CYCLES)
+        else:
+            trig_data['ts_sync'] = (((start_times + trigger_idx * LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES)
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
