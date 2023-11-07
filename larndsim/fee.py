@@ -42,7 +42,7 @@ ROLLOVER_CYCLES =  2**31
 # PPS reset time  
 PPS_CYCLES = 10**7
 #: True if using PPS reset / false for clock rollover
-USE_PPS_ROLLOVER = False #True 
+USE_PPS_ROLLOVER = True # leaving True as default 
 #: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
