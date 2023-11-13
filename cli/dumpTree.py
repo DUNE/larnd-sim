@@ -235,8 +235,6 @@ def dump(input_file, output_file, keep_all_dets=False):
                 lastSpill = spill_it
             t_spill = spillCounter * spillPeriod_s * 1E6 # convert to us
 
-        #print("event",event.EventId,"in spill",spill_it)
-
         # write to file
         if len(trajectories_list) >= 1000 or nb <= 0:
             updateHDF5File(
@@ -262,9 +260,6 @@ def dump(input_file, output_file, keep_all_dets=False):
                        for containerName, _hits in event.SegmentDetectors):
                 continue
 
-        #print("Class: ", event.ClassName())
-        #print("Event number:", event.EventId)
-
         # Count total number of vertices and trajectories
         n_traj = 0
 
@@ -285,14 +280,13 @@ def dump(input_file, output_file, keep_all_dets=False):
         trackMap = {}
 
         # Dump the trajectories
-        trajectories = np.zeros(len(event.Trajectories), dtype=trajectories_dtype)
+        trajectories = np.full(len(event.Trajectories), np.iinfo('u4').max, dtype=trajectories_dtype)
         for iTraj, trajectory in enumerate(event.Trajectories):
             fileTrackID = trackCounter
             trackCounter += 1
             trackMap[trajectory.GetTrackId()] = fileTrackID
 
         # Dump the segment containers
-        #print("Number of segment containers:", event.SegmentDetectors.size())
         for containerName, hitSegments in event.SegmentDetectors:
             # If ARCUBE_ACTIVE_VOLUME is not set, default to previously hard
             # coded containerName.
