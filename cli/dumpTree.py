@@ -49,6 +49,8 @@ edep2us = 0.001 # convert to microseconds
 gev2mev  = 1000 # convert to MeV
 meter2cm = 100  # convert to cm
 
+ns2us = 0.001 # convert ns to us
+
 # Needed for event kinematics calculation
 nucleon_mass = 938.272 # MeV
 beam_dir  = np.asarray([0.0, -0.05836, 1.0]) # -3.34 degrees in the y-direction
@@ -264,6 +266,7 @@ def dump(input_file, output_file, keep_all_dets=False):
         n_traj = 0
 
         # Dump the primary vertices
+        primary_vtx_map = {}
         vertices = np.empty(len(event.Primaries), dtype=vertices_dtype)
         for iVtx, primaryVertex in enumerate(event.Primaries):
             #printPrimaryVertex("PP", primaryVertex)
@@ -273,18 +276,24 @@ def dump(input_file, output_file, keep_all_dets=False):
             vertices[iVtx]["y_vert"] = primaryVertex.GetPosition().Y() * edep2cm
             vertices[iVtx]["z_vert"] = primaryVertex.GetPosition().Z() * edep2cm
             vertices[iVtx]["t_vert"] = primaryVertex.GetPosition().T() * edep2us
-            vertices[iVtx]["t_event"] = t_spill
+            vertices[iVtx]["t_event"] = primaryVertex.GetPosition().T() * ns2us
+            primary_pars = primaryVertex.Particles
+            for primary in primary_pars:
+                primary_vtx_map[primary.GetTrackId()] = iVtx
 
         vertices_list.append(vertices)
 
-        trackMap = {}
-
         # Dump the trajectories
+        trackMap = {}
+        traj_vtx_map = primary_vtx_map
         trajectories = np.full(len(event.Trajectories), np.iinfo(trajectories_dtype['traj_id']).max, dtype=trajectories_dtype)
         for iTraj, trajectory in enumerate(event.Trajectories):
             fileTrackID = trackCounter
             trackCounter += 1
             trackMap[trajectory.GetTrackId()] = fileTrackID
+
+            if trajectory.GetParentId() in list(traj_vtx_map.keys()):
+                traj_vtx_map[trajectory.GetTrackId()] = traj_vtx_map[trajectory.GetParentId()]
 
         # Dump the segment containers
         for containerName, hitSegments in event.SegmentDetectors:
@@ -295,12 +304,12 @@ def dump(input_file, output_file, keep_all_dets=False):
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
                 segment[iHit]["event_id"] = event.EventId
-                segment[iHit]["vertex_id"] = globalVertexID
                 segment[iHit]["segment_id"] = segment_id
                 segment_id += 1
                 try:
                     segment[iHit]["traj_id"] = trackMap[hitSegment.Contrib[0]]
                     seg_local_traj_id = hitSegment.Contrib[0]
+                    segment[iHit]["vertex_id"] = traj_vtx_map[seg_local_traj_id]
                     if segment[iHit]["traj_id"] not in trajectories["traj_id"]:
                         # Given event.Trajectories is ordered by traj_id (trajectory.GetTrackId())
                         trajectory = event.Trajectories[seg_local_traj_id]
@@ -314,9 +323,8 @@ def dump(input_file, output_file, keep_all_dets=False):
                                 continue
 
                             start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
-                            trajectories[n_traj]["event_id"] = spill_it
-                            trajectories[n_traj]["vertex_id"] = globalVertexID
-
+                            trajectories[n_traj]["event_id"] = event.EventId
+                            trajectories[n_traj]["vertex_id"] = traj_vtx_map[trajectory.GetTrackId()]
                             trajectories[n_traj]["traj_id"] = trackMap[trajectory.GetTrackId()]
                             trajectories[n_traj]["local_traj_id"] = trajectory.GetTrackId()
                             trajectories[n_traj]["parent_id"] = -1 if trajectory.GetParentId() == -1 \
