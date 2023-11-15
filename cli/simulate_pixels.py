@@ -271,7 +271,7 @@ def run_simulation(input_filename,
             vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
         if input_has_mc_hdr:
             mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_genie_stack:
+        if input_has_mc_stack:
             mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
 
     # Here we swap the x and z coordinates of the tracks
