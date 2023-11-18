@@ -90,10 +90,10 @@ def run_simulation(input_filename,
                    pixel_layout=None,
                    detector_properties=None,
                    simulation_properties=None,
-                   response_file='../larndsim/bin/response_44.npy',
-                   light_lut_filename='../larndsim/bin/lightLUT.npz',
-                   light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
+                   response_file=None,
                    light_simulated=None,
+                   light_lut_filename=None,
+                   light_det_noise_filename=None,
                    bad_channels=None,
                    n_events=None,
                    pixel_thresholds_file=None,
@@ -154,7 +154,8 @@ def run_simulation(input_filename,
     assert pixel_layout, 'pixel_layout (file) must be specified.'
     assert simulation_properties, 'simulation_properties (file) must be specified'
     assert detector_properties, 'detector_properties (file) must be specified'
-    
+    assert response_file 'response_file must be specified'
+
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -169,11 +170,15 @@ def run_simulation(input_filename,
     print("Output file:", output_filename)
 
     print("Random seed:", rand_seed)
-    print("Pixel layout file:", pixel_layout)
-    print("Detector properties file:", detector_properties)
-    print("Simulation properties file:", simulation_properties)
     print("edep-sim input file:", input_filename)
+    print("Simulation properties file:", simulation_properties)
+    print("Detector properties file:", detector_properties)
+    print("Pixel layout file:", pixel_layout)
     print("Response file:", response_file)
+    if light_lut_filename:
+        print("Light LUT:", light_lut_filename)
+    if light_det_noise_filename:
+        print("Light detector noise: ", light_det_noise_filename)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
     if save_memory:
