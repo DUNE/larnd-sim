@@ -1,0 +1,22 @@
+
+default:
+    SIM_PROPERTIES:  ''
+    PIXEL_LAYOUT:    ''
+    DET_PROPERTIES:  ''
+    RESPONSE:        response_44.npy
+    LIGHT_LUT:       lightLUT.npz
+    LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
+
+2x2: &2x2main
+    SIM_PROPERTIES:  singles_sim.yaml
+    PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
+    DET_PROPERTIES:  2x2.yaml
+    RESPONSE:        response_44.npy
+    LIGHT_LUT:       lightLUT.npz
+    LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
+
+2x2_only:
+    <<: *2x2main
+    DET_PROPERTIES:  2x2_only.yaml
+
+

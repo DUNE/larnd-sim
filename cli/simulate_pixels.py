@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from larndsim import consts
 from larndsim.util import CudaDict, batching, memory_logger
-
+from larndsim.config import get_config
 import os
 
 SEED = int(time())
@@ -85,10 +85,11 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
 
 def run_simulation(input_filename,
-                   pixel_layout,
-                   detector_properties,
-                   simulation_properties,
                    output_filename,
+                   config='default',
+                   pixel_layout=None,
+                   detector_properties=None,
+                   simulation_properties=None,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npz',
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
@@ -104,14 +105,15 @@ def run_simulation(input_filename,
 
     Args:
         input_filename (str): path of the edep-sim input file
+        output_filename (str): path of the HDF5 output file. If not specified
+            the output is added to the input file.
+        config (str, optional): a keyword to specify a configuration (all necessary meta data files)
         pixel_layout (str): path of the YAML file containing the pixel
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
         simulation_properties (str): path of the YAML file containing
             the simulation properties
-        output_filename (str): path of the HDF5 output file. If not specified
-            the output is added to the input file.
         response_file (str, optional): path of the Numpy array containing the pre-calculated
             field responses. Defaults to ../larndsim/bin/response_44.npy.
         light_lut_file (str, optional): path of the Numpy array containing the light
@@ -133,6 +135,25 @@ def run_simulation(input_filename,
         raise Exception(f'Input file {input_filename} does not exist.')
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
+
+    # Set the input (meta data) files
+    cfg = get_config(config)
+    if pixel_layout is None:
+        pixel_layout = cfg['PIXEL_LAYOUT']
+    if detector_properties is None:
+        detector_properties = cfg['DET_PROPERTIES']
+    if response_file is None:
+        response_file = cfg['RESPONSE']
+    if simulation_properties is None:
+        simulation_properties = cfg['SIM_PROPERTIES']
+    if light_lut_filename is None:
+        light_lut_filename = cfg['LIGHT_LUT']
+    if light_det_noise_filename is None:
+        light_det_noise_filename = cfg['LIGHT_DET_NOISE']
+    # Assert necessary ones
+    assert pixel_layout, 'pixel_layout (file) must be specified.'
+    assert simulation_properties, 'simulation_properties (file) must be specified'
+    assert detector_properties, 'detector_properties (file) must be specified'
     
     logger = memory_logger(save_memory is None)
     logger.start()

@@ -102,6 +102,11 @@ def electron_mobility(efield, temperature):
 
     return mu
 
+def load_detector_properties(config_keyword):
+    from ..config import get_config
+    cfg = get_config(config_keyword)
+    set_detector_properties(cfg['DET_PROPERTIES'],cfg['PIXEL_LAYOUT'])
+
 def set_detector_properties(detprop_file, pixel_file):
     """
     The function loads the detector properties and
