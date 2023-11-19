@@ -86,7 +86,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
 def run_simulation(input_filename,
                    output_filename,
-                   config='default',
+                   config='2x2',
                    pixel_layout=None,
                    detector_properties=None,
                    simulation_properties=None,
@@ -136,6 +136,9 @@ def run_simulation(input_filename,
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
 
+    if light_simulated is not None:
+        light.LIGHT_SIMULATED = light_simulated
+
     # Set the input (meta data) files
     cfg = get_config(config)
     if pixel_layout is None:
@@ -155,6 +158,9 @@ def run_simulation(input_filename,
     assert simulation_properties, 'simulation_properties (file) must be specified'
     assert detector_properties, 'detector_properties (file) must be specified'
     assert response_file 'response_file must be specified'
+    if light.LIGHT_SIMULATED:
+        assert light_lut_filename, 'light_lut_filename must be specified'
+        assert light_det_noise_filename, 'light_det_noise_filename must be specified'
 
     logger = memory_logger(save_memory is None)
     logger.start()
@@ -313,9 +319,6 @@ def run_simulation(input_filename,
         segment_ids = segment_ids[active_tracks]
         end_mask = time()
         print(f" {end_mask-start_mask:.2f} s")
-
-    if light_simulated is not None:
-        light.LIGHT_SIMULATED = light_simulated
 
     RangePush("run_simulation")
 
