@@ -629,12 +629,16 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
         
         if 'light_wvfm' not in f:
             f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
+            f.create_dataset('light_from_seg', data=from_seg, maxshape=(None,None,None))
             f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
             if waveforms_true_track_id.size > 0:
                 f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
         else:
             f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
             f['light_wvfm'][-waveforms.shape[0]:] = waveforms
+
+            f['light_from_seg'].resize(f['light_from_seg'].shape[0] + from_seg.shape[0], axis=0)
+            f['light_from_seg'][-from_seg.shape[0]:] = from_seg
             
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
