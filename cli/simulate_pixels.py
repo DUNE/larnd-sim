@@ -706,8 +706,9 @@ def run_simulation(input_filename,
                 n_light_det = op_channel.shape[0]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                 #### CHANGING THINGS HERE!!!! ####
-                tick_seg_link = 3
-                light_segment_inc = cp.zeros((n_light_det, tick_seg_link), dtype='f4')
+                tick_seg_backtrack_array = 3
+                light_segment_inc = cp.zeros((n_light_det, tick_seg_backtrack_array), dtype='f4')
+                ####
                 light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
 
@@ -738,6 +739,9 @@ def run_simulation(input_filename,
 
                 RangePush("sim_light_det_response")
                 light_response = cp.zeros_like(light_sample_inc)
+                #### CHANGING THINGS!!!! ####
+                tick_segment_response = cp.zeros_like(light_segment_inc)
+                ####
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                 light_sim.calc_light_detector_response[BPG, TPB](
