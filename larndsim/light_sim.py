@@ -613,6 +613,11 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
     event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
+
+    print('waveforms_true_track_id shape:',waveforms_true_track_id.shape)
+    print('waveforms_true_track_id size:',waveforms_true_track_id.size)
+    print('waveforms_true_photons shape:',waveforms_true_photons.shape)
+    print('waveforms_true_photons size:',waveforms_true_photons.size)
     
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
