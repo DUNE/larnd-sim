@@ -513,7 +513,7 @@ def run_simulation(input_filename,
                            bad_channels=bad_channels) # defined earlier in script
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],
+            waveforms_true_track_id, waveforms_true_photons =  light_sim.export_to_hdf5(results['light_event_id'],
                                      results['light_start_time'],
                                      results['light_trigger_idx'],
                                      results['light_op_channel_idx'],
@@ -523,6 +523,10 @@ def run_simulation(input_filename,
                                      uniq_event_times,
                                      results['light_waveforms_true_track_id'],
                                      results['light_waveforms_true_photons'])
+              print('waveforms_true_track_id shape:',waveforms_true_track_id.shape)
+              print('waveforms_true_track_id size:',waveforms_true_track_id.size)
+              print('waveforms_true_photons shape:',waveforms_true_photons.shape)
+              print('waveforms_true_photons size:',waveforms_true_photons.size)
         if is_first_batch:
             is_first_batch = False
         return is_first_batch
