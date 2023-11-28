@@ -54,7 +54,8 @@ def get_active_op_channel(light_incidence):
     if np.any(mask):
         return cp.array(np.where(np.any(mask, axis=0))[0], dtype='i4')
     return cp.empty((0,), dtype='i4')
-    
+
+@cuda.jit
 def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
     """
     Sums the number of photons observed by each light detector at each time tick
@@ -133,8 +134,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                                     if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
                                         light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
                                         light_sample_inc_true_photons[idet,itick,itrue] += photons
-    return photons, segment_track_id
-#break
+                                        break
     
 
 @nb.njit
