@@ -135,6 +135,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                                         light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
                                         light_sample_inc_true_photons[idet,itick,itrue] += photons
                                         break
+    return photons, segment_track_id
 
 @nb.njit
 def scintillation_model(time_tick):
