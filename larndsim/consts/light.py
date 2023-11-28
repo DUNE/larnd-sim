@@ -107,7 +107,7 @@ def set_light_properties(detprop_file):
 
     try:
         LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
-        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',0)
+        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',200)
 
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
