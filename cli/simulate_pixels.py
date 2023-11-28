@@ -814,8 +814,8 @@ def run_simulation(input_filename,
                 print('light_digit_signal_true_track_id shape:',light_digit_signal_true_track_id.shape)
                 print('light_digit_signal_true_track_id first indice:',light_digit_signal_true_track_id[0])
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                print('light_digit_signal_true_photons [0,0,0,0]:',light_digit_signal_true_photons[0,0,0,0])
-                print('light_digit_signal_true_photons last dimension shape:',light_digit_signal_true_photons[:,:,:,0].shape)
+                print('light_digit_signal_true_photons [0,0,0]:',light_digit_signal_true_photons[0,0,0])
+                print('light_digit_signal_true_photons last dimension shape:',light_digit_signal_true_photons[:,:,0].shape)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
         
         if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
