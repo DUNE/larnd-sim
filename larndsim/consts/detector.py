@@ -18,7 +18,8 @@ E_FIELD = 0.50 # kV/cm
 #: Drift velocity in :math:`cm/\mu s`
 V_DRIFT = 0.1648 # cm / us,
 #: Electron lifetime in :math:`\mu s`
-ELECTRON_LIFETIME = 2.2e3 # us,
+#ELECTRON_LIFETIME = 2.2e3 # us,
+ELECTRON_LIFETIME = 2.2e12 # basically, electrons never die,
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
 #: Drift time window in :math:`\mu s`
@@ -28,9 +29,11 @@ TIME_PADDING = 10
 #: Number of sampled points for each segment slice
 SAMPLED_POINTS = 40
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-LONG_DIFF = 4.0e-6 # cm * cm / us
+#LONG_DIFF = 4.0e-6 # cm * cm / us
+LONG_DIFF = 0 # cm * cm / us
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
-TRAN_DIFF = 8.8e-6 # cm * cm / us
+#TRAN_DIFF = 8.8e-6 # cm * cm / us
+TRAN_DIFF = 0 # cm * cm / us
 #: Numpy array containing all the time ticks in the drift time window
 TIME_TICKS = np.linspace(TIME_INTERVAL[0],
                          TIME_INTERVAL[1],
