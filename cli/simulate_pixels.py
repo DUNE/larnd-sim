@@ -752,12 +752,12 @@ def run_simulation(input_filename,
                 TPB = (1,64)
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                photooons, seeeg_track_id = light_sim.sum_light_signals[BPG, TPB](
+                light_sim.sum_light_signals[BPG, TPB](
                     selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons)
-                print('Sum_light_signals photons:', photooons)
-                print('Sum_light_signals segment/track ids:', seeeg_track_id)
+                #print('Sum_light_signals photons:', photooons)
+                #print('Sum_light_signals segment/track ids:', seeeg_track_id)
                 RangePop()
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                     warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
