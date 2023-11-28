@@ -523,6 +523,8 @@ def run_simulation(input_filename,
                                      uniq_event_times,
                                      results['light_waveforms_true_track_id'],
                                      results['light_waveforms_true_photons'])
+            print('results["light_waveforms_true_track_id"] shape:',results['light_waveforms_true_track_id'].shape)
+            print('results["light_waveforms_true_track_id"] first value:',results['light_waveforms_true_track_id'][0])
             print('waveforms_true_track_id shape:',waveforms_true_track_id.shape)
             print('waveforms_true_track_id size:',waveforms_true_track_id.size)
             print('waveforms_true_photons shape:',waveforms_true_photons.shape)
