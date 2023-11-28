@@ -647,5 +647,3 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
             if waveforms_true_track_id.size > 0:
                 f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
                 f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
-
-    return waveforms_true_track_id, waveforms_true_photons
