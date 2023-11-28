@@ -134,8 +134,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                                     if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
                                         light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
                                         light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                        return photons, segment_track_id
-                                        break
+    return photons, segment_track_id
+#break
     
 
 @nb.njit
