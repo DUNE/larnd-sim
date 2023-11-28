@@ -144,6 +144,7 @@ def run_simulation(input_filename,
     if not rand_seed: rand_seed = SEED
 
     print(LOGO)
+    print("FROG - FROG - FROG")
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
     print("Output file:", output_filename)
 
