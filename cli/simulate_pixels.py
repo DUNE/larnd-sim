@@ -23,8 +23,11 @@ from numba.core.errors import NumbaPerformanceWarning
 from tqdm import tqdm
 
 from larndsim import consts
+from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
+
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
+
 import os
 
 SEED = int(time())
@@ -81,78 +84,6 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
-def save_results(event_times, is_first_batch, results):
-    '''
-    results is a dictionary with the following keys
-
-     for the charge simulation
-     - event_id: event id for each hit
-     - adc_tot: adc value for each hit
-     - adc_tot_ticks: timestamp for each hit
-     - track_pixel_map: map from track to active pixels
-     - unique_pix: all unique pixels (per track?)
-     - current_fractions: fraction of charge associated with each true track
-
-     for the light simulation (in addition to all keys for the charge simulation)
-     - light_event_id: event_id for each light trigger
-     - light_start_time: simulation start time for event
-     - light_trigger_idx: time tick at which each trigger occurs
-     - light_op_channel_idx: optical channel id for each waveform
-     - light_waveforms: waveforms of each light trigger
-     - light_waveforms_true_track_id: true track ids for each tick in each waveform
-     - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
-    
-    returns is_first_batch = False
-    
-    Note: can't handle empty inputs
-    '''
-    for key in list(results.keys()):
-        results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
-
-    uniq_events = cp.asnumpy(np.unique(results['event_id']))
-    uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
-    if light.LIGHT_SIMULATED:
-        # prep arrays for embedded triggers in charge data stream
-        light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
-        if light.LIGHT_TRIG_MODE == 1:
-            light_trigger_modules = np.array(results['trigger_type']+1)
-        light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
-        light_trigger_event_ids = results['light_event_id']
-    else:
-        # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
-        light_trigger_modules = np.ones(len(uniq_events))
-        light_trigger_times = np.zeros_like(uniq_event_times)
-        light_trigger_event_ids = uniq_events
-
-    fee.export_to_hdf5(results['event_id'],
-                       results['adc_tot'],
-                       results['adc_tot_ticks'],
-                       results['unique_pix'],
-                       results['current_fractions'],
-                       results['track_pixel_map'],
-                       output_filename, # defined earlier in script
-                       uniq_event_times,
-                       is_first_batch=is_first_batch,
-                       light_trigger_times=light_trigger_times,
-                       light_trigger_event_id=light_trigger_event_ids,
-                       light_trigger_modules=light_trigger_modules,
-                       bad_channels=bad_channels) # defined earlier in script
-
-    if light.LIGHT_SIMULATED and len(results['light_event_id']):
-        light_sim.export_to_hdf5(results['light_event_id'],
-                                 results['light_start_time'],
-                                 results['light_trigger_idx'],
-                                 results['light_op_channel_idx'],
-                                 results['light_waveforms'],
-                                 output_filename,
-                                 #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
-                                 uniq_event_times,
-                                 results['light_waveforms_true_track_id'],
-                                 results['light_waveforms_true_photons'])
-    if is_first_batch:
-        is_first_batch = False
-    return is_first_batch
-
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2',
@@ -178,16 +109,18 @@ def run_simulation(input_filename,
         output_filename (str): path of the HDF5 output file. If not specified
             the output is added to the input file.
         config (str, optional): a keyword to specify a configuration (all necessary meta data files)
+        mod2mod_variation (bool): a flag indicating if load different configurations for different LArTPC modules
         pixel_layout (str): path of the YAML file containing the pixel
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
         simulation_properties (str): path of the YAML file containing
             the simulation properties
-        response_file (str, optional): path of the Numpy array containing the pre-calculated
-            field responses. Defaults to ../larndsim/bin/response_44.npy.
+        response_file (str): path of the Numpy array containing the pre-calculated
+            field responses. 
         light_lut_file (str, optional): path of the Numpy array containing the light
-            look-up table. Defaults to ../larndsim/bin/lightLUT.npy.
+            look-up table. 
+        light_det_noise_filename (str, optional): path of the Numpy array containning the light noise information
         bad_channels (str, optional): path of the YAML file containing the channels to be
             disabled. Defaults to None
         n_events (int, optional): number of events to be simulated. Defaults to None
@@ -200,14 +133,86 @@ def run_simulation(input_filename,
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
     """
-    
+    # Define a nested function to save the results
+    def save_results(event_times, is_first_batch, results):
+        '''
+        results is a dictionary with the following keys
+
+         for the charge simulation
+         - event_id: event id for each hit
+         - adc_tot: adc value for each hit
+         - adc_tot_ticks: timestamp for each hit
+         - track_pixel_map: map from track to active pixels
+         - unique_pix: all unique pixels (per track?)
+         - current_fractions: fraction of charge associated with each true track
+
+         for the light simulation (in addition to all keys for the charge simulation)
+         - light_event_id: event_id for each light trigger
+         - light_start_time: simulation start time for event
+         - light_trigger_idx: time tick at which each trigger occurs
+         - light_op_channel_idx: optical channel id for each waveform
+         - light_waveforms: waveforms of each light trigger
+         - light_waveforms_true_track_id: true track ids for each tick in each waveform
+         - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
+        
+        returns is_first_batch = False
+        
+        Note: can't handle empty inputs
+        '''
+        for key in list(results.keys()):
+            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
+
+        uniq_events = cp.asnumpy(np.unique(results['event_id']))
+        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+        if light.LIGHT_SIMULATED:
+            # prep arrays for embedded triggers in charge data stream
+            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if light.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type']+1)
+            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
+            light_trigger_event_ids = results['light_event_id']
+        else:
+            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
+            light_trigger_modules = np.ones(len(uniq_events))
+            light_trigger_times = np.zeros_like(uniq_event_times)
+            light_trigger_event_ids = uniq_events
+
+        fee.export_to_hdf5(results['event_id'],
+                           results['adc_tot'],
+                           results['adc_tot_ticks'],
+                           results['unique_pix'],
+                           results['current_fractions'],
+                           results['track_pixel_map'],
+                           output_filename, # defined earlier in script
+                           uniq_event_times,
+                           is_first_batch=is_first_batch,
+                           light_trigger_times=light_trigger_times,
+                           light_trigger_event_id=light_trigger_event_ids,
+                           light_trigger_modules=light_trigger_modules,
+                           bad_channels=bad_channels) # defined earlier in script
+
+        if light.LIGHT_SIMULATED and len(results['light_event_id']):
+            light_sim.export_to_hdf5(results['light_event_id'],
+                                     results['light_start_time'],
+                                     results['light_trigger_idx'],
+                                     results['light_op_channel_idx'],
+                                     results['light_waveforms'],
+                                     output_filename,
+                                     #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
+                                     uniq_event_times,
+                                     results['light_waveforms_true_track_id'],
+                                     results['light_waveforms_true_photons'])
+        if is_first_batch:
+            is_first_batch = False
+        return is_first_batch
+
+    print(LOGO)
+    print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+
     if not os.path.exists(input_filename):
         raise Exception(f'Input file {input_filename} does not exist.')
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
-
-    if light_simulated is not None:
-        light.LIGHT_SIMULATED = light_simulated
 
     # Set the input (meta data) files
     cfg = get_config(config)
@@ -219,30 +224,31 @@ def run_simulation(input_filename,
         response_file = cfg['RESPONSE']
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
+    if light_simulated is None:
+        try:
+            light_simulated = cfg['LIGHT_SIMULATED']
+        except:
+            print("The configuration has not specify wether to simulate light. By default the light simulation is activated.")
     if light_lut_filename is None:
-        light_lut_filename = cfg['LIGHT_LUT']
+        try:
+            light_lut_filename = cfg['LIGHT_LUT']
+        except:
+            print("light_lut_filename is not provided (required if light_simulated is True)")
     if light_det_noise_filename is None:
-        light_det_noise_filename = cfg['LIGHT_DET_NOISE']
+        try:
+            light_det_noise_filename = cfg['LIGHT_DET_NOISE']
+        except:
+            print("light_det_noise_filename is not provided (required if light_simulated is True)")
+
     # Assert necessary ones
     assert pixel_layout, 'pixel_layout (file) must be specified.'
     assert simulation_properties, 'simulation_properties (file) must be specified'
     assert detector_properties, 'detector_properties (file) must be specified'
-    assert response_file 'response_file must be specified'
-    if light.LIGHT_SIMULATED:
-        assert light_lut_filename, 'light_lut_filename must be specified'
-        assert light_det_noise_filename, 'light_det_noise_filename must be specified'
+    assert response_file, 'response_file must be specified'
 
-    logger = memory_logger(save_memory is None)
-    logger.start()
-    logger.take_snapshot()
-    start_simulation = time()
-
-    RangePush("run_simulation")
-
-    if not rand_seed: rand_seed = SEED
-
-    print(LOGO)
-    print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    # Print configuration files
+    # Shall we give an option to turn of the print out?
+    print("")
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
     print("")
@@ -262,18 +268,141 @@ def run_simulation(input_filename,
     else:
         print('Memory resource log will not be recorded')
 
+    # Get number of modules in the simulation
+    mod_ids = consts.detector.get_n_modules(detector_properties)
+    n_modules = len(mod_ids)
+
+    if mod2mod_variation is None:
+        try:
+            mod2mod_variation = cfg['MOD2MOD_VARIATION']
+        except:
+            print("The configuration has not specify wether to load different configurations for different modules. By default all the modules (if more than one simulated) are loaded with the same configuration.")
+
+    if mod2mod_variation is True:
+        if n_modules == 1:
+            warnings.warn("Simulating one module with module variation activated! \nDeactivating module variation...")
+            mod2mod_variation = False
+        if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or len(light_lut_filename) == 1):
+            warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response and light lookup table! \nDeactivating module variation...")
+            mod2mod_variation = False
+
+    if mod2mod_variation == True:
+        # Load the index for pixel layout, response and LUT
+        try:
+            pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
+            if not isinstance(pixel_layout, list) or len(pixel_layout_id) != n_modules or max(pixel_layout_id) >= len(pixel_layout):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel layout is incorrect!")
+            else:
+                module_pixel_layout = [pixel_layout[idx] for idx in pixel_layout_id]
+                pixel_layout = module_pixel_layout
+        except:
+            if len(pixel_layout) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of pixel layout files is incorrect!")
+            if len(pixel_layout) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the pixel layout files.")
+
+        try:
+            response_id = cfg['RESPONSE_ID']
+            if not isinstance(response_file, list) or len(response_id) != n_modules or max(response_id) >= len(response_file):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for response files is incorrect!")
+            else:
+                module_response_file = [response_file[idx] for idx in response_id]
+                response_file = module_response_file
+        except:
+            if len(response_file) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
+            if len(response_file) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the response files.")
+
+        try:
+            light_lut_id = cfg['LIGHT_LUT_ID']
+            if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
+            else:
+                module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
+                light_lut_filename = module_light_lut_filename
+        except:
+            if len(light_lut_filename) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
+            if len(light_lut_filename) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
+        
+        if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
+            if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:
+                warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
+
+    logger = memory_logger(save_memory is None)
+    logger.start()
+    logger.take_snapshot()
+    start_simulation = time()
 
     RangePush("set_random_seed")
+    # set up random seed for larnd-sim
+    if not rand_seed: rand_seed = SEED
     cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
     rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
-    RangePush("load_larndsim_modules")
-    # Here we load the modules after loading the detector properties
-    # maybe can be implemented in a better way?
-    from larndsim import (active_volume, quenching, drifting, detsim, pixels_from_track, fee,
-        lightLUT, light_sim)
+    RangePush("load_properties")
+    if not mod2mod_variation:
+        # Check if the configrations are consistent
+        # Allow configuration to be provided as a string or a single element list
+        if (isinstance(pixel_layout, list) or n_modules == 1) and len(pixel_layout) > 1:
+            raise KeyError("Provided more than one pixel layout file for the simulation with no module variation.")
+        elif isinstance(pixel_layout, list) and len(pixel_layout) == 1:
+            pixel_layout = pixel_layout[0]
+
+        if (isinstance(response_file, list) or n_modules == 1) and len(response_file) > 1:
+            raise KeyError("Provided more than one response file for the simulation with no module variation.")
+        elif isinstance(response_file, list) and len(response_file) == 1:
+            response_file = response_file[0]
+
+        if (isinstance(pixel_thresholds_file, list) or n_modules == 1) and len(pixel_thresholds_file) > 1:
+            raise KeyError("Provided more than one pixel threshold file for the simulation with no module variation.")
+        elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == 1:
+            pixel_thresholds_file = pixel_thresholds_file[0]
+
+        if (isinstance(pixel_gains_file, list) or n_modules == 1) and len(pixel_gains_file) > 1:
+            raise KeyError("Provided more than one pixel gain file for the simulation with no module variation.")
+        elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
+            pixel_gains_file = pixel_gains_file[0]
+
+        if (isinstance(light_lut_filename, list) or n_modules == 1) and len(light_lut_filename) > 1:
+            raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
+        elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
+            light_lut_filename = light_lut_filename[0]
+
+        RangePush("load_detector_properties")
+        consts.load_properties(detector_properties, pixel_layout, simulation_properties)
+        from larndsim.consts import light, detector, physics, sim
+        RangePop()
+
+        RangePush("load_induction_response")
+        response = cp.load(response_file)
+        RangePop()
+    else:
+        consts.light.set_light_properties(detector_properties)
+        consts.sim.set_simulation_properties(simulation_properties)
+        from larndsim.consts import light, physics, sim
+
+    RangePush("load_pixel_thresholds")
+    if pixel_thresholds_file is not None:
+        print("Pixel thresholds file:", pixel_thresholds_file)
+        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
+    else:
+        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
+    RangePop()
+
+    RangePush("load_pixel_gains")
+    if pixel_gains_file is not None:
+        print("Pixel gains file:", pixel_gains_file)
+        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+    RangePop()
+
+    RangePush("set_if_simulate_light")
+    if light_simulated is not None:
+        light.LIGHT_SIMULATED = light_simulated
     RangePop()
 
     RangePush("load_hd5_file")
@@ -392,6 +521,7 @@ def run_simulation(input_filename,
     print(f"Data preparation time: {end_load-start_load:.2f} s")
 
     print("******************\nRUNNING SIMULATION\n******************")
+    RangePush("run_simulation")
     logger.start()
     logger.take_snapshot()
     # Create a lookup table for event timestamps.
@@ -428,45 +558,40 @@ def run_simulation(input_filename,
 
     # Allow module to module variance in the configuration files
     # Loop over all modules
+    # First copy all tracks and segment_ids
+    all_mod_tracks = tracks
+    all_mod_segment_ids = segment_ids
     if mod2mod_variation == None or mod2mod_variation == False:
         mod_ids = [-1]
-    else:
-        mod_ids = range(tot_n_mods)
-    for i_mod in mod_ids:
-
-        # load charge related detector configuration
-        RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, simulation_properties)
-        from larndsim.consts import light, detector, physics, sim
-        RangePop()
-
-        RangePush("load_pixel_thresholds")
-        if pixel_thresholds_file is not None:
-            print("Pixel thresholds file:", pixel_thresholds_file)
-            pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
-        else:
-            pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
-        RangePop()
-
-        RangePush("load_pixel_gains")
-        if pixel_gains_file is not None:
-            print("Pixel gains file:", pixel_gains_file)
-            pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
-        RangePop()
-
-        RangePush("load_induction_response")
-        response = cp.load(response_file)
-        RangePop()
 
         # Sub-select only segments in active volumes
         if sim.IF_ACTIVE_VOLUME_CHECK:
             print("Skipping non-active volumes..." , end="")
             start_mask = time()
-            active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
-            tracks = tracks[active_tracks]
-            segment_ids = segment_ids[active_tracks]
+            active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
+            tracks = all_mod_tracks[active_tracks_mask]
+            segment_ids = all_mod_segment_ids[active_tracks_mask]
             end_mask = time()
             print(f" {end_mask-start_mask:.2f} s")
+    else:
+        mod_ids = consts.detector.get_n_modules(detector_properties)
+
+    # Convention module counting start from 1
+    for i_mod in mod_ids:
+
+        if mod2mod_variation:
+            consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
+            from larndsim.consts import detector
+
+            RangePush("load_module_induction_response")
+            response = cp.load(response_file[i_mod-1])
+            RangePop()
+
+            RangePush("load_segments_in_module")
+            module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS, i_mod)
+            tracks = all_mod_tracks[module_tracks_mask]
+            segment_ids = all_mod_segment_ids[module_tracks_mask]
+            RangePop()
 
         RangePush("run_simulation")
 
@@ -520,7 +645,9 @@ def run_simulation(input_filename,
             BPG = max(ceil(tracks.shape[0] / TPB),1)
             lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
 
-            light_sim_dat_acc.append(light_sim_dat)
+            light_sim_dat_acc['segment_id'].append(light_sim_dat['segment_id'])
+            light_sim_dat_acc['n_photons_det'].append(light_sim_dat['n_photons_det'])
+            light_sim_dat_acc['t0_det'].append(light_sim_dat['t0_det'])
 
             logger.take_snapshot()
             logger.archive('light')
@@ -537,8 +664,10 @@ def run_simulation(input_filename,
         is_first_batch = True
         logger.start()
         logger.take_snapshot([0])
+        i_batch = 0
         for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
                                desc='Simulating batches...', ncols=80, smoothing=0):
+            i_batch = i_batch+1
             # grab only tracks from current batch
             track_subset = tracks[batch_mask]
             if len(track_subset) == 0:
@@ -558,6 +687,7 @@ def run_simulation(input_filename,
                 event_ids = selected_tracks[sim.EVENT_SEPARATOR]
                 unique_eventIDs = np.unique(event_ids)
                 RangePop()
+                print("unique_eventIDs: ", unique_eventIDs)
 
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
@@ -668,7 +798,7 @@ def run_simulation(input_filename,
                 pixel_thresholds_lut.tpb = TPB
                 pixel_thresholds_lut.bpg = BPG
                 pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-                
+
                 fee.get_adc_values[BPG, TPB](pixels_signals,
                                              pixels_tracks_signals,
                                              time_ticks,
@@ -678,7 +808,7 @@ def run_simulation(input_filename,
                                              rng_states,
                                              current_fractions,
                                              pixel_thresholds)
-                
+
                 # get list of adc values
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
@@ -772,7 +902,7 @@ def run_simulation(input_filename,
                     results_acc['light_waveforms'].append(light_digit_signal)
                     results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                     results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-            
+
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                 is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
                 results_acc = defaultdict(list)
@@ -784,8 +914,6 @@ def run_simulation(input_filename,
             is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
 
     logger.take_snapshot([len(logger.log)])
-    for key in list(light_sim_dat.keys()):
-            light_sim_dat_acc[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
@@ -800,8 +928,15 @@ def run_simulation(input_filename,
     swap_coordinates(tracks)
 
     # merge light_sim_dat from different modules
-    for key in list(light_sim_dat.keys()):
-        light_sim_dat_acc[key] = np.concatenate([cp.asnumpy(light_sim_dat_acc[i_mod][key]) for i_mod in range(len(light_sim_dat_acc))], axis=0)
+    if light.LIGHT_SIMULATED:
+        for i_key, key in enumerate(list(light_sim_dat_acc.keys())):
+            light_sim_dat_acc[key] = np.concatenate(cp.asnumpy(light_sim_dat_acc[key]), axis=0)
+
+            if i_key == 0:
+                light_sim_dat_merged = np.zeros([len(light_sim_dat_acc[key]), light.N_OP_CHANNEL],
+                                                 dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+
+            light_sim_dat_merged[key] = light_sim_dat_acc[key]
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
@@ -811,7 +946,7 @@ def run_simulation(input_filename,
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat_acc)
+            output_file.create_dataset('light_dat', data=light_sim_dat_merged)
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
