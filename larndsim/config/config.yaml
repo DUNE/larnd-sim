@@ -1,4 +1,4 @@
-
+# module 0 (single 2x2 module), non-beam
 module0:
     SIM_PROPERTIES:  single_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.3.16.yaml
@@ -7,6 +7,7 @@ module0:
     LIGHT_LUT:       lightLUT.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
 
+# 2x2 (same module configuration), beam
 2x2: &2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
@@ -15,11 +16,25 @@ module0:
     LIGHT_LUT:       lightLUT.npz
     LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
 
+# 2x2 (differnt module configuration), beam
+2x2_module_variation:
+    <<: *2x2main
+    PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.3.16.yaml]
+    PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
+    RESPONSE:        [response_44.npy, response_38.npy]
+    RESPONSE_ID:     [0, 0, 1, 1] 
+    LIGHT_LUT:       [lightLUT.npz, lightLUT.npz]
+    LIGHT_LUT_ID:    [0, 1, 1, 1]
+
+# 2x2 (same module configuration), non-beam
 2x2_only:
     <<: *2x2main
-    SIM_PROPERTIES:  single_sim.yaml
+    SIM_PROPERTIES:  singles_sim.yaml
     DET_PROPERTIES:  2x2_only.yaml
 
+# nd-lar (same module configuration)
+# NuMI beam (not realistic)
+# lack of light configuration files
 ndlar: 
     SIM_PROPERTIES:  2x2_NuMI_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40.yaml
