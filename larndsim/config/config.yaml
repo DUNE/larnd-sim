@@ -15,16 +15,18 @@ module0:
     RESPONSE:        response_44.npy
     LIGHT_LUT:       lightLUT.npz
     LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
+    MOD2MOD_VARIATION: False
 
 # 2x2 (differnt module configuration), beam
 2x2_module_variation:
     <<: *2x2main
-    PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.3.16.yaml]
+    PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.5.16.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
     RESPONSE:        [response_44.npy, response_38.npy]
-    RESPONSE_ID:     [0, 0, 1, 1] 
+    RESPONSE_ID:     [0, 0, 1, 0] 
     LIGHT_LUT:       [lightLUT.npz, lightLUT.npz]
     LIGHT_LUT_ID:    [0, 1, 1, 1]
+    MOD2MOD_VARIATION: True
 
 # 2x2 (same module configuration), non-beam
 2x2_only:
