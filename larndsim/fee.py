@@ -248,9 +248,9 @@ def export_to_hdf5(event_id_list,
                                     packets_mc.append([-1] * track_ids.shape[1])
                                     packets_frac.append([0] * current_fractions.shape[2])
                             elif LIGHT_TRIG_MODE == 1:
-                                if module_trig == 0: #beam trigger
+                                if module_trig == 1: #beam trigger
                                     io_group = BEAM_TRIG_IO
-                                elif module_trig == 1: #threshold trigger
+                                elif module_trig == 0: #threshold trigger
                                     io_group = THRES_TRIG_IO
                                 packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                 packets_mc.append([-1] * track_ids.shape[1])
