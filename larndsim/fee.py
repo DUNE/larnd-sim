@@ -21,6 +21,8 @@ from .pixels_from_track import id2pixel
 from .consts.units import mV, e
 from .consts import units
 
+from .consts.light import LIGHT_TRIG_MODE
+
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 10
 #: Maximum number of ADC values stored per pixel
@@ -35,8 +37,17 @@ ADC_BUSY_DELAY = 9
 RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
 CLOCK_CYCLE = 0.1
-#: Clock rollover / reset time in larpix clock ticks
-ROLLOVER_CYCLES = 2**31
+#: Clock rollover / reset time in larpix clock ticks (32-digit clock)
+ROLLOVER_CYCLES =  2**31
+#: PPS reset time  
+PPS_CYCLES = 10**6 / CLOCK_CYCLE
+#: True if using PPS reset / false for clock rollover
+USE_PPS_ROLLOVER = True # leaving True as default 
+#: Clock reset, either ROLLOVER_CYCLES or PPS_CYCLES
+if USE_PPS_ROLLOVER:
+    CLOCK_RESET_PERIOD = PPS_CYCLES
+else:
+    CLOCK_RESET_PERIOD = ROLLOVER_CYCLES
 #: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
@@ -57,6 +68,10 @@ UNCORRELATED_NOISE_CHARGE = 500 * e
 DISCRIMINATOR_NOISE = 650 * e 
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
+#: Beam trig io group
+BEAM_TRIG_IO = 4
+#: Threshold/LRS trig io group
+THRES_TRIG_IO = 5
 
 import logging
 logging.basicConfig()
@@ -199,21 +214,21 @@ def export_to_hdf5(event_id_list,
                     event_t0 = event_start_time_list[itick]
                     time_tick = int(np.floor(t / CLOCK_CYCLE + event_t0))
 
-                    if event_t0 > ROLLOVER_CYCLES-1 or time_tick > ROLLOVER_CYCLES-1:
-                        # 31-bit rollover
+                    if event_t0 > CLOCK_RESET_PERIOD-1 or time_tick > CLOCK_RESET_PERIOD-1:
+                        # rollover (reset) at either PPS or at the 31-bit clock limit
                         rollover_count += 1
                         for io_group in io_groups:
                             packets.append(SyncPacket(sync_type=b'S',
-                                                      timestamp=ROLLOVER_CYCLES-1, io_group=io_group))
+                                                      timestamp=CLOCK_RESET_PERIOD-1, io_group=io_group))
                             packets_mc.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
-                        event_start_time_list[itick:] -= ROLLOVER_CYCLES
+                        event_start_time_list[itick:] -= CLOCK_RESET_PERIOD
                     else:
                         break
-
-                event_t0 = event_t0 % ROLLOVER_CYCLES
-                time_tick = time_tick % ROLLOVER_CYCLES
-
+                
+                event_t0 = event_t0 % CLOCK_RESET_PERIOD
+                time_tick = time_tick % CLOCK_RESET_PERIOD
+                    
                 # new event, insert light triggers and timestamp flag
                 if event != last_event:
                     for io_group in io_groups:
@@ -225,8 +240,18 @@ def export_to_hdf5(event_id_list,
                     trig_mask = light_trigger_event_id == event
                     if any(trig_mask):
                         for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
-                            t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % ROLLOVER_CYCLES
-                            for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                            t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % CLOCK_RESET_PERIOD
+
+                            if LIGHT_TRIG_MODE == 0:
+                                for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                                    packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+                                    packets_mc.append([-1] * track_ids.shape[1])
+                                    packets_frac.append([0] * current_fractions.shape[2])
+                            elif LIGHT_TRIG_MODE == 1:
+                                if module_trig == 1: #beam trigger
+                                    io_group = BEAM_TRIG_IO
+                                elif module_trig == 0: #threshold trigger
+                                    io_group = THRES_TRIG_IO
                                 packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                 packets_mc.append([-1] * track_ids.shape[1])
                                 packets_frac.append([0] * current_fractions.shape[2])

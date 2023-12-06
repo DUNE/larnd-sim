@@ -20,7 +20,7 @@ from .consts import light
 from .consts import units as units
 from .consts import detector
 
-from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES
+from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES, PPS_CYCLES, CLOCK_RESET_PERIOD, USE_PPS_ROLLOVER
 
 
 def get_nticks(light_incidence):
@@ -425,24 +425,40 @@ def get_triggers(signal, group_threshold, op_channel_idx):
     trigger_idx_list = []
     op_channel_idx_list = []
     trigger_type_list = [] # 0 --> threshold, # 1 --> beam
-    # treat each module independently
-    for mod_id, tpc_ids in [(mod_id, detector.MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
-        # get active channels for the module
-        op_channels = light.TPC_TO_OP_CHANNEL[tpc_ids].ravel()
-        op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
-        #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
-        module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
+    if LIGHT_TRIG_MODE == 0:
+        # treat each module independently
+        for mod_id, tpc_ids in [(mod_id, MODULE_TO_TPCS[mod_id]) for mod_id in mod_ids]:
+            # get active channels for the module
+            op_channels = TPC_TO_OP_CHANNEL[tpc_ids].ravel()
+            op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
+            #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
+            module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
 
+            last_trigger = 0
+            while cp.any(module_above_thresh):
+                # find next time signal goes above threshold
+                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+                next_trig_type = cp.asarray(0)
+                # keep track of trigger time
+                trigger_idx_list.append(next_idx)
+                trigger_type_list.append(next_trig_type)
+                op_channel_idx_list.append(op_channels)
+                # ignore samples during digitization window
+                module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
+                last_trigger = next_idx + digit_ticks
+
+    elif LIGHT_TRIG_MODE == 1:
+        module_above_thresh = np.any(sample_above_thresh, axis=0)
+        op_channels = TPC_TO_OP_CHANNEL[:].ravel()
         last_trigger = 0
         while cp.any(module_above_thresh):
             # find next time signal goes above threshold
-            if last_trigger == 0 and light.LIGHT_TRIG_MODE == 1:
+            if last_trigger == 0:
                 next_idx = cp.asarray(0)
                 next_trig_type = cp.asarray(1)
             else:
                 next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
                 next_trig_type = cp.asarray(0)
-                print("seondary trigger")
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
             trigger_type_list.append(next_trig_type)
@@ -613,13 +629,13 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
-    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % ROLLOVER_CYCLES
-    
+    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % CLOCK_RESET_PERIOD
+
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
         trig_data['op_channel'] = op_channel_idx
         trig_data['ts_s'] = ((start_times + trigger_idx * light.LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
-        trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % ROLLOVER_CYCLES)
+        trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % CLOCK_RESET_PERIOD)
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:

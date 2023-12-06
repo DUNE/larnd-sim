@@ -168,7 +168,7 @@ def run_simulation(input_filename,
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
             if light.LIGHT_TRIG_MODE == 1:
-                light_trigger_modules = np.array(results['trigger_type']+1)
+                light_trigger_modules = np.array(results['trigger_type'])
             light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
             light_trigger_event_ids = results['light_event_id']
         else:
