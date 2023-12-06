@@ -189,10 +189,10 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     elif i_module < 0:
         E_FIELD = e_field_bucket[0]
         if len(e_field_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but electric field is provided as a list. Taking the first given value.')
+            warnings.warn('Module variation seems to be not activated, but electric field is provided as a list. Taking the first given value.')
     elif i_module > len(e_field_bucket):
         E_FIELD = e_field_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the electric field is not specified per module.Taking the first given value.')
+        warnings.warn('Module variation seems to be activated, but the electric field is not specified per module.Taking the first given value.')
     else:
         E_FIELD = e_field_bucket[i_module-1]
     V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
@@ -205,10 +205,10 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     elif i_module < 0:
         ELECTRON_LIFETIME = lifetime_bucket[0]
         if len(lifetime_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but electron lifetime is provided as a list. Taking the first given value.')
+            warnings.warn('Module variation seems to be not activated, but electron lifetime is provided as a list. Taking the first given value.')
     elif i_module > len(lifetime_bucket):
         ELECTRON_LIFETIME = lifetime_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the electron lifetime is not specified per module. Taking the first given value.')
+        warnings.warn('Module variation seems to be activated, but the electron lifetime is not specified per module. Taking the first given value.')
     else:
         ELECTRON_LIFETIME = lifetime_bucket[i_module-1]
 
@@ -217,8 +217,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     RESPONSE_SAMPLING = detprop.get('response_sampling', RESPONSE_SAMPLING)
 
     response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
-    print("len(response_bin_size_bucket): ", len(response_bin_size_bucket))
-    print("get_n_modules(detprop_file): ", get_n_modules(detprop_file))
     if hasattr(response_bin_size_bucket, "__len__") and (len(response_bin_size_bucket) != len(get_n_modules(detprop_file)) and len(response_bin_size_bucket) != 1):
         raise KeyError("The length of provided induction response bin size in the detector configuration file is unexpected. Please check again.")
     if not hasattr(response_bin_size_bucket, "__len__"):

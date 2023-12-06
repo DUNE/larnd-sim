@@ -14,14 +14,12 @@ from math import exp, floor
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
 from larpix.format import hdf5format
-from .consts import detector
+from .consts import detector, light
 
 from .pixels_from_track import id2pixel
 
 from .consts.units import mV, e
 from .consts import units
-
-from .consts.light import LIGHT_TRIG_MODE
 
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 10
@@ -45,9 +43,9 @@ PPS_CYCLES = 10**6 / CLOCK_CYCLE
 USE_PPS_ROLLOVER = True # leaving True as default 
 #: Clock reset, either ROLLOVER_CYCLES or PPS_CYCLES
 if USE_PPS_ROLLOVER:
-    CLOCK_RESET_PERIOD = PPS_CYCLES
+    CLOCK_RESET_PERIOD = int(PPS_CYCLES)
 else:
-    CLOCK_RESET_PERIOD = ROLLOVER_CYCLES
+    CLOCK_RESET_PERIOD = int(ROLLOVER_CYCLES)
 #: Front-end gain in :math:`mV/e-`
 GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
@@ -241,13 +239,12 @@ def export_to_hdf5(event_id_list,
                     if any(trig_mask):
                         for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
                             t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % CLOCK_RESET_PERIOD
-
-                            if LIGHT_TRIG_MODE == 0:
+                            if light.LIGHT_TRIG_MODE == 0:
                                 for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                     packets_mc.append([-1] * track_ids.shape[1])
                                     packets_frac.append([0] * current_fractions.shape[2])
-                            elif LIGHT_TRIG_MODE == 1:
+                            elif light.LIGHT_TRIG_MODE == 1:
                                 if module_trig == 1: #beam trigger
                                     io_group = BEAM_TRIG_IO
                                 elif module_trig == 0: #threshold trigger
