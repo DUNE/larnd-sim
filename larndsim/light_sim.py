@@ -441,7 +441,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
             else:
                 next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
                 next_trig_type = cp.asarray(0)
-                print("seondary trigger")
+                #print("secondary trigger")
             # keep track of trigger time
             trigger_idx_list.append(next_idx)
             trigger_type_list.append(next_trig_type)
