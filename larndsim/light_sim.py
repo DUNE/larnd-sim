@@ -83,7 +83,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             # find tracks that contribute light to this time tick
             idet_lut = op_channel[idet] % lut.shape[3]
             # trying a thingy for getting the most relevant tracks first
-            for itrk in np.sort(light_inc[:,op_channel[idet]]['n_photons_det']):
+            print(light_inc[:,op_channel[idet]]['n_photons_det'])
+            for itrk in sorted(light_inc[:,op_channel[idet]]['n_photons_det'], reverse=True):
             #for itrk in range(segments.shape[0]):
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
