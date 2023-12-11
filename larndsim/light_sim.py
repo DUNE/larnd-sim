@@ -85,9 +85,9 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             
             # trying a thingy for getting the most relevant tracks first
             # Get the indices that would sort the array
-            sorted_indices = np.argsort(light_inc[:,op_channel[idet]]['n_photons_det'])
+            sorted_indices = cp.argsort(light_inc[:,op_channel[idet]]['n_photons_det'])
             # Reverse the array to sort in descending order
-            sorted_indices = sorted_indices[::-1]
+            sorted_indices = cp.flip(sorted_indices, axis=-1)
             # Loop over the segments in the order from most to least photons
             for itrk in sorted_indices:
             #for itrk in range(segments.shape[0]):
