@@ -214,7 +214,21 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
 
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
-    RESPONSE_SAMPLING = detprop.get('response_sampling', RESPONSE_SAMPLING)
+
+    response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
+    if hasattr(response_sampling_bucket, "__len__") and (len(response_sampling_bucket) != len(get_n_modules(detprop_file)) and len(response_sampling_bucket) != 1):
+        raise KeyError("The length of provided induction response time sampling (bin size) in the detector configuration file is unexpected. Please check again.")
+    if not hasattr(response_sampling_bucket, "__len__"):
+        RESPONSE_SAMPLING = response_sampling_bucket
+    elif i_module < 0:
+        RESPONSE_SAMPLING = response_sampling_bucket[0]
+        if len(response_sampling_bucket) > 1:
+            warnings.warn('It seems module variation is not activated, but the induction response time sampling (bin size) is provided as a list. Taking the first given value.')
+    elif i_module > len(response_sampling_bucket):
+        RESPONSE_SAMPLING = response_sampling_bucket[0]
+        warnings.warn('Simulation with module variation seems to be activated, but the induction response time sampling (bin size) is not specified per module. Taking the first given value.')
+    else:
+        RESPONSE_SAMPLING = response_sampling_bucket[i_module-1]
 
     response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
     if hasattr(response_bin_size_bucket, "__len__") and (len(response_bin_size_bucket) != len(get_n_modules(detprop_file)) and len(response_bin_size_bucket) != 1):

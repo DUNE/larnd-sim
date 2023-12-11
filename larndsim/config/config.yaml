@@ -18,8 +18,9 @@ module0:
     MOD2MOD_VARIATION: False
 
 # 2x2 (differnt module configuration), beam
-2x2_module_variation:
+2x2_mod2mod_variation:
     <<: *2x2main
+    DET_PROPERTIES:  2x2_mod2mod_variation.yaml
     PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.5.16.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
     RESPONSE:        [response_44.npy, response_38.npy]
