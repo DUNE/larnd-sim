@@ -82,7 +82,9 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
 
             # find tracks that contribute light to this time tick
             idet_lut = op_channel[idet] % lut.shape[3]
-            for itrk in range(segments.shape[0]):
+            # trying a thingy for getting the most relevant tracks first
+            for itrk in np.sort(light_inc[:,op_channel[idet]]['n_photons_det']):
+            #for itrk in range(segments.shape[0]):
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
