@@ -56,7 +56,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
 
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
+def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices):
     """
     Sums the number of photons observed by each light detector at each time tick
 
@@ -84,10 +84,6 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             idet_lut = op_channel[idet] % lut.shape[3]
             
             # trying a thingy for getting the most relevant tracks first
-            # Get the indices that would sort the array
-            sorted_indices = cp.argsort(light_inc[:,op_channel[idet]]['n_photons_det'])
-            # Reverse the array to sort in descending order
-            sorted_indices = cp.flip(sorted_indices, axis=-1)
             # Loop over the segments in the order from most to least photons
             for itrk in sorted_indices:
             #for itrk in range(segments.shape[0]):
