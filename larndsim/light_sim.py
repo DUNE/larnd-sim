@@ -87,7 +87,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             # Loop over the segments in the order from most to least photons
             for itrk in sorted_indices[idet]:
             #for itrk in range(segments.shape[0]):
-                if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
+                if itrk!=-1 and light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
                     track_time = segments[itrk]['t0']
