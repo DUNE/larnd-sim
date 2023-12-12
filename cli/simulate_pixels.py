@@ -750,8 +750,8 @@ def run_simulation(input_filename,
                 light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
                 # On the CPU CHANGE HERE
                 n_idet = light_inc.shape[1]
-                sorted_indices = cp.zeros((n_idet, light_inc.shape[0]), dtype=np.int32)
-
+                sorted_indices = np.empty((n_idet, light_inc.shape[0]), dtype=np.int32)
+                print(sorted_indices)
                 for idet in range(n_idet):
                   sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1]
                 print(sorted_indices)
