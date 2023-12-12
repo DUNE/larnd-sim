@@ -757,7 +757,7 @@ def run_simulation(input_filename,
                 print("MC_TRUTH_THRESHOLD", light.MC_TRUTH_THRESHOLD)
                 for idet in range(n_light_det):
                   sorted_segs = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1][:light.MAX_MC_TRUTH_IDS]
-                  padded_indices = np.pad(sorted_segs, (0, max(0, 3 - len(sorted_segs))), 'constant', constant_values=-1)
+                  padded_indices = np.pad(sorted_segs, (0, max(0, light.MAX_MC_TRUTH_IDS - len(sorted_segs))), 'constant', constant_values=-1)
                   sorted_indices[idet] = padded_indices # put -1 if there are less than 3 segments in a spill
 
                 TPB = (1,64)
