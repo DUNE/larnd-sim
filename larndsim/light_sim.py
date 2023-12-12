@@ -85,7 +85,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             
             # trying a thingy for getting the most relevant tracks first
             # Loop over the segments in the order from most to least photons
-            for itrk in sorted_indices:
+            print(sorted_indices)
+            for itrk in cp.array(sorted_indices):
             #for itrk in range(segments.shape[0]):
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
