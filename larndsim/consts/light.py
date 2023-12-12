@@ -6,7 +6,7 @@ import numpy as np
 import os
 
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
-MAX_MC_TRUTH_IDS = 3 # was 0
+MAX_MC_TRUTH_IDS = 100 # was 0
 #: Threshold for propogating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 20  # was 0.1 # pe/us
 ENABLE_LUT_SMEARING = False
@@ -107,7 +107,7 @@ def set_light_properties(detprop_file):
 
     try:
         LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
-        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',3)
+        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids',100)
 
         N_OP_CHANNEL = detprop['n_op_channel']
         OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
