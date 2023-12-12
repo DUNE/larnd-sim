@@ -752,7 +752,7 @@ def run_simulation(input_filename,
                 # We take all the tracks that contribute light, and sort them by how much
                 # Then we take only the max number allowed, because the rest will be thrown out anyway??
                 # Not sure if that is actually true 
-                sorted_indices = np.empty((n_light_det, light.MAX_MC_TRUTH_IDS), dtype=np.int32) #was light_inc.shape[0]
+                sorted_indices = np.zeros((n_light_det, light.MAX_MC_TRUTH_IDS), dtype=np.int32) #was light_inc.shape[0]
                 print("MAX_MC_TRUTH_IDS", light.MAX_MC_TRUTH_IDS)
                 print("MC_TRUTH_THRESHOLD", light.MC_TRUTH_THRESHOLD)
                 for idet in range(n_light_det):
