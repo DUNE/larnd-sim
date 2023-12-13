@@ -47,7 +47,7 @@ def set_simulation_properties(simprop_file):
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
 
-    BATCH_SIZE = simprop['batch_size']
+    #BATCH_SIZE = simprop['batch_size']
     EVENT_BATCH_SIZE = simprop['event_batch_size']
     WRITE_BATCH_SIZE = simprop['write_batch_size']
     EVENT_SEPARATOR = simprop['event_separator']
