@@ -742,16 +742,13 @@ def run_simulation(input_filename,
 
                 n_light_det = op_channel.shape[0]
                 light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                #### CHANGING THINGS HERE!!!! ####
-                tick_seg_backtrack_array = 3
-                light_segment_inc = cp.zeros((n_light_det, tick_seg_backtrack_array), dtype='f4')
-                ####
+
                 light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
-                # On the CPU CHANGE HERE
+
                 # We take all the tracks that contribute light, and sort them by how much
                 # Then we take only the max number allowed, because the rest will be thrown out anyway??
-                # Not sure if that is actually true 
+                # Not sure if that is actually true
                 sorted_indices = np.zeros((n_light_det, light.MAX_MC_TRUTH_IDS), dtype=np.int32) #was light_inc.shape[0]
                 print("MAX_MC_TRUTH_IDS", light.MAX_MC_TRUTH_IDS)
                 print("MC_TRUTH_THRESHOLD", light.MC_TRUTH_THRESHOLD)
@@ -788,9 +785,6 @@ def run_simulation(input_filename,
 
                 RangePush("sim_light_det_response")
                 light_response = cp.zeros_like(light_sample_inc)
-                #### CHANGING THINGS!!!! ####
-                tick_segment_response = cp.zeros_like(light_segment_inc)
-                ####
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                 light_sim.calc_light_detector_response[BPG, TPB](
@@ -821,8 +815,8 @@ def run_simulation(input_filename,
                 results_acc['trigger_type'].append(trigger_type)
                 results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
                 results_acc['light_waveforms'].append(light_digit_signal)
-                results_acc['light_waveforms_true_track_id'].append(light_response_true_track_id) # was light_digit_signal_true_track
-                results_acc['light_waveforms_true_photons'].append(light_response_true_photons) # was light_digit_signal_true_photons
+                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track)
+                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
         
         if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
