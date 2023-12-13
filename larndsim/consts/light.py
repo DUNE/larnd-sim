@@ -8,7 +8,7 @@ import os
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
 MAX_MC_TRUTH_IDS = 100 # was 0
 #: Threshold for propogating truth information on a given SiPM
-MC_TRUTH_THRESHOLD = 20  # was 0.1 # pe/us
+MC_TRUTH_THRESHOLD = 0.1  # was 0.1 # pe/us
 ENABLE_LUT_SMEARING = False
 
 N_OP_CHANNEL = 0
