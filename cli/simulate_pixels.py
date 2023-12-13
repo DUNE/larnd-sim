@@ -821,12 +821,8 @@ def run_simulation(input_filename,
                 results_acc['trigger_type'].append(trigger_type)
                 results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
                 results_acc['light_waveforms'].append(light_digit_signal)
-                #print('light_digit_signal_true_track_id shape:',light_digit_signal_true_track_id.shape)
-                #print('light_digit_signal_true_track_id first indice:',light_digit_signal_true_track_id[0])
-                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                #print('light_digit_signal_true_photons [0,0,0]:',light_digit_signal_true_photons[0,0,0])
-                #print('light_digit_signal_true_photons last dimension shape:',light_digit_signal_true_photons[:,:,0].shape)
-                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+                results_acc['light_waveforms_true_track_id'].append(light_response_signal_true_track_id) # was light_digit_signal_true_track
+                results_acc['light_waveforms_true_photons'].append(light_response_signal_true_photons) # was light_digit_signal_true_photons
         
         if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
