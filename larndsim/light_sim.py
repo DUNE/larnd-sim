@@ -71,7 +71,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
         light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
         light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
         light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
-        sorted_indices(array): shape `(MAX_MC_TRUTH_IDS,)`, indices of segments sorted by how much light they contribute
+        sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
     """
     idet,itick = cuda.grid(2)
 
