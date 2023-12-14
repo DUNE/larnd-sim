@@ -341,7 +341,7 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
                         # apply convolution if convolution tick matches or if available truth slot
                         if light_sample_inc_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,itick,itrue] or light_sample_inc_true_track_id[idet,itick,jtrue] == -1:
                             light_response_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,itick,itrue]
-                            light_response_true_photons[idet,itick,jtrue] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
+                            light_response_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
                             break
                 
 
