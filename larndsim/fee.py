@@ -328,7 +328,7 @@ def export_to_hdf5(event_id_list,
                 constant_values=0.)
 
         with h5py.File(filename, 'a') as f:
-            if is_first_batch:
+            if "mc_packets_assn" not in f.keys():
                 f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
