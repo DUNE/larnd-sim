@@ -289,6 +289,7 @@ def run_simulation(input_filename,
     if n_tracks:
         mask = np.isin(tracks['segment_id'], n_tracks)
         tracks = tracks[mask]
+        segment_ids = tracks["segment_id"]
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
