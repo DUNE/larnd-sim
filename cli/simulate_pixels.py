@@ -66,7 +66,6 @@ LOGO = """
      | |/ _` | '__| '_ \ / _` |______/ __| | '_ ` _ \\
      | | (_| | |  | | | | (_| |      \__ \ | | | | | |
      |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
-
 """
 
 warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
@@ -111,9 +110,6 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
-
-
-
 def run_simulation(input_filename,
                    pixel_layout,
                    detector_properties,
@@ -124,7 +120,7 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    light_simulated=None,
                    bad_channels=None,
-                   n_events=None,
+                   n_tracks=None,
                    pixel_thresholds_file=None,
                    pixel_gains_file=None,
                    rand_seed=None,
@@ -290,20 +286,8 @@ def run_simulation(input_filename,
     logger.start()
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
-    if n_events:
-        print(f'Selecting only the first {n_events} events for simulation.')
-        max_eventID = np.unique(tracks[sim.EVENT_SEPARATOR])[n_events-1]
-        segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
-        tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
-        
-        if input_has_trajectories:
-            trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_vertices:
-            vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_mc_hdr:
-            mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_mc_stack:
-            mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
+    if n_tracks:
+        tracks = tracks[:n_tracks]
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
