@@ -287,8 +287,6 @@ def run_simulation(input_filename,
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if n_tracks:
-        print(n_tracks)
-        n_tracks = eval(n_tracks)
         mask = np.isin(tracks['segment_id'], n_tracks)
         tracks = tracks[mask]
 
