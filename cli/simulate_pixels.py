@@ -5,7 +5,6 @@ Command-line interface to larnd-sim module.
 from math import ceil
 from time import time
 import warnings
-import ast
 from collections import defaultdict
 
 import numpy as np
@@ -288,7 +287,7 @@ def run_simulation(input_filename,
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if n_tracks:
-        n_tracks = ast.literal_eval(n_tracks)
+        n_tracks = eval(n_tracks)
         mask = np.isin(tracks['segment_id'], n_tracks)
         tracks = tracks[mask]
 
