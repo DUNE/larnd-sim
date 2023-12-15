@@ -630,7 +630,8 @@ def run_simulation(input_filename,
             start_light_time = time()
             logger.start()
             logger.take_snapshot()
-            lut = np.load(light_lut_filename[i_mod-1])['arr']
+            light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
+            lut = np.load(light_lut)['arr']
 
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
@@ -663,10 +664,7 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
-        if mod2mod_variation:
-            det_borders = module_borders
-        else:
-            det_borders = detector.TPC_BORDERS
+        det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
             i_batch = i_batch+1
