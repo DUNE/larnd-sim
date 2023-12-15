@@ -563,7 +563,6 @@ def run_simulation(input_filename,
     all_mod_segment_ids = segment_ids
     if mod2mod_variation == None or mod2mod_variation == False:
         mod_ids = [-1]
-
         # Sub-select only segments in active volumes
         if sim.IF_ACTIVE_VOLUME_CHECK:
             print("Skipping non-active volumes..." , end="")
@@ -588,13 +587,13 @@ def run_simulation(input_filename,
             RangePop()
 
             RangePush("load_segments_in_module")
-            module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS, i_mod)
+            module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+            module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
             tracks = all_mod_tracks[module_tracks_mask]
             segment_ids = all_mod_segment_ids[module_tracks_mask]
             RangePop()
 
         RangePush("run_simulation")
-
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
 
@@ -631,7 +630,7 @@ def run_simulation(input_filename,
             start_light_time = time()
             logger.start()
             logger.take_snapshot()
-            lut = np.load(light_lut_filename)['arr']
+            lut = np.load(light_lut_filename[i_mod-1])['arr']
 
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
@@ -660,12 +659,15 @@ def run_simulation(input_filename,
         track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
 
         # We divide the sample in portions that can be processed by the GPU
-
         is_first_batch = True
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
-        for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
+        if mod2mod_variation:
+            det_borders = module_borders
+        else:
+            det_borders = detector.TPC_BORDERS
+        for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
             i_batch = i_batch+1
             # grab only tracks from current batch
@@ -687,7 +689,6 @@ def run_simulation(input_filename,
                 event_ids = selected_tracks[sim.EVENT_SEPARATOR]
                 unique_eventIDs = np.unique(event_ids)
                 RangePop()
-                print("unique_eventIDs: ", unique_eventIDs)
 
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
@@ -918,9 +919,10 @@ def run_simulation(input_filename,
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+        localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
     # We previously called swap_coordinates(tracks), but we want to write
     # all truth info in the edep-sim convention (z = beam coordinate). So
@@ -940,7 +942,8 @@ def run_simulation(input_filename,
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=tracks)
+        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         swap_coordinates(tracks)
