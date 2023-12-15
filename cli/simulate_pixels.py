@@ -714,7 +714,6 @@ def run_simulation(input_filename,
 
                 for idet in range(n_light_det):
                     sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
-                    print(sorted_indices[idet])
                 ### END OF TEMPORARY FIX ###
 
                 TPB = (1,64)
