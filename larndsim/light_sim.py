@@ -56,7 +56,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons):
+def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices):
     """
     Sums the number of photons observed by each light detector at each time tick
 
@@ -71,6 +71,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
         light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
         light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
         light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
+        sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
     """
     idet,itick = cuda.grid(2)
 
@@ -82,7 +83,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
 
             # find tracks that contribute light to this time tick
             idet_lut = op_channel[idet] % lut.shape[3]
-            for itrk in range(segments.shape[0]):
+            for itrk in sorted_indices[idet]:
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
