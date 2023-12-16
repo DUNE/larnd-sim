@@ -300,7 +300,7 @@ def export_to_hdf5(event_id_list,
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
 
-        dtype = np.dtype([('track_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+        dtype = np.dtype([('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
@@ -314,11 +314,11 @@ def export_to_hdf5(event_id_list,
 
         # Second, only store the relevant portion.
         if ass_track_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
-            packets_mc_ds['track_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
+            packets_mc_ds['segment_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
             packets_mc_ds['fraction' ] = ass_fractions[:,:ASSOCIATION_COUNT_TO_STORE]
         else:
             num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
-            packets_mc_ds['track_ids'] = np.pad(ass_track_ids,
+            packets_mc_ds['segment_ids'] = np.pad(ass_track_ids,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
                 constant_values=-1)
