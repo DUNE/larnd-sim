@@ -120,7 +120,7 @@ def run_simulation(input_filename,
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
                    light_simulated=None,
                    bad_channels=None,
-                   n_tracks=None,
+                   spills=None,
                    pixel_thresholds_file=None,
                    pixel_gains_file=None,
                    rand_seed=None,
@@ -286,8 +286,8 @@ def run_simulation(input_filename,
     logger.start()
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
-    if n_tracks:
-        mask = np.isin(tracks['segment_id'], n_tracks)
+    if spills:
+        mask = np.isin(tracks['event_id'], spills)
         tracks = tracks[mask]
         segment_ids = tracks["segment_id"]
 
