@@ -192,15 +192,22 @@ def run_simulation(input_filename,
                            bad_channels=bad_channels) # defined earlier in script
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],
-                                     results['light_start_time'],
-                                     results['light_trigger_idx'],
-                                     results['light_op_channel_idx'],
-                                     results['light_waveforms'],
-                                     output_filename,
-                                     uniq_event_times,
-                                     results['light_waveforms_true_track_id'],
-                                     results['light_waveforms_true_photons'])
+            if light.LIGHT_TRIG_MODE == 0:
+                light_sim.export_to_hdf5(results['light_event_id'],
+                                         results['light_start_time'],
+                                         results['light_trigger_idx'],
+                                         results['light_op_channel_idx'],
+                                         results['light_waveforms'],
+                                         output_filename,
+                                         uniq_event_times,
+                                         results['light_waveforms_true_track_id'],
+                                         results['light_waveforms_true_photons'])
+            elif light.LIGHT_TRIG_MODE == 1:
+                light_sim.export_to_hdf5_no_trig(results['light_event_id'],
+                                                 results['light_waveforms'],
+                                                 output_filename,
+                                                 results['light_waveforms_true_track_id'],
+                                                 results['light_waveforms_true_photons'])
         if is_first_batch:
             is_first_batch = False
         return is_first_batch
@@ -832,20 +839,12 @@ def run_simulation(input_filename,
                 # ~~~ Light detector response simulation ~~~
                 if light.LIGHT_SIMULATED:
                     RangePush("sum_light_signals")
-                    print("light_sim_dat: ",light_sim_dat.shape)
                     light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
                     selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
                     n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                     n_light_ticks = min(n_light_ticks,int(5E4))
-                    if mod2mod_variation:
-                        active_tpc_list = np.arange((i_mod-1)*2, i_mod*2) # module and io_group counting starts from 1, but tpc counting start from 0
-                    else:
-                        active_tpc_list = np.arange(max(consts.detector.get_n_modules(detector_properties))*2)
-                    for i_, i_tpc in enumerate(active_tpc_list):
-                        if i_ ==  0:
-                            op_channel = light.TPC_TO_OP_CHANNEL[i_tpc]
-                        else:
-                            op_channel = np.append(op_channel, light.TPC_TO_OP_CHANNEL[i_tpc], axis=0)
+                    # at least the optical channels from a whole module are activated together
+                    op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                     op_channel = cp.array(op_channel)
                     #op_channel = light_sim.get_active_op_channel(light_inc)
                     n_light_det = op_channel.shape[0]
@@ -932,6 +931,19 @@ def run_simulation(input_filename,
         all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
         all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
         all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+
+        # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
+        # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
+        # once mod2mod variation is enabled, the light threshold triggering does not work properly
+        # compare the light trigger between different module and digitize afterwards should solve the issue
+        if light.LIGHT_TRIG_MODE == 1:
+            light_event_id = np.unique(localSpillIDs)
+            light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
+            light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
+            light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
+            light_event_times = light_event_id * sim.SPILL_PERIOD # us
+
+            light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
 
     # We previously called swap_coordinates(tracks), but we want to write
     # all truth info in the edep-sim convention (z = beam coordinate). So
