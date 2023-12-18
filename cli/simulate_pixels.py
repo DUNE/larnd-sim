@@ -198,7 +198,6 @@ def run_simulation(input_filename,
                                      results['light_op_channel_idx'],
                                      results['light_waveforms'],
                                      output_filename,
-                                     #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
                                      uniq_event_times,
                                      results['light_waveforms_true_track_id'],
                                      results['light_waveforms_true_photons'])
@@ -554,7 +553,7 @@ def run_simulation(input_filename,
 
     # accumulate results for periodic file saving
     results_acc = defaultdict(list)
-    light_sim_dat_acc = defaultdict(list)
+    light_sim_dat_acc = list()
 
     # Allow module to module variance in the configuration files
     # Loop over all modules
@@ -621,7 +620,8 @@ def run_simulation(input_filename,
 
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
-            light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
+            n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
+            light_sim_dat = np.zeros([len(tracks), n_light_channel],
                                      dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
             light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
             track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
@@ -639,15 +639,16 @@ def run_simulation(input_filename,
 
             lut = to_device(lut)
 
-            light_noise = cp.load(light_det_noise_filename)
+            if mod2mod_variation:
+                light_noise = cp.load(light_det_noise_filename)[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+            else:
+                light_noise = cp.load(light_det_noise_filename)
 
             TPB = 256
             BPG = max(ceil(tracks.shape[0] / TPB),1)
             lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
 
-            light_sim_dat_acc['segment_id'].append(light_sim_dat['segment_id'])
-            light_sim_dat_acc['n_photons_det'].append(light_sim_dat['n_photons_det'])
-            light_sim_dat_acc['t0_det'].append(light_sim_dat['t0_det'])
+            light_sim_dat_acc.append(light_sim_dat)
 
             logger.take_snapshot()
             logger.archive('light')
@@ -831,12 +832,22 @@ def run_simulation(input_filename,
                 # ~~~ Light detector response simulation ~~~
                 if light.LIGHT_SIMULATED:
                     RangePush("sum_light_signals")
+                    print("light_sim_dat: ",light_sim_dat.shape)
                     light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
                     selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
                     n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                     n_light_ticks = min(n_light_ticks,int(5E4))
-                    op_channel = light_sim.get_active_op_channel(light_inc)
-
+                    if mod2mod_variation:
+                        active_tpc_list = np.arange((i_mod-1)*2, i_mod*2) # module and io_group counting starts from 1, but tpc counting start from 0
+                    else:
+                        active_tpc_list = np.arange(max(consts.detector.get_n_modules(detector_properties))*2)
+                    for i_, i_tpc in enumerate(active_tpc_list):
+                        if i_ ==  0:
+                            op_channel = light.TPC_TO_OP_CHANNEL[i_tpc]
+                        else:
+                            op_channel = np.append(op_channel, light.TPC_TO_OP_CHANNEL[i_tpc], axis=0)
+                    op_channel = cp.array(op_channel)
+                    #op_channel = light_sim.get_active_op_channel(light_inc)
                     n_light_det = op_channel.shape[0]
                     light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                     light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
@@ -927,17 +938,6 @@ def run_simulation(input_filename,
     # temporarily undo the swap. It's easier than reorganizing the code!
     swap_coordinates(tracks)
 
-    # merge light_sim_dat from different modules
-    if light.LIGHT_SIMULATED:
-        for i_key, key in enumerate(list(light_sim_dat_acc.keys())):
-            light_sim_dat_acc[key] = np.concatenate(cp.asnumpy(light_sim_dat_acc[key]), axis=0)
-
-            if i_key == 0:
-                light_sim_dat_merged = np.zeros([len(light_sim_dat_acc[key]), light.N_OP_CHANNEL],
-                                                 dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
-
-            light_sim_dat_merged[key] = light_sim_dat_acc[key]
-
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
@@ -947,7 +947,12 @@ def run_simulation(input_filename,
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat_merged)
+            # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
+            if mod2mod_variation:
+                for i_mod in mod_ids:
+                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1])
+            else:
+                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0])
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
