@@ -7,10 +7,10 @@ import numba as nb
 
 from numba import cuda
 
-from .consts import light
-from .consts.light import OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
-from .consts.detector import TPC_BORDERS
-from .consts import units, detector
+#from .consts import light
+#from .consts.light import OP_CHANNEL_EFFICIENCY, OP_CHANNEL_TO_TPC
+#from .consts.detector import TPC_BORDERS
+from .consts import units, detector, light
 
 @nb.njit
 def get_voxel(pos, itpc, lut_vox_div):
@@ -25,7 +25,7 @@ def get_voxel(pos, itpc, lut_vox_div):
         tuple: indices (in x, y, z dimensions) of the voxel containing the input position
     """
 
-    this_tpc_borders = TPC_BORDERS[itpc]
+    this_tpc_borders = detector.TPC_BORDERS[itpc]
 
     # If we are in an "odd" TPC, that is, if the index of
     # the tpc is an odd number, we need to rotate x
@@ -91,7 +91,6 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
         # ignore any edeps with the default itpc value,
         # they are outside any tpc
         if itpc != detector.DEFAULT_PLANE_INDEX:
-
             # Voxel containing LUT position
             lut_vox_div = lut.shape[:-1]
             i_voxel = get_voxel(pos, itpc,lut_vox_div)
@@ -113,8 +112,8 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
                 op_channel_index = output_i
                 lut_index = output_i % vis_dat.shape[0]
 
-                eff = OP_CHANNEL_EFFICIENCY[output_i]
-                vis = vis_dat[lut_index] * (OP_CHANNEL_TO_TPC[output_i] == itpc)
+                eff = light.OP_CHANNEL_EFFICIENCY[output_i]
+                vis = vis_dat[lut_index] * (light.OP_CHANNEL_TO_TPC[output_i] == itpc)
                 t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
 
                 light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons

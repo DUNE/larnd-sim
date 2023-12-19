@@ -23,7 +23,10 @@ from numba.core.errors import NumbaPerformanceWarning
 from tqdm import tqdm
 
 from larndsim import consts
+from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
+
 from larndsim.util import CudaDict, batching, memory_logger
+from larndsim.config import get_config
 
 import os
 
@@ -81,18 +84,17 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
-
-
-
 def run_simulation(input_filename,
-                   pixel_layout,
-                   detector_properties,
-                   simulation_properties,
                    output_filename,
-                   response_file='../larndsim/bin/response_44.npy',
-                   light_lut_filename='../larndsim/bin/lightLUT.npz',
-                   light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
+                   config='2x2',
+                   mod2mod_variation=None,
+                   pixel_layout=None,
+                   detector_properties=None,
+                   simulation_properties=None,
+                   response_file=None,
                    light_simulated=None,
+                   light_lut_filename=None,
+                   light_det_noise_filename=None,
                    bad_channels=None,
                    n_events=None,
                    pixel_thresholds_file=None,
@@ -104,18 +106,21 @@ def run_simulation(input_filename,
 
     Args:
         input_filename (str): path of the edep-sim input file
+        output_filename (str): path of the HDF5 output file. If not specified
+            the output is added to the input file.
+        config (str, optional): a keyword to specify a configuration (all necessary meta data files)
+        mod2mod_variation (bool): a flag indicating if load different configurations for different LArTPC modules
         pixel_layout (str): path of the YAML file containing the pixel
             layout and connection details.
         detector_properties (str): path of the YAML file containing
             the detector properties
         simulation_properties (str): path of the YAML file containing
             the simulation properties
-        output_filename (str): path of the HDF5 output file. If not specified
-            the output is added to the input file.
-        response_file (str, optional): path of the Numpy array containing the pre-calculated
-            field responses. Defaults to ../larndsim/bin/response_44.npy.
+        response_file (str): path of the Numpy array containing the pre-calculated
+            field responses. 
         light_lut_file (str, optional): path of the Numpy array containing the light
-            look-up table. Defaults to ../larndsim/bin/lightLUT.npy.
+            look-up table. 
+        light_det_noise_filename (str, optional): path of the Numpy array containning the light noise information
         bad_channels (str, optional): path of the YAML file containing the channels to be
             disabled. Defaults to None
         n_events (int, optional): number of events to be simulated. Defaults to None
@@ -128,31 +133,140 @@ def run_simulation(input_filename,
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
     """
-    
+    # Define a nested function to save the results
+    def save_results(event_times, is_first_batch, results):
+        '''
+        results is a dictionary with the following keys
+
+         for the charge simulation
+         - event_id: event id for each hit
+         - adc_tot: adc value for each hit
+         - adc_tot_ticks: timestamp for each hit
+         - track_pixel_map: map from track to active pixels
+         - unique_pix: all unique pixels (per track?)
+         - current_fractions: fraction of charge associated with each true track
+
+         for the light simulation (in addition to all keys for the charge simulation)
+         - light_event_id: event_id for each light trigger
+         - light_start_time: simulation start time for event
+         - light_trigger_idx: time tick at which each trigger occurs
+         - light_op_channel_idx: optical channel id for each waveform
+         - light_waveforms: waveforms of each light trigger
+         - light_waveforms_true_track_id: true track ids for each tick in each waveform
+         - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
+        
+        returns is_first_batch = False
+        
+        Note: can't handle empty inputs
+        '''
+        for key in list(results.keys()):
+            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
+
+        uniq_events = cp.asnumpy(np.unique(results['event_id']))
+        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+        if light.LIGHT_SIMULATED:
+            # prep arrays for embedded triggers in charge data stream
+            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if light.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type'])
+            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
+            light_trigger_event_ids = results['light_event_id']
+        else:
+            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
+            light_trigger_modules = np.ones(len(uniq_events))
+            light_trigger_times = np.zeros_like(uniq_event_times)
+            light_trigger_event_ids = uniq_events
+
+        fee.export_to_hdf5(results['event_id'],
+                           results['adc_tot'],
+                           results['adc_tot_ticks'],
+                           results['unique_pix'],
+                           results['current_fractions'],
+                           results['track_pixel_map'],
+                           output_filename, # defined earlier in script
+                           uniq_event_times,
+                           is_first_batch=is_first_batch,
+                           light_trigger_times=light_trigger_times,
+                           light_trigger_event_id=light_trigger_event_ids,
+                           light_trigger_modules=light_trigger_modules,
+                           bad_channels=bad_channels) # defined earlier in script
+
+        if light.LIGHT_SIMULATED and len(results['light_event_id']):
+            if light.LIGHT_TRIG_MODE == 0:
+                light_sim.export_to_hdf5(results['light_event_id'],
+                                         results['light_start_time'],
+                                         results['light_trigger_idx'],
+                                         results['light_op_channel_idx'],
+                                         results['light_waveforms'],
+                                         output_filename,
+                                         uniq_event_times,
+                                         results['light_waveforms_true_track_id'],
+                                         results['light_waveforms_true_photons'])
+            elif light.LIGHT_TRIG_MODE == 1:
+                light_sim.export_to_hdf5_no_trig(results['light_event_id'],
+                                                 results['light_waveforms'],
+                                                 output_filename,
+                                                 results['light_waveforms_true_track_id'],
+                                                 results['light_waveforms_true_photons'])
+        if is_first_batch:
+            is_first_batch = False
+        return is_first_batch
+
+    print(LOGO)
+    print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+
     if not os.path.exists(input_filename):
         raise Exception(f'Input file {input_filename} does not exist.')
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
-    
-    logger = memory_logger(save_memory is None)
-    logger.start()
-    logger.take_snapshot()
-    start_simulation = time()
 
-    RangePush("run_simulation")
+    # Set the input (meta data) files
+    cfg = get_config(config)
+    if pixel_layout is None:
+        pixel_layout = cfg['PIXEL_LAYOUT']
+    if detector_properties is None:
+        detector_properties = cfg['DET_PROPERTIES']
+    if response_file is None:
+        response_file = cfg['RESPONSE']
+    if simulation_properties is None:
+        simulation_properties = cfg['SIM_PROPERTIES']
+    if light_simulated is None:
+        try:
+            light_simulated = cfg['LIGHT_SIMULATED']
+        except:
+            print("The configuration has not specify wether to simulate light. By default the light simulation is activated.")
+    if light_lut_filename is None:
+        try:
+            light_lut_filename = cfg['LIGHT_LUT']
+        except:
+            print("light_lut_filename is not provided (required if light_simulated is True)")
+    if light_det_noise_filename is None:
+        try:
+            light_det_noise_filename = cfg['LIGHT_DET_NOISE']
+        except:
+            print("light_det_noise_filename is not provided (required if light_simulated is True)")
 
-    if not rand_seed: rand_seed = SEED
+    # Assert necessary ones
+    assert pixel_layout, 'pixel_layout (file) must be specified.'
+    assert simulation_properties, 'simulation_properties (file) must be specified'
+    assert detector_properties, 'detector_properties (file) must be specified'
+    assert response_file, 'response_file must be specified'
 
-    print(LOGO)
-    print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
-    print("Output file:", output_filename)
-
-    print("Random seed:", rand_seed)
-    print("Pixel layout file:", pixel_layout)
-    print("Detector properties file:", detector_properties)
-    print("Simulation properties file:", simulation_properties)
+    # Print configuration files
+    # Shall we give an option to turn of the print out?
+    print("")
     print("edep-sim input file:", input_filename)
+    print("larnd-sim output file:", output_filename)
+    print("")
+    print("Random seed:", rand_seed)
+    print("Simulation properties file:", simulation_properties)
+    print("Detector properties file:", detector_properties)
+    print("Pixel layout file:", pixel_layout)
     print("Response file:", response_file)
+    if light_lut_filename:
+        print("Light LUT:", light_lut_filename)
+    if light_det_noise_filename:
+        print("Light detector noise: ", light_det_noise_filename)
     if bad_channels:
         print("Disabled channel list: ", bad_channels)
     if save_memory:
@@ -160,27 +274,123 @@ def run_simulation(input_filename,
     else:
         print('Memory resource log will not be recorded')
 
+    # Get number of modules in the simulation
+    mod_ids = consts.detector.get_n_modules(detector_properties)
+    n_modules = len(mod_ids)
+
+    if mod2mod_variation is None:
+        try:
+            mod2mod_variation = cfg['MOD2MOD_VARIATION']
+        except:
+            print("The configuration has not specify wether to load different configurations for different modules. By default all the modules (if more than one simulated) are loaded with the same configuration.")
+
+    if mod2mod_variation is True:
+        if n_modules == 1:
+            warnings.warn("Simulating one module with module variation activated! \nDeactivating module variation...")
+            mod2mod_variation = False
+        if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or len(light_lut_filename) == 1):
+            warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response and light lookup table! \nDeactivating module variation...")
+            mod2mod_variation = False
+
+    if mod2mod_variation == True:
+        # Load the index for pixel layout, response and LUT
+        try:
+            pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
+            if not isinstance(pixel_layout, list) or len(pixel_layout_id) != n_modules or max(pixel_layout_id) >= len(pixel_layout):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel layout is incorrect!")
+            else:
+                module_pixel_layout = [pixel_layout[idx] for idx in pixel_layout_id]
+                pixel_layout = module_pixel_layout
+        except:
+            if len(pixel_layout) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of pixel layout files is incorrect!")
+            if len(pixel_layout) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the pixel layout files.")
+
+        try:
+            response_id = cfg['RESPONSE_ID']
+            if not isinstance(response_file, list) or len(response_id) != n_modules or max(response_id) >= len(response_file):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for response files is incorrect!")
+            else:
+                module_response_file = [response_file[idx] for idx in response_id]
+                response_file = module_response_file
+        except:
+            if len(response_file) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
+            if len(response_file) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the response files.")
+
+        try:
+            light_lut_id = cfg['LIGHT_LUT_ID']
+            if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
+            else:
+                module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
+                light_lut_filename = module_light_lut_filename
+        except:
+            if len(light_lut_filename) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
+            if len(light_lut_filename) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
+        
+        if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
+            if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:
+                warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
+
+    logger = memory_logger(save_memory is None)
+    logger.start()
+    logger.take_snapshot()
+    start_simulation = time()
 
     RangePush("set_random_seed")
+    # set up random seed for larnd-sim
+    if not rand_seed: rand_seed = SEED
     cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
     rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
     RangePop()
 
-    RangePush("load_detector_properties")
-    consts.load_properties(detector_properties, pixel_layout, simulation_properties)
-    from larndsim.consts import light, detector, physics, sim
-    RangePop()
-    print("Event batch size:", sim.EVENT_BATCH_SIZE)
-    print("Batch size:", sim.BATCH_SIZE)
-    print("Write batch size:", sim.WRITE_BATCH_SIZE)
+    RangePush("load_properties")
+    if not mod2mod_variation:
+        # Check if the configrations are consistent
+        # Allow configuration to be provided as a string or a single element list
+        if (isinstance(pixel_layout, list) or n_modules == 1) and len(pixel_layout) > 1:
+            raise KeyError("Provided more than one pixel layout file for the simulation with no module variation.")
+        elif isinstance(pixel_layout, list) and len(pixel_layout) == 1:
+            pixel_layout = pixel_layout[0]
 
-    RangePush("load_larndsim_modules")
-    # Here we load the modules after loading the detector properties
-    # maybe can be implemented in a better way?
-    from larndsim import (active_volume, quenching, drifting, detsim, pixels_from_track, fee,
-        lightLUT, light_sim)
-    RangePop()
+        if (isinstance(response_file, list) or n_modules == 1) and len(response_file) > 1:
+            raise KeyError("Provided more than one response file for the simulation with no module variation.")
+        elif isinstance(response_file, list) and len(response_file) == 1:
+            response_file = response_file[0]
+
+        if (isinstance(pixel_thresholds_file, list) or n_modules == 1) and len(pixel_thresholds_file) > 1:
+            raise KeyError("Provided more than one pixel threshold file for the simulation with no module variation.")
+        elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == 1:
+            pixel_thresholds_file = pixel_thresholds_file[0]
+
+        if (isinstance(pixel_gains_file, list) or n_modules == 1) and len(pixel_gains_file) > 1:
+            raise KeyError("Provided more than one pixel gain file for the simulation with no module variation.")
+        elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
+            pixel_gains_file = pixel_gains_file[0]
+
+        if (isinstance(light_lut_filename, list) or n_modules == 1) and len(light_lut_filename) > 1:
+            raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
+        elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
+            light_lut_filename = light_lut_filename[0]
+
+        RangePush("load_detector_properties")
+        consts.load_properties(detector_properties, pixel_layout, simulation_properties)
+        from larndsim.consts import light, detector, physics, sim
+        RangePop()
+
+        RangePush("load_induction_response")
+        response = cp.load(response_file)
+        RangePop()
+    else:
+        consts.light.set_light_properties(detector_properties)
+        consts.sim.set_simulation_properties(simulation_properties)
+        from larndsim.consts import light, physics, sim
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
@@ -195,7 +405,12 @@ def run_simulation(input_filename,
         print("Pixel gains file:", pixel_gains_file)
         pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
     RangePop()
-    
+
+    RangePush("set_if_simulate_light")
+    if light_simulated is not None:
+        light.LIGHT_SIMULATED = light_simulated
+    RangePop()
+
     RangePush("load_hd5_file")
     print("Loading track segments..." , end="")
     start_load = time()
@@ -244,18 +459,9 @@ def run_simulation(input_filename,
         print("Empty input dataset, exiting")
         return
 
-    RangePop()
-    end_load = time()
     logger.take_snapshot()
     logger.archive('loading')
-    print(f" {end_load-start_load:.2f} s")
 
-    response = cp.load(response_file)
-
-    TPB = 256
-    BPG = max(ceil(tracks.shape[0] / TPB),1)
-
-    print("******************\nRUNNING SIMULATION\n******************")
     logger.start()
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
@@ -264,7 +470,7 @@ def run_simulation(input_filename,
         max_eventID = np.unique(tracks[sim.EVENT_SEPARATOR])[n_events-1]
         segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
-        
+
         if input_has_trajectories:
             trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
         if input_has_vertices:
@@ -274,36 +480,12 @@ def run_simulation(input_filename,
         if input_has_mc_stack:
             mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
 
-    # Here we swap the x and z coordinates of the tracks
-    # because of the different convention in larnd-sim wrt edep-sim
-    tracks = swap_coordinates(tracks)
-
-    # Sub-select only segments in active volumes
-    if sim.IF_ACTIVE_VOLUME_CHECK:
-        print("Skipping non-active volumes..." , end="")
-        start_mask = time()
-        active_tracks = active_volume.select_active_volume(tracks, detector.TPC_BORDERS)
-        tracks = tracks[active_tracks]
-        segment_ids = segment_ids[active_tracks]
-        end_mask = time()
-        print(f" {end_mask-start_mask:.2f} s")
-
-    if light_simulated is not None:
-        light.LIGHT_SIMULATED = light_simulated
-
-    RangePush("run_simulation")
-
-    # Set up light simulation data objects
-    if light.LIGHT_SIMULATED:
-        light_sim_dat = np.zeros([len(tracks), light.N_OP_CHANNEL],
-                                 dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
-        light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
-        track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
-
+    # Make "n_photons" attribute, if it doesn't exist
     if 'n_photons' not in tracks.dtype.names:
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
+    # Make "t0" attribute, if it doesn't exist
     if 't0' not in tracks.dtype.names:
         # the t0 key refers to the time of energy deposition
         # in the input files, it is called 't'
@@ -319,67 +501,35 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
+    # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
+    # Therefore, to run the detector simulation we reset the t0 to reflect that
+    # When storing the mc truth, revert this change and store the "real" segment time
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period so t0 is wrt the corresponding spill start time.
-        # The spill starts are marking the start of 
+        # The spill starts are marking the start of
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
         tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
+    # Here we swap the x and z coordinates of the tracks
+    # because of the different convention in larnd-sim wrt edep-sim
+    # When storing the mc truth, revert this change to have z as the beam direction and x as the drift axis
+    tracks = swap_coordinates(tracks)
+    
     logger.take_snapshot()
     logger.archive('preparation')
 
-    # We calculate the number of electrons after recombination (quenching module)
-    # and the position and number of electrons after drifting (drifting module)
-    print("Quenching electrons..." , end="")
+    RangePop()
+    end_load = time()
+    print(f"Data preparation time: {end_load-start_load:.2f} s")
+
+    print("******************\nRUNNING SIMULATION\n******************")
+    RangePush("run_simulation")
     logger.start()
     logger.take_snapshot()
-    start_quenching = time()
-    quenching.quench[BPG,TPB](tracks, physics.BIRKS)
-    end_quenching = time()
-    logger.take_snapshot()
-    logger.archive('quenching')
-    print(f" {end_quenching-start_quenching:.2f} s")
-
-    print("Drifting electrons...", end="")
-    start_drifting = time()
-    logger.start()
-    logger.take_snapshot()
-    drifting.drift[BPG,TPB](tracks)
-    end_drifting = time()
-    logger.take_snapshot()
-    logger.archive('drifting')
-    print(f" {end_drifting-start_drifting:.2f} s")
-
-    if light.LIGHT_SIMULATED:
-        print("Calculating optical responses...", end="")
-        start_light_time = time()
-        logger.start()
-        logger.take_snapshot()
-        lut = np.load(light_lut_filename)['arr']
-
-        # clip LUT so that no voxel contains 0 visibility
-        mask = lut['vis'] > 0
-        lut['vis'][~mask] = lut['vis'][mask].min()
-
-        lut = to_device(lut)
-
-        light_noise = cp.load(light_det_noise_filename)
-
-        TPB = 256
-        BPG = max(ceil(tracks.shape[0] / TPB),1)
-        lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
-        logger.take_snapshot()
-        logger.archive('light')
-        print(f" {time()-start_light_time:.2f} s")
-
-    # Restart the memory logger for the electronics simulation loop
-    logger.start()
-    logger.take_snapshot()
-
     # Create a lookup table for event timestamps.
 
     # Event IDs may have some offset (e.g. to make them globally unique within
@@ -408,25 +558,413 @@ def run_simulation(input_filename,
         event_times_in_use = cp.take(event_times, uniq_ev)
         vertices['t_event'] = np.repeat(event_times_in_use.get(),counts)
 
+    # accumulate results for periodic file saving
+    results_acc = defaultdict(list)
+    light_sim_dat_acc = list()
+
+    # Allow module to module variance in the configuration files
+    # Loop over all modules
+    # First copy all tracks and segment_ids
+    all_mod_tracks = tracks
+    all_mod_segment_ids = segment_ids
+    if mod2mod_variation == None or mod2mod_variation == False:
+        mod_ids = [-1]
+        # Sub-select only segments in active volumes
+        if sim.IF_ACTIVE_VOLUME_CHECK:
+            print("Skipping non-active volumes..." , end="")
+            start_mask = time()
+            active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
+            tracks = all_mod_tracks[active_tracks_mask]
+            segment_ids = all_mod_segment_ids[active_tracks_mask]
+            end_mask = time()
+            print(f" {end_mask-start_mask:.2f} s")
+    else:
+        mod_ids = consts.detector.get_n_modules(detector_properties)
+
+    # Convention module counting start from 1
+    for i_mod in mod_ids:
+
+        if mod2mod_variation:
+            consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
+            from larndsim.consts import detector
+
+            RangePush("load_module_induction_response")
+            response = cp.load(response_file[i_mod-1])
+            RangePop()
+
+            RangePush("load_segments_in_module")
+            module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+            module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
+            tracks = all_mod_tracks[module_tracks_mask]
+            segment_ids = all_mod_segment_ids[module_tracks_mask]
+            RangePop()
+
+        RangePush("run_simulation")
+        TPB = 256
+        BPG = max(ceil(tracks.shape[0] / TPB),1)
+
+        # We calculate the number of electrons after recombination (quenching module)
+        # and the position and number of electrons after drifting (drifting module)
+        print("Quenching electrons..." , end="")
+        logger.start()
+        logger.take_snapshot()
+        start_quenching = time()
+        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+        end_quenching = time()
+        logger.take_snapshot()
+        logger.archive('quenching')
+        print(f" {end_quenching-start_quenching:.2f} s")
+
+        print("Drifting electrons...", end="")
+        start_drifting = time()
+        logger.start()
+        logger.take_snapshot()
+        drifting.drift[BPG,TPB](tracks)
+        end_drifting = time()
+        logger.take_snapshot()
+        logger.archive('drifting')
+        print(f" {end_drifting-start_drifting:.2f} s")
+
+        # Set up light simulation data objects and calculate the optical responses
+        if light.LIGHT_SIMULATED:
+            n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
+            light_sim_dat = np.zeros([len(tracks), n_light_channel],
+                                     dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+            light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
+            track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
+
+            print("Calculating optical responses...", end="")
+            start_light_time = time()
+            logger.start()
+            logger.take_snapshot()
+            light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
+            lut = np.load(light_lut)['arr']
+
+            # clip LUT so that no voxel contains 0 visibility
+            mask = lut['vis'] > 0
+            lut['vis'][~mask] = lut['vis'][mask].min()
+
+            lut = to_device(lut)
+
+            if mod2mod_variation:
+                light_noise = cp.load(light_det_noise_filename)[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+            else:
+                light_noise = cp.load(light_det_noise_filename)
+
+            TPB = 256
+            BPG = max(ceil(tracks.shape[0] / TPB),1)
+            lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
+
+            light_sim_dat_acc.append(light_sim_dat)
+
+            logger.take_snapshot()
+            logger.archive('light')
+            print(f" {time()-start_light_time:.2f} s")
+
+        # Restart the memory logger for the electronics simulation loop
+        logger.start()
+        logger.take_snapshot()
+
+        track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
+
+        # We divide the sample in portions that can be processed by the GPU
+        is_first_batch = True
+        logger.start()
+        logger.take_snapshot([0])
+        i_batch = 0
+        det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
+        for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
+                               desc='Simulating batches...', ncols=80, smoothing=0):
+            i_batch = i_batch+1
+            # grab only tracks from current batch
+            track_subset = tracks[batch_mask]
+            if len(track_subset) == 0:
+                continue
+            ievd = int(track_subset[0][sim.EVENT_SEPARATOR])
+            evt_tracks = track_subset
+            first_trk_id = np.argmax(batch_mask) # first track in batch
+
+            for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
+                             delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+                if itrk > 0:
+                    warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
+                    
+                selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
+
+                RangePush("event_id_map")
+                event_ids = selected_tracks[sim.EVENT_SEPARATOR]
+                unique_eventIDs = np.unique(event_ids)
+                RangePop()
+
+                # We find the pixels intersected by the projection of the tracks on
+                # the anode plane using the Bresenham's algorithm. We also take into
+                # account the neighboring pixels, due to the transverse diffusion of the charges.
+                RangePush("pixels_from_track")
+                max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
+
+                TPB = 128
+                BPG = max(ceil(selected_tracks.shape[0] / TPB),1)
+                max_pixels = np.array([0])
+                pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
+
+                # This formula tries to estimate the maximum number of pixels which can have
+                # a current induced on them.
+                max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
+
+                active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
+                neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
+                n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
+
+                if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
+                    continue
+
+                pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
+                                                      active_pixels,
+                                                      neighboring_pixels,
+                                                      n_pixels_list,
+                                                      max_radius)
+                RangePop()
+
+                RangePush("unique_pix")
+                shapes = neighboring_pixels.shape
+                joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
+                unique_pix = cp.unique(joined)
+                unique_pix = unique_pix[(unique_pix != -1)]
+                RangePop()
+
+                if not unique_pix.shape[0]:
+                    continue
+
+                RangePush("time_intervals")
+                # Here we find the longest signal in time and we store an array with the start in time of each track
+                max_length = cp.array([0])
+                track_starts = cp.empty(selected_tracks.shape[0])
+                detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
+                RangePop()
+
+                RangePush("tracks_current")
+                # Here we calculate the induced current on each pixel
+                signals = cp.zeros((selected_tracks.shape[0],
+                                    neighboring_pixels.shape[1],
+                                    cp.asnumpy(max_length)[0]), dtype=np.float32)
+                TPB = (1,1,64)
+                BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
+                BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
+                BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
+                BPG = (BPG_X, BPG_Y, BPG_Z)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+                RangePop()
+
+                RangePush("pixel_index_map")
+                # Here we create a map between tracks and index in the unique pixel array
+                pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
+                for i_ in range(selected_tracks.shape[0]):
+                    compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
+                    indices = cp.where(compare)
+                    pixel_index_map[i_, indices[0]] = indices[1]
+                RangePop()
+
+                RangePush("track_pixel_map")
+                # Mapping between unique pixel array and track array index
+                track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
+                TPB = 32
+                BPG = max(ceil(unique_pix.shape[0] / TPB),1)
+                detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
+                RangePop()
+
+                RangePush("sum_pixels_signals")
+                # Here we combine the induced current on the same pixels by different tracks
+                TPB = (1,1,64)
+                BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
+                BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
+                BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
+                BPG = (BPG_X, BPG_Y, BPG_Z)
+                pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
+                pixels_tracks_signals = cp.zeros((len(unique_pix),
+                                                  len(detector.TIME_TICKS),
+                                                  track_pixel_map.shape[1]))
+                detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
+                                                  signals,
+                                                  track_starts,
+                                                  pixel_index_map,
+                                                  track_pixel_map,
+                                                  pixels_tracks_signals)
+                RangePop()
+
+                RangePush("get_adc_values")
+                # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
+                time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
+                integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
+                adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
+                current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+
+                TPB = 128
+                BPG = ceil(pixels_signals.shape[0] / TPB)
+                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                pixel_thresholds_lut.tpb = TPB
+                pixel_thresholds_lut.bpg = BPG
+                pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+
+                fee.get_adc_values[BPG, TPB](pixels_signals,
+                                             pixels_tracks_signals,
+                                             time_ticks,
+                                             integral_list,
+                                             adc_ticks_list,
+                                             0,
+                                             rng_states,
+                                             current_fractions,
+                                             pixel_thresholds)
+
+                # get list of adc values
+                if pixel_gains_file is not None:
+                    pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
+                    gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                    adc_list = fee.digitize(integral_list, gain_list)
+                else:
+                    adc_list = fee.digitize(integral_list)
+                
+                adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
+                RangePop()
+
+                results_acc['event_id'].append(adc_event_ids)
+                results_acc['adc_tot'].append(adc_list)
+                results_acc['adc_tot_ticks'].append(adc_ticks_list)
+                results_acc['unique_pix'].append(unique_pix)
+                results_acc['current_fractions'].append(current_fractions)
+                #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+                track_pixel_map[track_pixel_map != -1] = track_ids[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                results_acc['track_pixel_map'].append(track_pixel_map)
+
+                # ~~~ Light detector response simulation ~~~
+                if light.LIGHT_SIMULATED:
+                    RangePush("sum_light_signals")
+                    light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
+                    selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
+                    n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
+                    n_light_ticks = min(n_light_ticks,int(5E4))
+                    # at least the optical channels from a whole module are activated together
+                    op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                    op_channel = cp.array(op_channel)
+                    #op_channel = light_sim.get_active_op_channel(light_inc)
+                    n_light_det = op_channel.shape[0]
+                    light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                    light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                    light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
+
+                    TPB = (1,64)
+                    BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
+                           max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
+                    light_sim.sum_light_signals[BPG, TPB](
+                        selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
+                        light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                        light_sample_inc_true_photons)
+                    RangePop()
+                    if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
+                        warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
+
+                    RangePush("sim_scintillation")
+                    light_sample_inc_scint = cp.zeros_like(light_sample_inc)
+                    light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                    light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                    light_sim.calc_scintillation_effect[BPG, TPB](
+                        light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
+                        light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
+
+                    light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                    rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
+                                                         seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                    light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                    RangePop()
+
+                    RangePush("sim_light_det_response")
+                    light_response = cp.zeros_like(light_sample_inc)
+                    light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                    light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                    light_sim.calc_light_detector_response[BPG, TPB](
+                        light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                        light_response, light_response_true_track_id, light_response_true_photons)
+                    light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+                    RangePop()
+
+                    RangePush("sim_light_triggers")
+                    light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
+                    light_threshold = light_threshold.ravel()[op_channel.get()].copy()
+                    light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
+                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
+                    digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                    TPB = (1,1,64)
+                    BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+                           max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
+                           max(ceil(digit_samples / TPB[2]),1))
+
+                    light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+                        BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+                        digit_samples, light_noise)
+                    RangePop()
+
+                    results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
+                    results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+                    results_acc['light_trigger_idx'].append(trigger_idx)
+                    results_acc['trigger_type'].append(trigger_type)
+                    results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+                    results_acc['light_waveforms'].append(light_digit_signal)
+                    results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+                    results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+
+            if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+                is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+                results_acc = defaultdict(list)
+
+            logger.take_snapshot([len(logger.log)])
+
+        # Always save results after last iteration
+        if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+
+    logger.take_snapshot([len(logger.log)])
+
+    # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        tracks['t0_start'] = tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+        localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+
+        # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
+        # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
+        # once mod2mod variation is enabled, the light threshold triggering does not work properly
+        # compare the light trigger between different module and digitize afterwards should solve the issue
+        if light.LIGHT_TRIG_MODE == 1:
+            light_event_id = np.unique(localSpillIDs)
+            light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
+            light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
+            light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
+            light_event_times = light_event_id * sim.SPILL_PERIOD # us
+
+            light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+
+    # We previously called swap_coordinates(tracks), but we want to write
+    # all truth info in the edep-sim convention (z = beam coordinate). So
+    # temporarily undo the swap. It's easier than reorganizing the code!
+    swap_coordinates(tracks)
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
-        # We previously called swap_coordinates(tracks), but we want to write
-        # all truth info in the edep-sim convention (z = beam coordinate). So
-        # temporarily undo the swap. It's easier than reorganizing the code!
-        swap_coordinates(tracks)
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=tracks)
+        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         swap_coordinates(tracks)
 
         if light.LIGHT_SIMULATED:
-            output_file.create_dataset('light_dat', data=light_sim_dat)
+            # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
+            if mod2mod_variation:
+                for i_mod in mod_ids:
+                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1])
+            else:
+                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0])
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories)
         if input_has_vertices:
@@ -435,358 +973,6 @@ def run_simulation(input_filename,
             output_file.create_dataset("mc_hdr", data=mc_hdr)
         if input_has_mc_stack:
             output_file.create_dataset("mc_stack", data=mc_stack)
-
-    if sim.IS_SPILL_SIM:
-        # ..... even thought larnd-sim does expect t0 to be given with respect to
-        # the event time
-        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
-
-
-    # create a lookup table that maps between unique event ids and the segments in the file
-    track_ids = cp.array(np.arange(len(tracks)), dtype='i4')
-    # copy to device
-    track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
-    # We divide the sample in portions that can be processed by the GPU
-    step = 1
-
-    # accumulate results for periodic file saving
-    results_acc = defaultdict(list)
-    def save_results(event_times, is_first_batch, results):
-        '''
-        results is a dictionary with the following keys
-
-         for the charge simulation
-         - event_id: event id for each hit
-         - adc_tot: adc value for each hit
-         - adc_tot_ticks: timestamp for each hit
-         - track_pixel_map: map from track to active pixels
-         - unique_pix: all unique pixels (per track?)
-         - current_fractions: fraction of charge associated with each true track
-
-         for the light simulation (in addition to all keys for the charge simulation)
-         - light_event_id: event_id for each light trigger
-         - light_start_time: simulation start time for event
-         - light_trigger_idx: time tick at which each trigger occurs
-         - light_op_channel_idx: optical channel id for each waveform
-         - light_waveforms: waveforms of each light trigger
-         - light_waveforms_true_track_id: true track ids for each tick in each waveform
-         - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
-        
-        returns is_first_batch = False
-        
-        Note: can't handle empty inputs
-        '''
-        for key in list(results.keys()):
-            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
-
-        uniq_events = cp.asnumpy(np.unique(results['event_id']))
-        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
-        if light.LIGHT_SIMULATED:
-            # prep arrays for embedded triggers in charge data stream
-            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
-            if light.LIGHT_TRIG_MODE == 1:
-                light_trigger_modules = np.array(results['trigger_type']+1)
-            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
-            light_trigger_event_ids = results['light_event_id']
-        else:
-            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
-            light_trigger_modules = np.ones(len(uniq_events))
-            light_trigger_times = np.zeros_like(uniq_event_times)
-            light_trigger_event_ids = uniq_events
-
-        fee.export_to_hdf5(results['event_id'],
-                           results['adc_tot'],
-                           results['adc_tot_ticks'],
-                           results['unique_pix'],
-                           results['current_fractions'],
-                           results['track_pixel_map'],
-                           output_filename, # defined earlier in script
-                           uniq_event_times,
-                           is_first_batch=is_first_batch,
-                           light_trigger_times=light_trigger_times,
-                           light_trigger_event_id=light_trigger_event_ids,
-                           light_trigger_modules=light_trigger_modules,
-                           bad_channels=bad_channels) # defined earlier in script
-
-        if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            light_sim.export_to_hdf5(results['light_event_id'],
-                                     results['light_start_time'],
-                                     results['light_trigger_idx'],
-                                     results['light_op_channel_idx'],
-                                     results['light_waveforms'],
-                                     output_filename,
-                                     #cp.asnumpy(event_times[np.unique(results['light_event_id'])]),
-                                     uniq_event_times,
-                                     results['light_waveforms_true_track_id'],
-                                     results['light_waveforms_true_photons'])
-        if is_first_batch:
-            is_first_batch = False
-        return is_first_batch
-    logger.take_snapshot()
-    logger.archive('preparation2')
-
-
-    is_first_batch = True
-    logger.start()
-    logger.take_snapshot([0])
-    for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=detector.TPC_BORDERS),
-                           desc='Simulating batches...', ncols=80, smoothing=0):
-        # grab only tracks from current batch
-        track_subset = tracks[batch_mask]
-        if len(track_subset) == 0:
-            continue
-        ievd = int(track_subset[0][sim.EVENT_SEPARATOR])
-        evt_tracks = track_subset
-        first_trk_id = np.argmax(batch_mask) # first track in batch
-
-        for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
-                         delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
-            if itrk > 0:
-                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
-                
-            selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
-
-            RangePush("event_id_map")
-            event_ids = selected_tracks[sim.EVENT_SEPARATOR]
-            unique_eventIDs = np.unique(event_ids)
-            RangePop()
-
-            # We find the pixels intersected by the projection of the tracks on
-            # the anode plane using the Bresenham's algorithm. We also take into
-            # account the neighboring pixels, due to the transverse diffusion of the charges.
-            RangePush("pixels_from_track")
-            max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
-
-            TPB = 128
-            BPG = max(ceil(selected_tracks.shape[0] / TPB),1)
-            max_pixels = np.array([0])
-            pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
-
-            # This formula tries to estimate the maximum number of pixels which can have
-            # a current induced on them.
-            max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
-
-            active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
-            neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
-            n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
-
-            if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
-                continue
-
-            pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
-                                                  active_pixels,
-                                                  neighboring_pixels,
-                                                  n_pixels_list,
-                                                  max_radius)
-            RangePop()
-
-            RangePush("unique_pix")
-            shapes = neighboring_pixels.shape
-            joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
-            unique_pix = cp.unique(joined)
-            unique_pix = unique_pix[(unique_pix != -1)]
-            RangePop()
-
-            if not unique_pix.shape[0]:
-                continue
-
-            RangePush("time_intervals")
-            # Here we find the longest signal in time and we store an array with the start in time of each track
-            max_length = cp.array([0])
-            track_starts = cp.empty(selected_tracks.shape[0])
-            detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
-            RangePop()
-
-            RangePush("tracks_current")
-            # Here we calculate the induced current on each pixel
-            signals = cp.zeros((selected_tracks.shape[0],
-                                neighboring_pixels.shape[1],
-                                cp.asnumpy(max_length)[0]), dtype=np.float32)
-            TPB = (1,1,64)
-            BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
-            BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
-            BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
-            BPG = (BPG_X, BPG_Y, BPG_Z)
-            rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-            detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
-            RangePop()
-
-            RangePush("pixel_index_map")
-            # Here we create a map between tracks and index in the unique pixel array
-            pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-            for i_ in range(selected_tracks.shape[0]):
-                compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
-                indices = cp.where(compare)
-                pixel_index_map[i_, indices[0]] = indices[1]
-            RangePop()
-
-            RangePush("track_pixel_map")
-            # Mapping between unique pixel array and track array index
-            track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
-            TPB = 32
-            BPG = max(ceil(unique_pix.shape[0] / TPB),1)
-            detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
-            RangePop()
-
-            RangePush("sum_pixels_signals")
-            # Here we combine the induced current on the same pixels by different tracks
-            TPB = (1,1,64)
-            BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
-            BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
-            BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
-            BPG = (BPG_X, BPG_Y, BPG_Z)
-            pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-            pixels_tracks_signals = cp.zeros((len(unique_pix),
-                                              len(detector.TIME_TICKS),
-                                              track_pixel_map.shape[1]))
-            detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
-                                              signals,
-                                              track_starts,
-                                              pixel_index_map,
-                                              track_pixel_map,
-                                              pixels_tracks_signals)
-            RangePop()
-
-            RangePush("get_adc_values")
-            # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-            time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
-            integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-            adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-            current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
-
-            TPB = 128
-            BPG = ceil(pixels_signals.shape[0] / TPB)
-            rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-            pixel_thresholds_lut.tpb = TPB
-            pixel_thresholds_lut.bpg = BPG
-            pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-            
-            fee.get_adc_values[BPG, TPB](pixels_signals,
-                                         pixels_tracks_signals,
-                                         time_ticks,
-                                         integral_list,
-                                         adc_ticks_list,
-                                         0,
-                                         rng_states,
-                                         current_fractions,
-                                         pixel_thresholds)
-            
-            # get list of adc values
-            if pixel_gains_file is not None:
-                pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                adc_list = fee.digitize(integral_list, gain_list)
-            else:
-                adc_list = fee.digitize(integral_list)
-            
-            adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
-            RangePop()
-
-            results_acc['event_id'].append(adc_event_ids)
-            results_acc['adc_tot'].append(adc_list)
-            results_acc['adc_tot_ticks'].append(adc_ticks_list)
-            results_acc['unique_pix'].append(unique_pix)
-            results_acc['current_fractions'].append(current_fractions)
-            #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-            track_pixel_map[track_pixel_map != -1] = track_ids[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
-            results_acc['track_pixel_map'].append(track_pixel_map)
-
-            # ~~~ Light detector response simulation ~~~
-            if light.LIGHT_SIMULATED:
-                RangePush("sum_light_signals")
-                light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
-                selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
-                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
-                n_light_ticks = min(n_light_ticks,int(5E4))
-                op_channel = light_sim.get_active_op_channel(light_inc)
-
-                n_light_det = op_channel.shape[0]
-                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
-
-                ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
-                ### FIXME: this is a temporary fix to avoid memory issues ###
-                sorted_indices = np.zeros((n_light_det, selected_tracks.shape[0]), dtype=np.int32)
-
-                for idet in range(n_light_det):
-                    sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
-                ### END OF TEMPORARY FIX ###
-
-                TPB = (1,64)
-                BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
-                       max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                light_sim.sum_light_signals[BPG, TPB](
-                    selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
-                    light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                    light_sample_inc_true_photons, sorted_indices)
-                RangePop()
-                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
-                    warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
-
-                RangePush("sim_scintillation")
-                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                light_sim.calc_scintillation_effect[BPG, TPB](
-                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
-
-                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                     seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
-                RangePop()
-
-                RangePush("sim_light_det_response")
-                light_response = cp.zeros_like(light_sample_inc)
-                light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                light_sim.calc_light_detector_response[BPG, TPB](
-                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                    light_response, light_response_true_track_id, light_response_true_photons)
-                light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-                RangePop()
-
-                RangePush("sim_light_triggers")
-                light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
-                light_threshold = light_threshold.ravel()[op_channel.get()].copy()
-                light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
-                TPB = (1,1,64)
-                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
-                       max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
-                       max(ceil(digit_samples / TPB[2]),1))
-
-                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-                    digit_samples, light_noise)
-                RangePop()
-
-                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
-                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-                results_acc['light_trigger_idx'].append(trigger_idx)
-                results_acc['trigger_type'].append(trigger_type)
-                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-                results_acc['light_waveforms'].append(light_digit_signal)
-                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-        
-        if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
-            results_acc = defaultdict(list)
-
-        logger.take_snapshot([len(logger.log)])
-
-    # Always save results after last iteration
-    if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-        is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
-
-    logger.take_snapshot([len(logger.log)])
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():

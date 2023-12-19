@@ -5,7 +5,8 @@ pixels.
 """
 import numba as nb
 from numba import cuda
-from .consts.detector import PIXEL_PITCH, N_PIXELS, TPC_BORDERS
+#from .consts.detector import PIXEL_PITCH, N_PIXELS, TPC_BORDERS
+from .consts import detector
 
 @nb.njit
 def pixel2id(pixel_x, pixel_y, pixel_plane):
@@ -20,7 +21,7 @@ def pixel2id(pixel_x, pixel_y, pixel_plane):
     Returns:
         unique integer id
     """
-    return pixel_x + N_PIXELS[0] * (pixel_y + N_PIXELS[1] * pixel_plane)
+    return pixel_x + detector.N_PIXELS[0] * (pixel_y + detector.N_PIXELS[1] * pixel_plane)
 
 @nb.njit
 def id2pixel(pid):
@@ -34,8 +35,8 @@ def id2pixel(pid):
             number of pixel pitches in y-dimension,
             pixel plane number
     """
-    return (pid % N_PIXELS[0], (pid // N_PIXELS[0]) % N_PIXELS[1],
-            (pid // (N_PIXELS[0] * N_PIXELS[1])))
+    return (pid % detector.N_PIXELS[0], (pid // detector.N_PIXELS[0]) % detector.N_PIXELS[1],
+            (pid // (detector.N_PIXELS[0] * detector.N_PIXELS[1])))
 
 @cuda.jit
 def max_pixels(tracks, n_max_pixels):
@@ -52,11 +53,11 @@ def max_pixels(tracks, n_max_pixels):
 
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
-        this_border = TPC_BORDERS[int(t["pixel_plane"])]
-        start_pixel = ((t["x_start"] - this_border[0][0]) // PIXEL_PITCH,
-                       (t["y_start"] - this_border[1][0]) // PIXEL_PITCH)
-        end_pixel = ((t["x_end"] - this_border[0][0]) // PIXEL_PITCH,
-                     (t["y_end"]- this_border[1][0]) // PIXEL_PITCH)
+        this_border = detector.TPC_BORDERS[int(t["pixel_plane"])]
+        start_pixel = ((t["x_start"] - this_border[0][0]) // detector.PIXEL_PITCH,
+                       (t["y_start"] - this_border[1][0]) // detector.PIXEL_PITCH)
+        end_pixel = ((t["x_end"] - this_border[0][0]) // detector.PIXEL_PITCH,
+                     (t["y_end"]- this_border[1][0]) // detector.PIXEL_PITCH)
         n_active_pixels = get_num_active_pixels(start_pixel[0], start_pixel[1],
                                                 end_pixel[0], end_pixel[1], t["pixel_plane"])
         cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
@@ -85,14 +86,14 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
         
-        this_border = TPC_BORDERS[int(t["pixel_plane"])]
+        this_border = detector.TPC_BORDERS[int(t["pixel_plane"])]
         start_pixel = (
-            int((t["x_start"] - this_border[0][0]) // PIXEL_PITCH),
-            int((t["y_start"] - this_border[1][0]) // PIXEL_PITCH),
+            int((t["x_start"] - this_border[0][0]) // detector.PIXEL_PITCH),
+            int((t["y_start"] - this_border[1][0]) // detector.PIXEL_PITCH),
             t["pixel_plane"])
         end_pixel = (
-            int((t["x_end"] - this_border[0][0]) // PIXEL_PITCH),
-            int((t["y_end"] - this_border[1][0]) // PIXEL_PITCH),
+            int((t["x_end"] - this_border[0][0]) // detector.PIXEL_PITCH),
+            int((t["y_end"] - this_border[1][0]) // detector.PIXEL_PITCH),
             t["pixel_plane"])
 
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1],
@@ -128,7 +129,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     err = dx + dy
 
     n = 0
-    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
+    if 0 <= x0 < detector.N_PIXELS[0] and 0 <= y0 < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
         n += 1
 
     while x0 != x1 or y0 != y1:
@@ -142,7 +143,7 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
             err += dx
             y0 += sy
 
-        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
+        if 0 <= x0 < detector.N_PIXELS[0] and 0 <= y0 < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
             n += 1
 
     return n
@@ -173,7 +174,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
 
     i = 0
 
-    if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
+    if 0 <= x0 < detector.N_PIXELS[0] and 0 <= y0 < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
         tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
     while x0 != x1 or y0 != y1:
@@ -188,7 +189,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
             err += dx
             y0 += sy
 
-        if 0 <= x0 < N_PIXELS[0] and 0 <= y0 < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
+        if 0 <= x0 < detector.N_PIXELS[0] and 0 <= y0 < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
             tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
 @cuda.jit(device=True)
@@ -223,7 +224,7 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
                 new_x, new_y = active_x + x_r, active_y + y_r
                 is_unique = True
 
-                if 0 <= new_x < N_PIXELS[0] and 0 <= new_y < N_PIXELS[1] and 0 <= plane_id < TPC_BORDERS.shape[0]:
+                if 0 <= new_x < detector.N_PIXELS[0] and 0 <= new_y < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
                     new_pixel = pixel2id(new_x, new_y, plane_id)
 
                     for ipix in range(neighboring_pixels.shape[0]):

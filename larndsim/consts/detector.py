@@ -1,6 +1,7 @@
 """
 Set detector constants
 """
+import warnings
 
 import numpy as np
 import yaml
@@ -102,16 +103,38 @@ def electron_mobility(efield, temperature):
 
     return mu
 
-def set_detector_properties(detprop_file, pixel_file):
+def load_detector_properties(config_keyword):
+    from ..config import get_config
+    cfg = get_config(config_keyword)
+    set_detector_properties(cfg['DET_PROPERTIES'],cfg['PIXEL_LAYOUT'])
+
+def get_n_modules(detprop_file):
+    """
+    The function loads the global detector properties (not subject to the module variations)
+    stores the constants as global variables
+
+    Args:
+        detprop_file (str): detector properties YAML
+            filename
+    """
+    with open(detprop_file) as df:
+        detprop = yaml.load(df, Loader=yaml.FullLoader)
+                
+    return list(detprop['module_to_tpcs'].keys())
+
+def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
     as global variables
 
     Args:
-        detprop_file (str): detector properties YAML
-            filename
+        detprop_file (str): detector properties YAML filename
+                            It is acceptable to provide a single value or a list with one element
+                            for electric field and electron lifetime.
         pixel_file (str): pixel layout YAML filename
+        i_module (int): module id, default value i_module = -1.
+                        i_module < 0 means all module share the same detector configuration.
     """
     global PIXEL_PITCH
     global TPC_BORDERS
@@ -157,14 +180,74 @@ def set_detector_properties(detprop_file, pixel_file):
     TIME_PADDING = detprop.get('time_padding', TIME_PADDING)
     TIME_WINDOW = detprop.get('time_window', TIME_WINDOW)
     TEMPERATURE = detprop.get('temperature', TEMPERATURE)
-    E_FIELD = detprop.get('e_field', E_FIELD)
+
+    e_field_bucket = detprop.get('e_field', E_FIELD)
+    if hasattr(e_field_bucket, "__len__") and (len(e_field_bucket) != len(get_n_modules(detprop_file)) and len(e_field_bucket) != 1):
+        raise KeyError("The length of provided E_field in the detector configuration file is unexpected. Please check again.")
+    if not hasattr(e_field_bucket, "__len__"):
+        E_FIELD = e_field_bucket
+    elif i_module < 0:
+        E_FIELD = e_field_bucket[0]
+        if len(e_field_bucket) > 1:
+            warnings.warn('Module variation seems to be not activated, but electric field is provided as a list. Taking the first given value.')
+    elif i_module > len(e_field_bucket):
+        E_FIELD = e_field_bucket[0]
+        warnings.warn('Module variation seems to be activated, but the electric field is not specified per module.Taking the first given value.')
+    else:
+        E_FIELD = e_field_bucket[i_module-1]
     V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
-    ELECTRON_LIFETIME = detprop.get('lifetime', ELECTRON_LIFETIME)
+
+    lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
+    if hasattr(lifetime_bucket, "__len__") and (len(lifetime_bucket) != len(get_n_modules(detprop_file)) and len(lifetime_bucket) != 1):
+        raise KeyError("The length of provided lifetime in the detector configuration file is unexpected. Please check again.")
+    if not hasattr(lifetime_bucket, "__len__"):
+        ELECTRON_LIFETIME = lifetime_bucket
+    elif i_module < 0:
+        ELECTRON_LIFETIME = lifetime_bucket[0]
+        if len(lifetime_bucket) > 1:
+            warnings.warn('Module variation seems to be not activated, but electron lifetime is provided as a list. Taking the first given value.')
+    elif i_module > len(lifetime_bucket):
+        ELECTRON_LIFETIME = lifetime_bucket[0]
+        warnings.warn('Module variation seems to be activated, but the electron lifetime is not specified per module. Taking the first given value.')
+    else:
+        ELECTRON_LIFETIME = lifetime_bucket[i_module-1]
+
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
-    RESPONSE_SAMPLING = detprop.get('response_sampling', RESPONSE_SAMPLING)
-    RESPONSE_BIN_SIZE = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
 
+    response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
+    if hasattr(response_sampling_bucket, "__len__") and (len(response_sampling_bucket) != len(get_n_modules(detprop_file)) and len(response_sampling_bucket) != 1):
+        raise KeyError("The length of provided induction response time sampling (bin size) in the detector configuration file is unexpected. Please check again.")
+    if not hasattr(response_sampling_bucket, "__len__"):
+        RESPONSE_SAMPLING = response_sampling_bucket
+    elif i_module < 0:
+        RESPONSE_SAMPLING = response_sampling_bucket[0]
+        if len(response_sampling_bucket) > 1:
+            warnings.warn('It seems module variation is not activated, but the induction response time sampling (bin size) is provided as a list. Taking the first given value.')
+    elif i_module > len(response_sampling_bucket):
+        RESPONSE_SAMPLING = response_sampling_bucket[0]
+        warnings.warn('Simulation with module variation seems to be activated, but the induction response time sampling (bin size) is not specified per module. Taking the first given value.')
+    else:
+        RESPONSE_SAMPLING = response_sampling_bucket[i_module-1]
+
+    response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
+    if hasattr(response_bin_size_bucket, "__len__") and (len(response_bin_size_bucket) != len(get_n_modules(detprop_file)) and len(response_bin_size_bucket) != 1):
+        raise KeyError("The length of provided induction response bin size in the detector configuration file is unexpected. Please check again.")
+    if not hasattr(response_bin_size_bucket, "__len__"):
+        RESPONSE_BIN_SIZE = response_bin_size_bucket
+    elif i_module < 0:
+        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
+        if len(response_bin_size_bucket) > 1:
+            warnings.warn('It seems module variation is not activated, but the induction response bin size is provided as a list. Taking the first given value.')
+    elif i_module > len(response_bin_size_bucket):
+        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
+        warnings.warn('Simulation with module variation seems to be activated, but the induction response bin size is not specified per module. Taking the first given value.')
+    else:
+        RESPONSE_BIN_SIZE = response_bin_size_bucket[i_module-1]
+
+    # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
+    if isinstance(pixel_file, list):
+        pixel_file = pixel_file[i_module-1]
     with open(pixel_file, 'r') as pf:
         tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
 

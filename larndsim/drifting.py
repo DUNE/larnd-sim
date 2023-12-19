@@ -6,7 +6,7 @@ electrons towards the anode.
 from math import exp, sqrt
 from numba import cuda
 from .consts import detector
-from .consts.detector import TPC_BORDERS
+#from .consts.detector import TPC_BORDERS
 
 @cuda.jit
 def drift(tracks):
@@ -31,7 +31,7 @@ def drift(tracks):
 
         pixel_plane = detector.DEFAULT_PLANE_INDEX
 
-        for ip, plane in enumerate(TPC_BORDERS):
+        for ip, plane in enumerate(detector.TPC_BORDERS):
             if plane[0][0]-2e-2 <= track["x"] <= plane[0][1]+2e-2 and \
                plane[1][0]-2e-2 <= track["y"] <= plane[1][1]+2e-2 and \
                min(plane[2][1]-2e-2,plane[2][0]-2e-2) <= track["z"] <= max(plane[2][1]+2e-2,plane[2][0]+2e-2):
@@ -41,7 +41,7 @@ def drift(tracks):
         track["pixel_plane"] = pixel_plane
 
         if pixel_plane != detector.DEFAULT_PLANE_INDEX:
-            z_anode = TPC_BORDERS[pixel_plane][2][0]
+            z_anode = detector.TPC_BORDERS[pixel_plane][2][0]
             drift_distance = abs(track["z"] - z_anode)
             drift_start = abs(min(track["z_start"],track["z_end"]) - z_anode)
             drift_end = abs(max(track["z_start"],track["z_end"]) - z_anode)
@@ -52,6 +52,7 @@ def drift(tracks):
 
             track["long_diff"] = sqrt(drift_time * 2 * detector.LONG_DIFF)
             track["tran_diff"] = sqrt(drift_time * 2 * detector.TRAN_DIFF)
+
             track["t"] += drift_time + track["t0"]
             track["t_start"] += min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
             track["t_end"] += max(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
