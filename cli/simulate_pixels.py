@@ -287,8 +287,8 @@ def run_simulation(input_filename,
     logger.take_snapshot()
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if spills:
-        mask = np.isin(tracks['event_id'], spills)
-        tracks = tracks[mask]
+        # mask = np.isin(tracks['event_id'], track_ids)
+        tracks = tracks[spills] # this should work if tracks is a numpy array
         segment_ids = tracks["segment_id"]
 
     # Here we swap the x and z coordinates of the tracks
