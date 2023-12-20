@@ -134,7 +134,7 @@ def run_simulation(input_filename,
             store memory snapshot information
     """
     # Define a nested function to save the results
-    def save_results(event_times, is_first_batch, results):
+    def save_results(event_times, is_first_batch, results, i_mod=-1):
         '''
         results is a dictionary with the following keys
 
@@ -201,16 +201,19 @@ def run_simulation(input_filename,
                                          output_filename,
                                          uniq_event_times,
                                          results['light_waveforms_true_track_id'],
-                                         results['light_waveforms_true_photons'])
+                                         results['light_waveforms_true_photons'],
+                                         i_mod)
             elif light.LIGHT_TRIG_MODE == 1:
-                light_sim.export_to_hdf5_no_trig(results['light_event_id'],
-                                                 results['light_waveforms'],
-                                                 output_filename,
-                                                 results['light_waveforms_true_track_id'],
-                                                 results['light_waveforms_true_photons'])
+                light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
+                                                    results['light_waveforms'],
+                                                    output_filename,
+                                                    results['light_waveforms_true_track_id'],
+                                                    results['light_waveforms_true_photons'],
+                                                    i_mod)
         if is_first_batch:
             is_first_batch = False
         return is_first_batch
+    ###########################################################################################
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
@@ -391,6 +394,9 @@ def run_simulation(input_filename,
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
         from larndsim.consts import light, physics, sim
+
+    # set the value for the global variable MOD2MOD_VARIATION
+    sim.MOD2MOD_VARIATION = mod2mod_variation
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
@@ -891,7 +897,7 @@ def run_simulation(input_filename,
                     light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                     light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                     light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
+                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, itrk)
                     digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                     TPB = (1,1,64)
                     BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
@@ -913,14 +919,14 @@ def run_simulation(input_filename,
                     results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-                is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+                is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
                 results_acc = defaultdict(list)
 
             logger.take_snapshot([len(logger.log)])
 
         # Always save results after last iteration
         if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
 
     logger.take_snapshot([len(logger.log)])
 
@@ -944,6 +950,9 @@ def run_simulation(input_filename,
             light_event_times = light_event_id * sim.SPILL_PERIOD # us
 
             light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+
+    # merge light waveforms per module
+    light_sim.merge_module_light_wvfm_same_trigger(output_filename)
 
     # We previously called swap_coordinates(tracks), but we want to write
     # all truth info in the edep-sim convention (z = beam coordinate). So
