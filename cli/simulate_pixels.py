@@ -950,9 +950,14 @@ def run_simulation(input_filename,
             light_event_times = light_event_id * sim.SPILL_PERIOD # us
 
             light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+            fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
+
+    #if light.LIGHT_TRIG_MODE == 0:
+    #    fee.export_pacman_trigger_to_hdf5(light_event_times_something_different)
 
     # merge light waveforms per module
-    light_sim.merge_module_light_wvfm_same_trigger(output_filename)
+    if light.LIGHT_SIMULATED:
+        light_sim.merge_module_light_wvfm_same_trigger(output_filename)
 
     # We previously called swap_coordinates(tracks), but we want to write
     # all truth info in the edep-sim convention (z = beam coordinate). So
