@@ -288,7 +288,7 @@ def run_simulation(input_filename,
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if spills:
         print(spills)
-        print(spills.dtype)
+        spills = eval(spills)
         # mask = np.isin(tracks['event_id'], track_ids)
         tracks = np.asarray(tracks)[spills]
         segment_ids = tracks["segment_id"]
