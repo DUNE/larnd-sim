@@ -551,7 +551,6 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                     if digit_signal_true_track_id[itrig,idet_module,isample,itrue-1] != -1:
                         digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
 
-
 def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
     """
     Generates digitized waveforms at specified simulation tick indices
@@ -666,6 +665,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
                         f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'][-truth_data.shape[0]:] = truth_data
             else:
                 raise ValueError("Mod2mod variation is activated, but the module id is not provided correctly.")
+
         else:
             if 'light_wvfm' not in f:
                 f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))

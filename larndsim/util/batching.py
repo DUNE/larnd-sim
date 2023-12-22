@@ -6,7 +6,8 @@ from ..active_volume import select_active_volume
 class TrackSegmentBatcher(object):
     """ Base class for LArND-sim simulation batching, implements an iterator that creates masks into an array of track segments """
     
-    def __init__(self, track_seg, event_separator, **kwargs):
+    def __init__(self, all_track_seg, track_seg, event_separator, **kwargs):
+        self.all_track_seg = all_track_seg
         self.track_seg = track_seg
         self.EVENT_SEPARATOR = event_separator
 
@@ -17,14 +18,14 @@ class TPCBatcher(TrackSegmentBatcher):
     """ Batch generator that generates batches containing a single (or multiple) TPCs per iteration """
 
 
-    def __init__(self, track_seg, event_separator ,tpc_batch_size=1, tpc_borders=np.empty((0,3,2), dtype='f4')):
-        super().__init__(track_seg, event_separator)
+    def __init__(self, all_track_seg, track_seg, event_separator ,tpc_batch_size=1, tpc_borders=np.empty((0,3,2), dtype='f4')):
+        super().__init__(all_track_seg, track_seg, event_separator)
 
         self.tpc_batch_size = tpc_batch_size
         self.tpc_borders = np.sort(tpc_borders, axis=-1)
         
         self._simulated = np.zeros_like(self.track_seg['traj_id'], dtype=bool)
-        self._events = np.unique(self.track_seg[self.EVENT_SEPARATOR])
+        self._events = np.unique(self.all_track_seg[self.EVENT_SEPARATOR])
         self._curr_event = 0
         self._curr_tpc = 0
 
@@ -46,7 +47,7 @@ class TPCBatcher(TrackSegmentBatcher):
         # if all events have been simulated, stop
         if self._curr_event >= len(self._events):
             raise StopIteration
-        
+
         mask = ~self._simulated.copy()
 
         # select only current event
