@@ -191,7 +191,8 @@ def run_simulation(input_filename,
                                light_trigger_times=light_trigger_times,
                                light_trigger_event_id=light_trigger_event_ids,
                                light_trigger_modules=light_trigger_modules,
-                               bad_channels=bad_channels) # defined earlier in script
+                               bad_channels=bad_channels, # defined earlier in script
+                               i_mod=i_mod)
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             if light.LIGHT_TRIG_MODE == 0:
@@ -399,6 +400,9 @@ def run_simulation(input_filename,
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
+
+    if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
+        raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
