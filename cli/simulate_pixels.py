@@ -1003,7 +1003,8 @@ def run_simulation(input_filename,
     #    fee.export_pacman_trigger_to_hdf5(light_event_times_something_different)
 
     # merge light waveforms per module
-    if light.LIGHT_SIMULATED:
+    # correspond to light_sim.export_light_wvfm_to_hdf5
+    if light.LIGHT_SIMULATED and mod2mod_variation:
         light_sim.merge_module_light_wvfm_same_trigger(output_filename)
 
     # We previously called swap_coordinates(tracks), but we want to write

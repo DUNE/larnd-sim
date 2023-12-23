@@ -484,7 +484,7 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
 
     if len(trigger_idx_list):
         return cp.array(trigger_idx_list), cp.array(op_channel_idx_list), cp.array(trigger_type_list)
-    return cp.empty((0,), dtype=int), cp.empty((0,len(light.TPC_TO_OP_CHANNEL[list(detector.MODULE_TO_TPCS.values())[0]].ravel())), dtype=int), cp.empty((0,), dtype=int)
+    return cp.empty((0,), dtype=int), cp.empty((0, len(op_channel_idx)), dtype=int), cp.empty((0,), dtype=int)
 
 
 @cuda.jit
