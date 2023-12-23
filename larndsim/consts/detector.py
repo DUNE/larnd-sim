@@ -162,6 +162,7 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
     global TPC_OFFSETS
+    global MOD_IDS
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -302,3 +303,5 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     MODULE_TO_IO_GROUPS = detprop['module_to_io_groups']
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
+
+    MOD_IDS = get_n_modules(detprop_file)

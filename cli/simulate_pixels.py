@@ -134,7 +134,7 @@ def run_simulation(input_filename,
             store memory snapshot information
     """
     # Define a nested function to save the results
-    def save_results(event_times, is_first_batch, results):
+    def save_results(event_times, is_first_batch, results, i_mod=-1, light_only=False):
         '''
         results is a dictionary with the following keys
 
@@ -162,34 +162,37 @@ def run_simulation(input_filename,
         for key in list(results.keys()):
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
-        uniq_events = cp.asnumpy(np.unique(results['event_id']))
+        uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
         uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
-        if light.LIGHT_SIMULATED:
-            # prep arrays for embedded triggers in charge data stream
-            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
-            if light.LIGHT_TRIG_MODE == 1:
-                light_trigger_modules = np.array(results['trigger_type'])
-            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
-            light_trigger_event_ids = results['light_event_id']
-        else:
-            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
-            light_trigger_modules = np.ones(len(uniq_events))
-            light_trigger_times = np.zeros_like(uniq_event_times)
-            light_trigger_event_ids = uniq_events
 
-        fee.export_to_hdf5(results['event_id'],
-                           results['adc_tot'],
-                           results['adc_tot_ticks'],
-                           results['unique_pix'],
-                           results['current_fractions'],
-                           results['track_pixel_map'],
-                           output_filename, # defined earlier in script
-                           uniq_event_times,
-                           is_first_batch=is_first_batch,
-                           light_trigger_times=light_trigger_times,
-                           light_trigger_event_id=light_trigger_event_ids,
-                           light_trigger_modules=light_trigger_modules,
-                           bad_channels=bad_channels) # defined earlier in script
+        if not light_only:
+            if light.LIGHT_SIMULATED:
+                # prep arrays for embedded triggers in charge data stream
+                light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+                if light.LIGHT_TRIG_MODE == 1:
+                    light_trigger_modules = np.array(results['trigger_type'])
+                light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
+                light_trigger_event_ids = results['light_event_id']
+            else:
+                # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
+                light_trigger_modules = np.ones(len(uniq_events))
+                light_trigger_times = np.zeros_like(uniq_event_times)
+                light_trigger_event_ids = uniq_events
+
+            fee.export_to_hdf5(results['event_id'],
+                               results['adc_tot'],
+                               results['adc_tot_ticks'],
+                               results['unique_pix'],
+                               results['current_fractions'],
+                               results['track_pixel_map'],
+                               output_filename, # defined earlier in script
+                               uniq_event_times,
+                               is_first_batch=is_first_batch,
+                               light_trigger_times=light_trigger_times,
+                               light_trigger_event_id=light_trigger_event_ids,
+                               light_trigger_modules=light_trigger_modules,
+                               bad_channels=bad_channels, # defined earlier in script
+                               i_mod=i_mod)
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             if light.LIGHT_TRIG_MODE == 0:
@@ -201,16 +204,19 @@ def run_simulation(input_filename,
                                          output_filename,
                                          uniq_event_times,
                                          results['light_waveforms_true_track_id'],
-                                         results['light_waveforms_true_photons'])
+                                         results['light_waveforms_true_photons'],
+                                         i_mod)
             elif light.LIGHT_TRIG_MODE == 1:
-                light_sim.export_to_hdf5_no_trig(results['light_event_id'],
-                                                 results['light_waveforms'],
-                                                 output_filename,
-                                                 results['light_waveforms_true_track_id'],
-                                                 results['light_waveforms_true_photons'])
+                light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
+                                                    results['light_waveforms'],
+                                                    output_filename,
+                                                    results['light_waveforms_true_track_id'],
+                                                    results['light_waveforms_true_photons'],
+                                                    i_mod)
         if is_first_batch:
             is_first_batch = False
         return is_first_batch
+    ###########################################################################################
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
@@ -391,6 +397,12 @@ def run_simulation(input_filename,
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
         from larndsim.consts import light, physics, sim
+
+    # set the value for the global variable MOD2MOD_VARIATION
+    sim.MOD2MOD_VARIATION = mod2mod_variation
+
+    if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
+        raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
@@ -673,22 +685,62 @@ def run_simulation(input_filename,
         logger.take_snapshot([0])
         i_batch = 0
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
-        for batch_mask in tqdm(batching.TPCBatcher(tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
+        for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
             i_batch = i_batch+1
             # grab only tracks from current batch
             track_subset = tracks[batch_mask]
-            if len(track_subset) == 0:
-                continue
-            ievd = int(track_subset[0][sim.EVENT_SEPARATOR])
+            # go through all simulated events in all modules even there might be no segments in the module
+            ievd = np.unique(all_mod_tracks[sim.EVENT_SEPARATOR])[i_batch-1]
             evt_tracks = track_subset
             first_trk_id = np.argmax(batch_mask) # first track in batch
+
+            # generate light waveforms for null signal in the module
+            # so we can have light waveforms in this case (if the whole detector is triggered together)
+            if len(track_subset) == 0 and light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                trigger_idx = cp.array([0], dtype=int)
+                op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                op_channel = cp.array(op_channel)
+                trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
+                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+
+                n_light_det = op_channel.shape[0]
+                n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
+
+                light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                light_response_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
+
+                TPB = (1,1,64)
+                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+                       max(ceil(len(op_channel) / TPB[1]),1),
+                       max(ceil(digit_samples / TPB[2]),1))
+                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+                    digit_samples, light_noise)
+                RangePop()
+
+                light_t_start = 0
+                trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
+
+                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
+                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+                results_acc['light_trigger_idx'].append(trigger_idx)
+                results_acc['trigger_type'].append(trigger_type)
+                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+                results_acc['light_waveforms'].append(light_digit_signal)
+                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+
+                save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
+                results_acc = defaultdict(list)
+                continue
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
                 if itrk > 0:
                     warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
-                    
+
                 selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
 
                 RangePush("event_id_map")
@@ -899,7 +951,7 @@ def run_simulation(input_filename,
                     light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                     light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                     light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel)
+                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, itrk)
                     digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                     TPB = (1,1,64)
                     BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
@@ -921,14 +973,14 @@ def run_simulation(input_filename,
                     results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-                is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+                is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
                 results_acc = defaultdict(list)
 
             logger.take_snapshot([len(logger.log)])
 
         # Always save results after last iteration
         if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results=results_acc)
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
 
     logger.take_snapshot([len(logger.log)])
 
@@ -952,6 +1004,16 @@ def run_simulation(input_filename,
             light_event_times = light_event_id * sim.SPILL_PERIOD # us
 
             light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+            fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
+
+    # FIXME
+    #if light.LIGHT_TRIG_MODE == 0:
+    #    fee.export_pacman_trigger_to_hdf5(light_event_times_something_different)
+
+    # merge light waveforms per module
+    # correspond to light_sim.export_light_wvfm_to_hdf5
+    if light.LIGHT_SIMULATED and mod2mod_variation:
+        light_sim.merge_module_light_wvfm_same_trigger(output_filename)
 
     # We previously called swap_coordinates(tracks), but we want to write
     # all truth info in the edep-sim convention (z = beam coordinate). So

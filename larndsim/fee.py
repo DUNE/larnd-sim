@@ -133,7 +133,8 @@ def export_to_hdf5(event_id_list,
                    light_trigger_times=None,
                    light_trigger_event_id=None,
                    light_trigger_modules=None,
-                   bad_channels=None):
+                   bad_channels=None,
+                   i_mod=-1):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -153,11 +154,13 @@ def export_to_hdf5(event_id_list,
         light_trigger_modules (array): 1D array of module id for each light trigger
         bad_channels (dict): dictionary containing as value a list of bad channels and as
             the chip key
+        i_mod (int): module index for saving the result in each module individually if needed.
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of entries for the `mc_packets_assn` dataset
     """
 
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
+    io_groups = io_groups if i_mod < 0 else io_groups[(i_mod-1)*2: i_mod*2]
     packets = []
     packets_mc = []
     packets_frac = []
@@ -226,33 +229,37 @@ def export_to_hdf5(event_id_list,
                 
                 event_t0 = event_t0 % CLOCK_RESET_PERIOD
                 time_tick = time_tick % CLOCK_RESET_PERIOD
-                    
-                # new event, insert light triggers and timestamp flag
-                if event != last_event:
-                    for io_group in io_groups:
-                        packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
-                        packets[-1].chip_key = Key(io_group,0,0)
-                        packets_mc.append([-1] * track_ids.shape[1])
-                        packets_frac.append([0] * current_fractions.shape[2])
 
-                    trig_mask = light_trigger_event_id == event
-                    if any(trig_mask):
-                        for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
-                            t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % CLOCK_RESET_PERIOD
-                            if light.LIGHT_TRIG_MODE == 0:
-                                for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                # FIXME light.LIGHT_TRIG_MODE != 0 should also be here
+                # This trigger packet block should only be activated with trigger forwarding scheme to individual modules
+                if light.LIGHT_TRIG_MODE != 1:
+                    # new event, insert light triggers and timestamp flag
+                    if event != last_event:
+                        for io_group in io_groups:
+                            packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
+                            packets[-1].chip_key = Key(io_group,0,0)
+                            packets_mc.append([-1] * track_ids.shape[1])
+                            packets_frac.append([0] * current_fractions.shape[2])
+
+                        trig_mask = light_trigger_event_id == event
+                        if any(trig_mask):
+                            for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
+                                t_trig = int(np.floor(t_trig / CLOCK_CYCLE + event_t0)) % CLOCK_RESET_PERIOD
+                                if light.LIGHT_TRIG_MODE == 0:
+                                    for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
+                                        packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+                                        packets_mc.append([-1] * track_ids.shape[1])
+                                        packets_frac.append([0] * current_fractions.shape[2])
+                                # redundant here
+                                elif light.LIGHT_TRIG_MODE == 1:
+                                    if module_trig == 1: #beam trigger
+                                        io_group = BEAM_TRIG_IO
+                                    elif module_trig == 0: #threshold trigger
+                                        io_group = THRES_TRIG_IO
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                     packets_mc.append([-1] * track_ids.shape[1])
                                     packets_frac.append([0] * current_fractions.shape[2])
-                            elif light.LIGHT_TRIG_MODE == 1:
-                                if module_trig == 1: #beam trigger
-                                    io_group = BEAM_TRIG_IO
-                                elif module_trig == 0: #threshold trigger
-                                    io_group = THRES_TRIG_IO
-                                packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                packets_mc.append([-1] * track_ids.shape[1])
-                                packets_frac.append([0] * current_fractions.shape[2])
-                    last_event = event
+                        last_event = event
 
                 p = Packet_v2()
 
@@ -342,6 +349,65 @@ def export_to_hdf5(event_id_list,
 
     return packets, packets_mc_ds
 
+def export_pacman_trigger_to_hdf5(filename, event_start_times):
+    """
+    Saves trigger packets in the LArPix HDF5 format.
+    Args:
+        event_start_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
+    Returns:
+        tuple: a tuple containing the list of LArPix trigger packets and the list of entries for the `mc_packets_assn` dataset
+    """
+    io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
+    packets = []
+    packets_mc = []
+    packets_frac = []
+    for evt_time in event_start_times:
+        t_trig = int(np.floor(evt_time / CLOCK_CYCLE)) % CLOCK_RESET_PERIOD
+        # timestamp packet
+        for io_group in io_groups:
+            packets.append(TimestampPacket(timestamp=t_trig))
+            packets[-1].chip_key = Key(io_group,0,0)
+            packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+            packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+        # trigger packet
+        if light.LIGHT_TRIG_MODE == 0:
+            for io_group in io_groups:
+                packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+                packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+                packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+        if light.LIGHT_TRIG_MODE == 1:
+            io_group = BEAM_TRIG_IO
+            #if module_trig == 1: #beam trigger
+            #    io_group = BEAM_TRIG_IO
+            #elif module_trig == 0: #threshold trigger # currently it will not get into threshold trigger under this mode
+            #    io_group = THRES_TRIG_IO
+            packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
+            packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+            packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+
+    if packets:
+        packet_list = PacketCollection(packets, read_id=0, message='')
+        hdf5format.to_file(filename, packet_list, workers=1)
+
+        dtype = np.dtype([('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
+        packets_mc_ds = np.empty(len(packets), dtype=dtype)
+
+        # First, sort the back-tracking information by the magnitude of the fraction
+        packets_frac = np.array(packets_frac)
+        packets_mc   = np.array(packets_mc)
+
+        packets_mc_ds['segment_ids'] = packets_mc
+        packets_mc_ds['fraction' ] = packets_frac
+
+        with h5py.File(filename, 'a') as f:
+            if "mc_packets_assn" not in f.keys():
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+            else:
+                f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
+                f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds
+
+    return packets, packets_mc_ds
 
 def digitize(integral_list, gain=GAIN):
     """

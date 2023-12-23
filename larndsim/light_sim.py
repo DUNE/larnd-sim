@@ -17,7 +17,8 @@ from .consts import light
 #from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
 
 #from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
-from .consts import units as units
+from .consts import units
+from .consts import sim
 from .consts import detector
 
 from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES, PPS_CYCLES, CLOCK_RESET_PERIOD, USE_PPS_ROLLOVER
@@ -387,7 +388,7 @@ def gen_light_detector_noise(shape, light_det_noise):
     return noise[:,:shape[1]]
 
 
-def get_triggers(signal, group_threshold, op_channel_idx):
+def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
     """
     Identifies each simulated ticks that would initiate a trigger taking into account the ADC digitization window
     
@@ -395,6 +396,7 @@ def get_triggers(signal, group_threshold, op_channel_idx):
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
         group_threshold(array): shape `(ngrp,)`, threshold on group sum (requires `ndet/ngrp == OP_CHANNEL_PER_TRIG`)
         op_channel_idx(array): shape `(ndet,)`, optical channel index for each signal
+        i_subbatch(int): index of the sub_batch numbering ("itrk in the batch for loop")
         
     Returns:
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
@@ -448,30 +450,42 @@ def get_triggers(signal, group_threshold, op_channel_idx):
                 module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
                 last_trigger = next_idx + digit_ticks
 
-    elif light.LIGHT_TRIG_MODE == 1:
-        module_above_thresh = np.any(sample_above_thresh, axis=0)
-        op_channels = light.TPC_TO_OP_CHANNEL[:].ravel()
-        op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
-        last_trigger = 0
-        while cp.any(module_above_thresh):
-            # find next time signal goes above threshold
-            if last_trigger == 0:
-                next_idx = cp.asarray(0)
-                next_trig_type = cp.asarray(1)
-            else:
-                next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
-                next_trig_type = cp.asarray(0)
-            # keep track of trigger time
-            trigger_idx_list.append(next_idx)
-            trigger_type_list.append(next_trig_type)
-            op_channel_idx_list.append(op_channel_idx)
-            # ignore samples during digitization window
-            module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
-            last_trigger = next_idx + digit_ticks
+    # if i_subbatch > 0, means this batch/event should already have a trigger
+    # then return an empty list
+    elif light.LIGHT_TRIG_MODE == 1 and i_subbatch == 0:
+        # always add a trigger for a simulated spill/event
+        # this function is called in the batch script
+        # which means it is executed per event
+        # keep track of trigger time (initial comment)
+        trigger_idx_list.append(cp.asarray(0)) # the first trigger in the event
+        op_channel_idx_list.append(op_channel_idx) 
+        trigger_type_list.append(cp.asarray(1)) # beam
+
+        ## would we ever get these secondary triggers? -- Not at the moment
+        ## 1. currently the internal light simulation window is the same as the light readout window, 
+        ##    and 16us is large enough (for NuMI at least)
+        ## 2. potentially an off-beam event if ever simulated together with the beam, will be considered as a separate event
+        ##    therefore, likely will not be in the same batch
+        ##    if we ever overlay beam and off-beam, we should consider if we should compare the two signals and overlay the two light signals
+        ##    wether they would be in the same readout window; how to deal with the dead time between the two triggers etc...
+        #module_above_thresh = np.any(sample_above_thresh, axis=0)
+        #module_above_thresh = module_above_thresh[digit_ticks:]
+        #last_trigger = digit_ticks
+        #while cp.any(module_above_thresh):
+        #    # find next time signal goes above threshold
+        #    next_idx = cp.sort(cp.nonzero(module_above_thresh)[0])[0] + (last_trigger if last_trigger != 0 else 0)
+        #    next_trig_type = cp.asarray(0)
+        #    # keep track of trigger time
+        #    trigger_idx_list.append(next_idx)
+        #    trigger_type_list.append(next_trig_type)
+        #    op_channel_idx_list.append(op_channel_idx)
+        #    # ignore samples during digitization window
+        #    module_above_thresh = module_above_thresh[next_idx+digit_ticks:]
+        #    last_trigger = next_idx + digit_ticks
 
     if len(trigger_idx_list):
         return cp.array(trigger_idx_list), cp.array(op_channel_idx_list), cp.array(trigger_type_list)
-    return cp.empty((0,), dtype=int), cp.empty((0,len(light.TPC_TO_OP_CHANNEL[list(detector.MODULE_TO_TPCS.values())[0]].ravel())), dtype=int), cp.empty((0,), dtype=int)
+    return cp.empty((0,), dtype=int), cp.empty((0, len(op_channel_idx)), dtype=int), cp.empty((0,), dtype=int)
 
 
 @cuda.jit
@@ -537,7 +551,6 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                     # if a valid truth entry was found, do interpolation
                     if digit_signal_true_track_id[itrig,idet_module,isample,itrue-1] != -1:
                         digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
-
 
 def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
     """
@@ -609,7 +622,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def export_to_hdf5_no_trig(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons):
+def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod=-1):
     """
     Saves waveforms to output file
     
@@ -632,18 +645,40 @@ def export_to_hdf5_no_trig(event_id, waveforms, output_filename, waveforms_true_
             truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
             truth_data['track_ids'] = waveforms_true_track_id
             truth_data['pe_current'] = waveforms_true_photons
-        
-        if 'light_wvfm' not in f:
-            f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
-            if waveforms_true_track_id.size > 0:
-                f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
+
+        # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
+        # it would take too much memory if we hold the information until all the modules been simulated
+        # therefore, let's store the intermediate data with (n_triggers, op channels in a module, waveform samples) per module
+        # and we will cast it into the final shape
+        # FIXME currently this does not support threshold triggering
+        if sim.MOD2MOD_VARIATION and light.LIGHT_TRIG_MODE == 1:
+            if i_mod > 0:
+                if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
+                    f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
+                    if waveforms_true_track_id.size > 0:
+                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,None,None))
+                else:
+                    f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
+                    f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
+
+                    if waveforms_true_track_id.size > 0:
+                        f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].resize(f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].shape[0] + truth_data.shape[0], axis=0)
+                        f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'][-truth_data.shape[0]:] = truth_data
+            else:
+                raise ValueError("Mod2mod variation is activated, but the module id is not provided correctly.")
+
         else:
-            f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
-            f['light_wvfm'][-waveforms.shape[0]:] = waveforms
-            
-            if waveforms_true_track_id.size > 0:
-                f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
-                f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
+            if 'light_wvfm' not in f:
+                f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
+                if waveforms_true_track_id.size > 0:
+                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
+            else:
+                f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
+                f['light_wvfm'][-waveforms.shape[0]:] = waveforms
+                
+                if waveforms_true_track_id.size > 0:
+                    f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
+                    f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
 
 def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times):
     """
@@ -677,7 +712,7 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
-def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons):
+def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_mod):
     """
     Saves waveforms to output file
 
@@ -693,39 +728,18 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
         waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples, ntruth)`, true photocurrent at each sample
 
     """
-    if event_id.shape[0] == 0:
-        return
+    export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times)
+    export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod)
 
-    unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
-    event_start_times = event_times[unique_events_inv]
-    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % CLOCK_RESET_PERIOD
-
+def merge_module_light_wvfm_same_trigger(output_filename):
     with h5py.File(output_filename, 'a') as f:
-        trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
-        trig_data['op_channel'] = op_channel_idx
-        trig_data['ts_s'] = ((start_times + trigger_idx * light.LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
-        trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % CLOCK_RESET_PERIOD)
-
-        # skip creating the truth dataset if there is no truth information to store
-        if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('segment_ids', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_photons.shape[-1],))])
-            truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
-            truth_data['segment_ids'] = waveforms_true_track_id
-            truth_data['pe_current'] = waveforms_true_photons
-
-        if 'light_wvfm' not in f:
-            f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
-            f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
-            if waveforms_true_track_id.size > 0:
-                f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
-        else:
-            f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
-            f['light_wvfm'][-waveforms.shape[0]:] = waveforms
-
-            f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
-            f['light_trig'][-trigger_idx.shape[0]:] = trig_data
-
-            if waveforms_true_track_id.size > 0:
-                f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
-                f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
-
+        for i_, i_mod in enumerate(detector.MOD_IDS):
+            if i_ == 0:  
+                merged_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
+            else:
+                mod_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
+                if mod_wvfm.shape[0] != merged_wvfm.shape[0]:
+                    raise ValueError("The number of triggers should be the same in each module with light trigger mode 1.")
+                merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
+        del f['light_wvfm']
+        f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))

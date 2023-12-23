@@ -43,6 +43,7 @@ def set_simulation_properties(simprop_file):
     global SPILL_PERIOD
     global MAX_EVENTS_PER_FILE
     global TRACKS_DSET_NAME
+    global MOD2MOD_VARIATION
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
