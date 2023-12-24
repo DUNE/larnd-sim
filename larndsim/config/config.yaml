@@ -4,7 +4,10 @@ module0:
     PIXEL_LAYOUT:    multi_tile_layout-2.3.16.yaml
     DET_PROPERTIES:  module0.yaml
     RESPONSE:        response_44.npy
-    LIGHT_LUT:       lightLUT.npz
+    # Path to light LUT at NERSC
+    # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
+    # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
 
 # 2x2 (same module configuration), beam
@@ -13,9 +16,18 @@ module0:
     DET_PROPERTIES:  2x2.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
     RESPONSE:        response_44.npy
-    LIGHT_LUT:       lightLUT.npz
+    # Path to light LUT at NERSC
+    # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
+    # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz
     LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
     MOD2MOD_VARIATION: False
+
+# 2x2 (same module configuration), non-beam
+2x2_non_beam:
+    <<: *2x2main
+    SIM_PROPERTIES:  singles_sim.yaml
+    DET_PROPERTIES:  2x2_non_beam.yaml
 
 # 2x2 (differnt module configuration), beam
 2x2_mod2mod_variation:
@@ -26,15 +38,12 @@ module0:
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
     RESPONSE:        [response_44.npy, response_38.npy]
     RESPONSE_ID:     [0, 0, 1, 0] 
-    LIGHT_LUT:       [lightLUT.npz, lightLUT.npz]
+    # Path to light LUT at NERSC
+    # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
+    # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
+    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz] 
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
-
-# 2x2 (same module configuration), non-beam
-2x2_only:
-    <<: *2x2main
-    SIM_PROPERTIES:  singles_sim.yaml
-    DET_PROPERTIES:  2x2_only.yaml
 
 # nd-lar (same module configuration)
 # NuMI beam (not realistic)
