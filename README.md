@@ -8,14 +8,14 @@
 
 This software aims to simulate the light readout and the pixelated charge readout of a Liquid Argon Time Projection Chamber. It consists of a set of highly-parallelized algorithms implemented on the [CUDA architecture](https://developer.nvidia.com/cuda-toolkit) using [Numba](https://numba.pydata.org).
 
-Software documentation is available [here](https://dune.github.io/larnd-sim/index.html). In addition, a paper about larnd-sim performance can be found here: [here](https://iopscience.iop.org/article/10.1088/1748-0221/18/04/P04034).
+Software documentation is available [here](https://dune.github.io/larnd-sim/index.html). In addition, a paper about larnd-sim performance can be found [here](https://iopscience.iop.org/article/10.1088/1748-0221/18/04/P04034).
 
 ## Overview
 
 The software takes as input a dataset containing segments of deposited energy in the detector, generated with a [Geant4](https://geant4.web.cern.ch) wrapper called [`edep-sim`](https://github.com/ClarkMcGrew/edep-sim). The output of `edep-sim` is in the [ROOT](https://root.cern) format and must be converted into [HDF5](https://www.hdfgroup.org/solutions/hdf5/) to be used by `larnd-sim`. For this purpose, we provide [`cli/dumpTree.py`](https://github.com/DUNE/larnd-sim/blob/develop/cli/dumpTree.py) for non-beam events and [`2x2_sim/run-convert2h5
 /convert_edepsim_roottoh5.py`](https://github.com/DUNE/2x2_sim/blob/develop/run-convert2h5/convert_edepsim_roottoh5.py) (Note that this is in another repository, namely [`2x2_sim`](https://github.com/DUNE/2x2_sim/tree/develop)) for beam events. The two versions will be merged in future.
 
-`larnd-sim` simulates both the scintillation light acquired by the light sensors and the charge induced on the pixels.
+`larnd-sim` simulates both the light and charge readout signals with ND-LAr like detector designs.
 
 ## Installation
 
@@ -101,6 +101,14 @@ Generator truth information includes `mc_hdr` and `mc_stack` which are reserved 
 
 edep-sim/geant4 truth information contains `vertices` (interaction-level or equivalent), `trajectories` (particle-level) and `segments` (segment of energy depositions). Primary trajectories should overlap `mc_stack` if it originates from neutrino generators. `segments` is the essential input to the simulation. This part should exist in most of the output, and it is a direct copy of the corresponding part in the input with possible minor extensions such as event time (vertices['t_event']).
 
-The charged readout output is stored in the datasets described in the [LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html), plus a dataset `tracks` containing the _true_ energy depositions in the detector, and a dataset `mc_packets_assn`, which has a list of indeces corresponding to the true energy deposition associated to each packet.
+The simulated charge detector output is stored in `packets` which is compatible with the converted raw data from LArPix. A data packet could be considered as a point-like charge readout in time and the LArPix plane (anode). It encodes information of the readout charge, position and time. Other type of packets such as trigger, timestamp and sync are also available in the simulated `packets` dataset. A general discription can be found in [the LArPix HDF5 documentation](https://larpix-control.readthedocs.io/en/stable/api/format/hdf5format.html).
 
-The light output is stored in the `light_dat`, `light_trig`, and `light_wvfm` datasets, containing the number of photons, the optical sensors triggers and the optical sensors waveforms, respectively.
+
+### Configuration files
+
+## Future developments
+`larnd-sim` is fairly mature for the detector simulation it is in vision to be. However, various developments are still needed to further improve the simulation. [The Git Issues](https://github.com/DUNE/larnd-sim/issues) provides a peek into the wishlist. We welcome your contribution!
+
+Currently, the development of `larnd-sim` is organised by Kevin Wood (@krwood, LBNL), Yifan Chen (@YifanC, SLAC) and Matt Kramer (@mjkramer, LBNL), as part of the 2x2 simulation effort. The future simulation group of ND-LAr and/or its prototype will continue managing and maintaining `larnd-sim`. Please contact us if you have any suggestions, questions or concerns regarding `larnd-sim`.
+
+Here, we would also like to acknowledge the initial authors of `larnd-sim`, Roberto Soleti (@soleti) and Peter Madigan (@peter-madigan). Thank you and many other contributors that have built `larnd-sim`.
