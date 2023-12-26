@@ -162,18 +162,21 @@ def export_to_hdf5(event_id_list,
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
     io_groups = io_groups if i_mod < 0 else io_groups[(i_mod-1)*2: i_mod*2]
     packets = []
-    packets_mc = []
+    packets_mc_evt = []
+    packets_mc_trk = []
     packets_frac = []
 
     if is_first_batch:
         for io_group in io_groups:
             packets.append(TimestampPacket(timestamp=0))
             packets[-1].chip_key = Key(io_group,0,0)
-            packets_mc.append([-1] * track_ids.shape[1])
+            packets_mc_evt.append([-1])
+            packets_mc_trk.append([-1] * track_ids.shape[1])
             packets_frac.append([0] * current_fractions.shape[2])
 
             packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
-            packets_mc.append([-1] * track_ids.shape[1])
+            packets_mc_evt.append([-1])
+            packets_mc_trk.append([-1] * track_ids.shape[1])
             packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
@@ -221,7 +224,8 @@ def export_to_hdf5(event_id_list,
                         for io_group in io_groups:
                             packets.append(SyncPacket(sync_type=b'S',
                                                       timestamp=CLOCK_RESET_PERIOD-1, io_group=io_group))
-                            packets_mc.append([-1] * track_ids.shape[1])
+                            packets_mc_evt.append([-1])
+                            packets_mc_trk.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
                         event_start_time_list[itick:] -= CLOCK_RESET_PERIOD
                     else:
@@ -238,7 +242,8 @@ def export_to_hdf5(event_id_list,
                         for io_group in io_groups:
                             packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
                             packets[-1].chip_key = Key(io_group,0,0)
-                            packets_mc.append([-1] * track_ids.shape[1])
+                            packets_mc_evt.append([-1])
+                            packets_mc_trk.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
 
                         trig_mask = light_trigger_event_id == event
@@ -248,7 +253,8 @@ def export_to_hdf5(event_id_list,
                                 if light.LIGHT_TRIG_MODE == 0:
                                     for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                        packets_mc.append([-1] * track_ids.shape[1])
+                                        packets_mc_evt.append([-1])
+                                        packets_mc_trk.append([-1] * track_ids.shape[1])
                                         packets_frac.append([0] * current_fractions.shape[2])
                                 # redundant here
                                 elif light.LIGHT_TRIG_MODE == 1:
@@ -257,7 +263,8 @@ def export_to_hdf5(event_id_list,
                                     elif module_trig == 0: #threshold trigger
                                         io_group = THRES_TRIG_IO
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                    packets_mc.append([-1] * track_ids.shape[1])
+                                    packets_mc_evt.append([-1])
+                                    packets_mc_trk.append([-1] * track_ids.shape[1])
                                     packets_frac.append([0] * current_fractions.shape[2])
                         last_event = event
 
@@ -297,7 +304,8 @@ def export_to_hdf5(event_id_list,
                 p.first_packet = 1
                 p.assign_parity()
 
-                packets_mc.append(track_ids[itick])
+                packets_mc_evt.append([event])
+                packets_mc_trk.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
             else:
@@ -307,16 +315,18 @@ def export_to_hdf5(event_id_list,
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
 
-        dtype = np.dtype([('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+        dtype = np.dtype([('event_ids',f'(1,)i8'),
+                          ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
         # First, sort the back-tracking information by the magnitude of the fraction
         packets_frac = np.array(packets_frac)
-        packets_mc   = np.array(packets_mc)
+        packets_mc_trk   = np.array(packets_mc_trk)
+        packets_mc_evt   = np.array(packets_mc_evt)
         
         frac_order = np.flip(np.argsort(np.abs(packets_frac),axis=1),axis=1)
-        ass_track_ids = np.take_along_axis(packets_mc,   frac_order, axis=1)
+        ass_track_ids = np.take_along_axis(packets_mc_trk,   frac_order, axis=1)
         ass_fractions = np.take_along_axis(packets_frac, frac_order, axis=1)
 
         # Second, only store the relevant portion.
@@ -333,6 +343,9 @@ def export_to_hdf5(event_id_list,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
                 constant_values=0.)
+        packets_mc_ds['event_ids'] = packets_mc_evt
+        print("packets_mc_ds['event_ids']: ",packets_mc_ds['event_ids'])
+        print("packets_mc_ds['event_ids'].shape: ", packets_mc_ds['event_ids'].shape)
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
