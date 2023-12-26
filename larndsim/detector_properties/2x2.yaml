@@ -61,5 +61,5 @@ light_window: [0, 16] # us
 light_trig_window: [1.6, 14.4] # us
 light_digit_sample_spacing: 0.016 # us
 light_nbit: 14
-max_light_truth_ids: 3 # set to zero to disable light truth backtracking
+max_light_truth_ids: 0 # set to zero to disable light truth backtracking
 mc_truth_threshold: 1 # pe/us
