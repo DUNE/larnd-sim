@@ -357,30 +357,33 @@ def run_simulation(input_filename,
     RangePop()
 
     RangePush("load_properties")
+    if mod2mod_variation and n_modules == 1:
+        raise KeyError("You cannot set module variation with only one module.")
+
     if not mod2mod_variation:
         # Check if the configrations are consistent
         # Allow configuration to be provided as a string or a single element list
-        if (isinstance(pixel_layout, list) or n_modules == 1) and len(pixel_layout) > 1:
+        if isinstance(pixel_layout, list) and len(pixel_layout) > 1:
             raise KeyError("Provided more than one pixel layout file for the simulation with no module variation.")
         elif isinstance(pixel_layout, list) and len(pixel_layout) == 1:
             pixel_layout = pixel_layout[0]
 
-        if (isinstance(response_file, list) or n_modules == 1) and len(response_file) > 1:
+        if isinstance(response_file, list) and len(response_file) > 1:
             raise KeyError("Provided more than one response file for the simulation with no module variation.")
         elif isinstance(response_file, list) and len(response_file) == 1:
             response_file = response_file[0]
 
-        if (isinstance(pixel_thresholds_file, list) or n_modules == 1) and len(pixel_thresholds_file) > 1:
+        if isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) > 1:
             raise KeyError("Provided more than one pixel threshold file for the simulation with no module variation.")
         elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == 1:
             pixel_thresholds_file = pixel_thresholds_file[0]
 
-        if (isinstance(pixel_gains_file, list) or n_modules == 1) and len(pixel_gains_file) > 1:
+        if isinstance(pixel_gains_file, list) and len(pixel_gains_file) > 1:
             raise KeyError("Provided more than one pixel gain file for the simulation with no module variation.")
         elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
             pixel_gains_file = pixel_gains_file[0]
 
-        if (isinstance(light_lut_filename, list) or n_modules == 1) and len(light_lut_filename) > 1:
+        if isinstance(light_lut_filename, list) and len(light_lut_filename) > 1:
             raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
         elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
             light_lut_filename = light_lut_filename[0]
