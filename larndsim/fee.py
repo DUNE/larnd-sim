@@ -344,8 +344,6 @@ def export_to_hdf5(event_id_list,
                 mode='constant',
                 constant_values=0.)
         packets_mc_ds['event_ids'] = packets_mc_evt
-        #print("packets_mc_ds['event_ids']: ",packets_mc_ds['event_ids'])
-        #print("packets_mc_ds['event_ids'].shape: ", packets_mc_ds['event_ids'].shape)
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():

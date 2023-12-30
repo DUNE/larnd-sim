@@ -308,9 +308,9 @@ def run_simulation(input_filename,
                 module_pixel_layout = [pixel_layout[idx] for idx in pixel_layout_id]
                 pixel_layout = module_pixel_layout
         except:
-            if len(pixel_layout) != n_modules:
+            if isinstance(pixel_layout, list) and len(pixel_layout) != n_modules:
                 raise KeyError("Simulation with module variation activated, but the number of pixel layout files is incorrect!")
-            if len(pixel_layout) == n_modules:
+            elif isinstance(pixel_layout, list) and len(pixel_layout) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the pixel layout files.")
 
         try:
@@ -321,9 +321,9 @@ def run_simulation(input_filename,
                 module_response_file = [response_file[idx] for idx in response_id]
                 response_file = module_response_file
         except:
-            if len(response_file) != n_modules:
+            if isinstance(response_file, list) and len(response_file) != n_modules:
                 raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
-            if len(response_file) == n_modules:
+            elif isinstance(response_file, list) and len(response_file) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the response files.")
 
         try:
@@ -334,9 +334,9 @@ def run_simulation(input_filename,
                 module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
                 light_lut_filename = module_light_lut_filename
         except:
-            if len(light_lut_filename) != n_modules:
+            if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
                 raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
-            if len(light_lut_filename) == n_modules:
+            elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
         
         if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
@@ -357,9 +357,8 @@ def run_simulation(input_filename,
     RangePop()
 
     RangePush("load_properties")
-    if mod2mod_variation and n_modules == 1:
-        raise KeyError("You cannot set module variation with only one module.")
 
+    # if n_modules == 1, mod2mod_variation would have already been set to False
     if not mod2mod_variation:
         # Check if the configrations are consistent
         # Allow configuration to be provided as a string or a single element list
