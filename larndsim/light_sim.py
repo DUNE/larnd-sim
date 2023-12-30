@@ -733,22 +733,24 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
 
 def merge_module_light_wvfm_same_trigger(output_filename):
     with h5py.File(output_filename, 'a') as f:
+        have_mc_assn = 'light_wvfm_mc_assn' in f.keys()
         for i_, i_mod in enumerate(detector.MOD_IDS):
             if i_ == 0:  
                 merged_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
-                if 'light_wvfm_mc_assn' in f.keys():
+                if have_mc_assn:
                     merged_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
             else:
                 mod_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
                 if mod_wvfm.shape[0] != merged_wvfm.shape[0]:
                     raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform).")
-                if 'light_wvfm_mc_assn' in f.keys():
+                if have_mc_assn:
                     mod_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
                     if mod_wvfm_mc_assn.shape[0] != merged_wvfm_mc_assn.shape[0]:
                         raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform mc assn).")
+                    merged_wvfm_mc_assn = np.append(merged_wvfm_mc_assn, mod_wvfm_mc_assn, axis=1)
                 merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
-                merged_wvfm_mc_assn = np.append(merged_wvfm_mc_assn, mod_wvfm_mc_assn, axis=1)
         del f['light_wvfm']
-        del f['light_wvfm_mc_assn']
         f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))
-        f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None,None))
+        if have_mc_assn:
+            del f['light_wvfm_mc_assn']
+            f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None,None))
