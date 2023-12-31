@@ -160,7 +160,8 @@ def run_simulation(input_filename,
         Note: can't handle empty inputs
         '''
         for key in list(results.keys()):
-            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
+            if len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
+                results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
         uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
         uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
