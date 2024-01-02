@@ -86,7 +86,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
 def run_simulation(input_filename,
                    output_filename,
-                   config='2x2_mod2od_variation',
+                   config='2x2_mod2mod_variation',
                    mod2mod_variation=None,
                    pixel_layout=None,
                    detector_properties=None,
