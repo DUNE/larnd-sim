@@ -245,6 +245,15 @@ def run_simulation(input_filename,
     if light_lut_filename is None:
         try:
             light_lut_filename = cfg['LIGHT_LUT']
+            if isinstance(light_lut_filename, list):
+                for i_light_lut, f_light_lut in enumerate(light_lut_filename):
+                    if not os.path.isfile(f_light_lut):
+                        light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+                        warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
+            else:
+                if not os.path.isfile(light_lut_filename):
+                    light_lut_filename = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+                    warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
         except:
             print("light_lut_filename is not provided (required if light_simulated is True)")
     if light_det_noise_filename is None:
