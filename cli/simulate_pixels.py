@@ -24,6 +24,7 @@ from tqdm import tqdm
 
 from larndsim import consts
 from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
+import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
@@ -412,7 +413,7 @@ def run_simulation(input_filename,
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
-
+    from larndsim import fee
     if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
         raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
@@ -611,6 +612,13 @@ def run_simulation(input_filename,
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             from larndsim.consts import detector
+            #importlib.reload(detector)
+            importlib.reload(pixels_from_track)
+            importlib.reload(active_volume)
+            importlib.reload(detsim)
+            importlib.reload(light_sim)
+            importlib.reload(lightLUT)
+            importlib.reload(fee)
 
             RangePush("load_module_induction_response")
             response = cp.load(response_file[i_mod-1])
@@ -618,6 +626,7 @@ def run_simulation(input_filename,
 
             RangePush("load_segments_in_module")
             module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+
             module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
             tracks = all_mod_tracks[module_tracks_mask]
             segment_ids = all_mod_segment_ids[module_tracks_mask]
