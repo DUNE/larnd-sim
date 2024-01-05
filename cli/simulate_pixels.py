@@ -436,6 +436,8 @@ def run_simulation(input_filename,
         light.LIGHT_SIMULATED = light_simulated
     RangePop()
 
+    RangePop()                  # load_properties
+
     RangePush("load_hd5_file")
     print("Loading track segments..." , end="")
     start_load = time()
@@ -547,12 +549,12 @@ def run_simulation(input_filename,
     logger.take_snapshot()
     logger.archive('preparation')
 
-    RangePop()
+    RangePop()                  # load_hdf5_file
     end_load = time()
     print(f"Data preparation time: {end_load-start_load:.2f} s")
 
     print("******************\nRUNNING SIMULATION\n******************")
-    RangePush("run_simulation")
+    RangePush("prep_simulation")
     logger.start()
     logger.take_snapshot()
     # Create a lookup table for event timestamps.
@@ -605,6 +607,8 @@ def run_simulation(input_filename,
             print(f" {end_mask-start_mask:.2f} s")
     else:
         mod_ids = consts.detector.get_n_modules(detector_properties)
+
+    RangePop()                  # prep_simulation
 
     # Convention module counting start from 1
     for i_mod in mod_ids:
@@ -684,9 +688,11 @@ def run_simulation(input_filename,
             else:
                 light_noise = cp.load(light_det_noise_filename)
 
+            RangePush('calculate_light_incidence')
             TPB = 256
             BPG = max(ceil(tracks.shape[0] / TPB),1)
             lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
+            RangePop()
 
             light_sim_dat_acc.append(light_sim_dat)
 
@@ -732,6 +738,7 @@ def run_simulation(input_filename,
                 light_response_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
 
+                RangePush('light_sim_triggers')
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
                        max(ceil(len(op_channel) / TPB[1]),1),
@@ -772,13 +779,14 @@ def run_simulation(input_filename,
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
                 # account the neighboring pixels, due to the transverse diffusion of the charges.
-                RangePush("pixels_from_track")
+                RangePush("max_pixels")
                 max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
 
                 TPB = 128
                 BPG = max(ceil(selected_tracks.shape[0] / TPB),1)
                 max_pixels = np.array([0])
                 pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
+                RangePop()
 
                 # This formula tries to estimate the maximum number of pixels which can have
                 # a current induced on them.
@@ -791,6 +799,7 @@ def run_simulation(input_filename,
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                     continue
 
+                RangePush("get_pixels")
                 pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
                                                       active_pixels,
                                                       neighboring_pixels,
@@ -998,10 +1007,13 @@ def run_simulation(input_filename,
                 results_acc = defaultdict(list)
 
             logger.take_snapshot([len(logger.log)])
+        RangePop()                  # run_simulation
 
+        RangePush('save_results')
         # Always save results after last iteration
         if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
+        RangePop()
 
     logger.take_snapshot([len(logger.log)])
 
@@ -1071,7 +1083,6 @@ def run_simulation(input_filename,
 
     print("Output saved in:", output_filename)
 
-    RangePop()
     end_simulation = time()
     logger.take_snapshot([len(logger.log)])
     print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
