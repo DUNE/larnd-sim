@@ -413,7 +413,15 @@ def run_simulation(input_filename,
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
-    from larndsim import fee
+
+    # reload after the variables been defined (has been loaded for the first time at the top)
+    importlib.reload(pixels_from_track)
+    importlib.reload(active_volume)
+    importlib.reload(detsim)
+    importlib.reload(light_sim)
+    importlib.reload(lightLUT)
+    importlib.reload(fee)
+
     if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
         raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
@@ -612,7 +620,7 @@ def run_simulation(input_filename,
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             from larndsim.consts import detector
-            #importlib.reload(detector)
+            # reload after the variables been defined/updated; first imported at the top
             importlib.reload(pixels_from_track)
             importlib.reload(active_volume)
             importlib.reload(detsim)
@@ -626,7 +634,6 @@ def run_simulation(input_filename,
 
             RangePush("load_segments_in_module")
             module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
-
             module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
             tracks = all_mod_tracks[module_tracks_mask]
             segment_ids = all_mod_segment_ids[module_tracks_mask]
@@ -705,6 +712,7 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
+        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
@@ -714,7 +722,18 @@ def run_simulation(input_filename,
             # go through all simulated events in all modules even there might be no segments in the module
             ievd = np.unique(all_mod_tracks[sim.EVENT_SEPARATOR])[i_batch-1]
             evt_tracks = track_subset
-            first_trk_id = np.argmax(batch_mask) # first track in batch
+            #first_trk_id = np.argmax(batch_mask) # first track in batch
+
+            this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
+            # forward sync packets
+            if this_event_time[0] - sync_start > 0:
+                sync_times = cp.arange(sync_start, this_event_time[0], fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                if len(sync_times) > 0:
+                    fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
+                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD
+            # beam trigger is only forwarded to one specific pacman (defined in fee)
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
+                fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
@@ -755,6 +774,7 @@ def run_simulation(input_filename,
 
                 save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
                 results_acc = defaultdict(list)
+
                 continue
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
@@ -1025,7 +1045,7 @@ def run_simulation(input_filename,
             light_event_times = light_event_id * sim.SPILL_PERIOD # us
 
             light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
-            fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
+            #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
     #if light.LIGHT_TRIG_MODE == 0:

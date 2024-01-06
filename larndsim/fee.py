@@ -6,6 +6,7 @@ import numpy as np
 import cupy as cp
 import h5py
 import yaml
+import warnings
 
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
@@ -67,9 +68,9 @@ DISCRIMINATOR_NOISE = 650 * e
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
 #: Beam trig io group
-BEAM_TRIG_IO = 4
+BEAM_TRIG_IO = 1
 #: Threshold/LRS trig io group
-THRES_TRIG_IO = 5
+THRES_TRIG_IO = 2
 
 import logging
 logging.basicConfig()
@@ -166,18 +167,18 @@ def export_to_hdf5(event_id_list,
     packets_mc_trk = []
     packets_frac = []
 
-    if is_first_batch:
-        for io_group in io_groups:
-            packets.append(TimestampPacket(timestamp=0))
-            packets[-1].chip_key = Key(io_group,0,0)
-            packets_mc_evt.append([-1])
-            packets_mc_trk.append([-1] * track_ids.shape[1])
-            packets_frac.append([0] * current_fractions.shape[2])
+    #if is_first_batch:
+    #    for io_group in io_groups:
+    #        packets.append(TimestampPacket(timestamp=0))
+    #        packets[-1].chip_key = Key(io_group,0,0)
+    #        packets_mc_evt.append([-1])
+    #        packets_mc_trk.append([-1] * track_ids.shape[1])
+    #        packets_frac.append([0] * current_fractions.shape[2])
 
-            packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
-            packets_mc_evt.append([-1])
-            packets_mc_trk.append([-1] * track_ids.shape[1])
-            packets_frac.append([0] * current_fractions.shape[2])
+    #        packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
+    #        packets_mc_evt.append([-1])
+    #        packets_mc_trk.append([-1] * track_ids.shape[1])
+    #        packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
     last_event = -1
@@ -221,12 +222,13 @@ def export_to_hdf5(event_id_list,
                     if event_t0 > CLOCK_RESET_PERIOD-1 or time_tick > CLOCK_RESET_PERIOD-1:
                         # rollover (reset) at either PPS or at the 31-bit clock limit
                         rollover_count += 1
-                        for io_group in io_groups:
-                            packets.append(SyncPacket(sync_type=b'S',
-                                                      timestamp=CLOCK_RESET_PERIOD-1, io_group=io_group))
-                            packets_mc_evt.append([-1])
-                            packets_mc_trk.append([-1] * track_ids.shape[1])
-                            packets_frac.append([0] * current_fractions.shape[2])
+                        # FIXME disable this sync packets fill as it may overlap with what is already filled
+                        #for io_group in io_groups:
+                        #    packets.append(SyncPacket(sync_type=b'S',
+                        #                              timestamp=CLOCK_RESET_PERIOD-1, io_group=io_group))
+                        #    packets_mc_evt.append([-1])
+                        #    packets_mc_trk.append([-1] * track_ids.shape[1])
+                        #    packets_frac.append([0] * current_fractions.shape[2])
                         event_start_time_list[itick:] -= CLOCK_RESET_PERIOD
                     else:
                         break
@@ -360,55 +362,111 @@ def export_to_hdf5(event_id_list,
 
     return packets, packets_mc_ds
 
-def export_pacman_trigger_to_hdf5(filename, event_start_times):
+def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
     """
-    Saves trigger packets in the LArPix HDF5 format.
+    Saves sync packets in the LArPix HDF5 format.
     Args:
-        event_start_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
+        sync_times (:obj:`numpy.ndarray`): list of sync timestamps [us]
     Returns:
-        tuple: a tuple containing the list of LArPix trigger packets and the list of entries for the `mc_packets_assn` dataset
+        tuple: a tuple containing the list of LArPix sync packets and the list of entries for the `mc_packets_assn` dataset
     """
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
+    io_groups = detector.MODULE_TO_IO_GROUPS[i_mod] if i_mod > 0 else io_groups
+
     packets = []
-    packets_mc = []
+    packets_mc_evt = []
+    packets_mc_trk = []
     packets_frac = []
-    for evt_time in event_start_times:
-        t_trig = int(np.floor(evt_time / CLOCK_CYCLE)) % CLOCK_RESET_PERIOD
-        # timestamp packet
+
+    sync_ticks = sync_times / CLOCK_CYCLE # us -> time tick
+    for sync_tick in sync_ticks:
+        if sync_tick % CLOCK_RESET_PERIOD != 0:
+            warnings.warn("The provided sync time is not the mutiply of the reset period!")
+            sync_tick = sync_tick // CLOCK_RESET_PERIOD * CLOCK_RESET_PERIOD
         for io_group in io_groups:
-            packets.append(TimestampPacket(timestamp=t_trig))
-            packets[-1].chip_key = Key(io_group,0,0)
-            packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
-            packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
-        # trigger packet
-        if light.LIGHT_TRIG_MODE == 0:
-            for io_group in io_groups:
-                packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
-                packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
-        if light.LIGHT_TRIG_MODE == 1:
-            io_group = BEAM_TRIG_IO
-            #if module_trig == 1: #beam trigger
-            #    io_group = BEAM_TRIG_IO
-            #elif module_trig == 0: #threshold trigger # currently it will not get into threshold trigger under this mode
-            #    io_group = THRES_TRIG_IO
-            packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-            packets_mc.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+            packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))
+            packets_mc_evt.append([-1])
+            packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
             packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
 
-        dtype = np.dtype([('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+        dtype = np.dtype([('event_ids',f'(1,)i8'),
+                          ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
-        # First, sort the back-tracking information by the magnitude of the fraction
         packets_frac = np.array(packets_frac)
-        packets_mc   = np.array(packets_mc)
+        packets_mc_trk   = np.array(packets_mc_trk)
+        packets_mc_evt   = np.array(packets_mc_evt)
 
-        packets_mc_ds['segment_ids'] = packets_mc
+        packets_mc_ds['event_ids'] = packets_mc_evt
+        packets_mc_ds['segment_ids'] = packets_mc_trk
+        packets_mc_ds['fraction' ] = packets_frac
+
+        with h5py.File(filename, 'a') as f:
+            if "mc_packets_assn" not in f.keys():
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+            else:
+                f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
+                f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds
+
+    return packets, packets_mc_ds
+
+def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
+    """
+    Saves timestamp and trigger packets in the LArPix HDF5 format.
+    Args:
+        event_start_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
+    Returns:
+        tuple: a tuple containing the list of LArPix timestamp and trigger packets and the list of entries for the `mc_packets_assn` dataset
+    """
+    io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
+    io_groups = detector.MODULE_TO_IO_GROUPS[i_mod] if i_mod > 0 else io_groups
+
+    packets = []
+    packets_mc_evt = []
+    packets_mc_trk = []
+    packets_frac = []
+    for evt_time in event_start_times:
+
+        t_trig = int(np.floor(evt_time / CLOCK_CYCLE)) % CLOCK_RESET_PERIOD # tick
+
+        if light.LIGHT_TRIG_MODE == 0:
+            io_group = THRES_TRIG_IO
+        if light.LIGHT_TRIG_MODE == 1:
+            io_group = BEAM_TRIG_IO
+
+        # timestamp packets
+        packets.append(TimestampPacket(timestamp=evt_time)) # us
+        packets[-1].chip_key = Key(io_group,0,0)
+        packets_mc_evt.append([-1])
+        packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+        packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+
+        # trigger packets
+        packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig)) # tick
+        packets_mc_evt.append([-1])
+        packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
+        packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+
+    if packets:
+        packet_list = PacketCollection(packets, read_id=0, message='')
+        hdf5format.to_file(filename, packet_list, workers=1)
+
+        dtype = np.dtype([('event_ids',f'(1,)i8'),
+                          ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
+        packets_mc_ds = np.empty(len(packets), dtype=dtype)
+
+        packets_frac = np.array(packets_frac)
+        packets_mc_trk   = np.array(packets_mc_trk)
+        packets_mc_evt   = np.array(packets_mc_evt)
+
+        packets_mc_ds['event_ids'] = packets_mc_evt
+        packets_mc_ds['segment_ids'] = packets_mc_trk
         packets_mc_ds['fraction' ] = packets_frac
 
         with h5py.File(filename, 'a') as f:
