@@ -56,6 +56,10 @@ def get_voxel(pos, itpc, lut_vox_div):
     j = int((y_max - pos[1])/(y_max - y_min) * lut_vox_div[1])
     k = int((pos[2] - z_min)/(z_max - z_min) * lut_vox_div[2])
 
+    i = min(lut_vox_div[0] - 1, max(0, i))
+    j = min(lut_vox_div[1] - 1, max(0, j))
+    k = min(lut_vox_div[2] - 1, max(0, k))
+
     return i, j, k
 
 @cuda.jit
