@@ -161,7 +161,7 @@ def run_simulation(input_filename,
         Note: can't handle empty inputs
         '''
         for key in list(results.keys()):
-            if len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
+            if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
                 results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
         uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
@@ -413,7 +413,15 @@ def run_simulation(input_filename,
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
-    from larndsim import fee
+
+    # reload after the variables been defined (has been loaded for the first time at the top)
+    importlib.reload(pixels_from_track)
+    importlib.reload(active_volume)
+    importlib.reload(detsim)
+    importlib.reload(light_sim)
+    importlib.reload(lightLUT)
+    importlib.reload(fee)
+
     if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
         raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
@@ -612,11 +620,10 @@ def run_simulation(input_filename,
 
     # Convention module counting start from 1
     for i_mod in mod_ids:
-
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             from larndsim.consts import detector
-            #importlib.reload(detector)
+            # reload after the variables been defined/updated; first imported at the top
             importlib.reload(pixels_from_track)
             importlib.reload(active_volume)
             importlib.reload(detsim)
@@ -630,7 +637,6 @@ def run_simulation(input_filename,
 
             RangePush("load_segments_in_module")
             module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
-
             module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
             tracks = all_mod_tracks[module_tracks_mask]
             segment_ids = all_mod_segment_ids[module_tracks_mask]
@@ -698,33 +704,10 @@ def run_simulation(input_filename,
 
             logger.take_snapshot()
             logger.archive('light')
-            print(f" {time()-start_light_time:.2f} s")
 
-        # Restart the memory logger for the electronics simulation loop
-        logger.start()
-        logger.take_snapshot()
-
-        track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
-        # We divide the sample in portions that can be processed by the GPU
-        is_first_batch = True
-        logger.start()
-        logger.take_snapshot([0])
-        i_batch = 0
-        det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
-        for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
-                               desc='Simulating batches...', ncols=80, smoothing=0):
-            i_batch = i_batch+1
-            # grab only tracks from current batch
-            track_subset = tracks[batch_mask]
-            # go through all simulated events in all modules even there might be no segments in the module
-            ievd = np.unique(all_mod_tracks[sim.EVENT_SEPARATOR])[i_batch-1]
-            evt_tracks = track_subset
-            first_trk_id = np.argmax(batch_mask) # first track in batch
-
-            # generate light waveforms for null signal in the module
-            # so we can have light waveforms in this case (if the whole detector is triggered together)
-            if len(track_subset) == 0 and light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+            # Prepare the light waveform padding (only necessary for module variation)
+            if mod2mod_variation:
+                null_light_results_acc = defaultdict(list)
                 trigger_idx = cp.array([0], dtype=int)
                 op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                 op_channel = cp.array(op_channel)
@@ -751,17 +734,58 @@ def run_simulation(input_filename,
                 light_t_start = 0
                 trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
 
-                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
-                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-                results_acc['light_trigger_idx'].append(trigger_idx)
-                results_acc['trigger_type'].append(trigger_type)
-                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-                results_acc['light_waveforms'].append(light_digit_signal)
-                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+                #null_light_results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
+                null_light_results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+                null_light_results_acc['light_trigger_idx'].append(trigger_idx)
+                null_light_results_acc['trigger_type'].append(trigger_type)
+                null_light_results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+                null_light_results_acc['light_waveforms'].append(light_digit_signal)
+                null_light_results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+                null_light_results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-                save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
-                results_acc = defaultdict(list)
+            print(f" {time()-start_light_time:.2f} s")
+
+        # Restart the memory logger for the electronics simulation loop
+        logger.start()
+        logger.take_snapshot()
+
+        track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
+
+        # We divide the sample in portions that can be processed by the GPU
+        is_first_batch = True
+        logger.start()
+        logger.take_snapshot([0])
+        i_batch = 0
+        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
+        det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
+        for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
+                               desc='Simulating batches...', ncols=80, smoothing=0):
+            i_batch = i_batch+1
+            # grab only tracks from current batch
+            track_subset = tracks[batch_mask]
+            # go through all simulated events in all modules even there might be no segments in the module
+            ievd = np.unique(all_mod_tracks[sim.EVENT_SEPARATOR])[i_batch-1]
+            evt_tracks = track_subset
+            #first_trk_id = np.argmax(batch_mask) # first track in batch
+
+            this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
+            # forward sync packets
+            if this_event_time[0] - sync_start > 0:
+                sync_times = cp.arange(sync_start, this_event_time[0], fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                if len(sync_times) > 0:
+                    fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
+                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD
+            # beam trigger is only forwarded to one specific pacman (defined in fee)
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
+                fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+
+            # generate light waveforms for null signal in the module
+            # so we can have light waveforms in this case (if the whole detector is triggered together)
+            if len(track_subset) == 0:
+                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                    save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                    del null_light_results_acc['light_event_id']
                 continue
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
@@ -797,6 +821,10 @@ def run_simulation(input_filename,
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
 
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
+                    if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                        null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                        save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                        del null_light_results_acc['light_event_id']
                     continue
 
                 RangePush("get_pixels")
@@ -815,6 +843,10 @@ def run_simulation(input_filename,
                 RangePop()
 
                 if not unique_pix.shape[0]:
+                    if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                        null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                        save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                        del null_light_results_acc['light_event_id']
                     continue
 
                 RangePush("time_intervals")
@@ -1002,8 +1034,11 @@ def run_simulation(input_filename,
                     results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                     results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-            if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-                is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
+            if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
+                if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=False)
+                elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
+                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
                 results_acc = defaultdict(list)
 
             logger.take_snapshot([len(logger.log)])
@@ -1011,8 +1046,10 @@ def run_simulation(input_filename,
 
         RangePush('save_results')
         # Always save results after last iteration
-        if len(results_acc['event_id']) >0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod)
+        if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=False)
+        elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
@@ -1037,7 +1074,7 @@ def run_simulation(input_filename,
             light_event_times = light_event_id * sim.SPILL_PERIOD # us
 
             light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
-            fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
+            #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
     #if light.LIGHT_TRIG_MODE == 0:
