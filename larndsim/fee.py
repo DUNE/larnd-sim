@@ -248,6 +248,11 @@ def export_to_hdf5(event_id_list,
                             packets_mc_trk.append([-1] * track_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
 
+                            packets.append(SyncPacket(sync_type=b'S', timestamp=time_tick , io_group=io_group))
+                            packets_mc_evt.append([-1])
+                            packets_mc_trk.append([-1] * track_ids.shape[1])
+                            packets_frac.append([0] * current_fractions.shape[2])
+
                         trig_mask = light_trigger_event_id == event
                         if any(trig_mask):
                             for t_trig, module_trig in zip(light_trigger_times[trig_mask], light_trigger_modules[trig_mask]):
@@ -440,7 +445,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
             io_group = BEAM_TRIG_IO
 
         # timestamp packets
-        packets.append(TimestampPacket(timestamp=evt_time)) # us
+        packets.append(TimestampPacket(timestamp=evt_time*units.mus/units.s)) # s
         packets[-1].chip_key = Key(io_group,0,0)
         packets_mc_evt.append([-1])
         packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
