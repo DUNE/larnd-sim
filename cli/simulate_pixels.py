@@ -622,6 +622,10 @@ def run_simulation(input_filename,
     for i_mod in mod_ids:
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
+            # Currently shouln't be necessary to reload light props, but if
+            # someone later updates `set_light_properties` to use stuff from the
+            # `consts.detector` module, we'll be glad for this line:
+            consts.light.set_light_properties(detector_properties)
             from larndsim.consts import detector
             # reload after the variables been defined/updated; first imported at the top
             importlib.reload(pixels_from_track)
