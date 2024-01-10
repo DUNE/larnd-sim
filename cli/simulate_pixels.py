@@ -713,7 +713,7 @@ def run_simulation(input_filename,
             if mod2mod_variation:
                 null_light_results_acc = defaultdict(list)
                 trigger_idx = cp.array([0], dtype=int)
-                op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                 op_channel = cp.array(op_channel)
                 trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
                 digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
@@ -962,7 +962,11 @@ def run_simulation(input_filename,
                     n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                     n_light_ticks = min(n_light_ticks,int(5E4))
                     # at least the optical channels from a whole module are activated together
-                    op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+
+                    # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
+                    # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
+                    # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
+                    op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                     op_channel = cp.array(op_channel)
                     #op_channel = light_sim.get_active_op_channel(light_inc)
                     n_light_det = op_channel.shape[0]
