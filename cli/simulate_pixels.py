@@ -324,7 +324,8 @@ def run_simulation(input_filename,
         # The spill starts are marking the start of 
         # The space between spills will be accounted for in the
         # packet timestamps through the event_times array below
-        localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        #localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        localSpillIDs = localSpillIDs = tracks[sim.EVENT_SEPARATOR] - 1000
         tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
@@ -389,7 +390,8 @@ def run_simulation(input_filename,
     # we can use when indexing into event_times. Note that num_evids is actually
     # an upper bound on the number of events, since there may be gaps due to
     # events that didn't deposit any energy in the LAr. Such gaps are harmless.
-    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
+    #num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
+    num_evids = (tracks[sim.EVENT_SEPARATOR].max() - 1000) + 1
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
@@ -483,7 +485,8 @@ def run_simulation(input_filename,
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
 
         uniq_events = cp.asnumpy(np.unique(results['event_id']))
-        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+        #uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+        uniq_event_times = cp.asnumpy(event_times[uniq_events - 1000])
         if light.LIGHT_SIMULATED:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
