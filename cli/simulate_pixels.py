@@ -778,7 +778,7 @@ def run_simulation(input_filename,
                 sync_times = cp.arange(sync_start, this_event_time[0], fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
                 if len(sync_times) > 0:
                     fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
-                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD
+                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
             if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
                 fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
@@ -790,7 +790,10 @@ def run_simulation(input_filename,
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                     save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
                     del null_light_results_acc['light_event_id']
+                # Nothing to simulate for charge readout?
                 continue
+
+                
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
