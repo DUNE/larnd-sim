@@ -189,11 +189,11 @@ def export_to_hdf5(event_id_list,
 
     unique_events, unique_events_inv = np.unique(event_id_list[...,0], return_inverse=True)
     event_start_time_list = (event_start_times[unique_events_inv] / CLOCK_CYCLE).astype(int)
-
     light_trigger_times = np.empty((0,)) if light_trigger_times is None else light_trigger_times
     light_trigger_event_id = np.empty((0,), dtype=int) if light_trigger_event_id is None else light_trigger_event_id
 
     rollover_count = 0
+    last_time_tick = -1
     for itick, adcs in enumerate(adc_list):
         ts = adc_ticks_list[itick]
         pixel_id = unique_pix[itick]
@@ -311,17 +311,29 @@ def export_to_hdf5(event_id_list,
                 p.first_packet = 1
                 p.assign_parity()
 
+                if not time_tick==last_time_tick:
+                    # timestamp packet every time there is a new "message"
+                    # the logic in real data for when a timestamp packet is complicated and depends on pacman CPU speed, packet creation rate
+                    # best simple approximation is that any group of packets with the same timestamp get a single timestamp packet
+                    last_time_tick = time_tick
+                    packets.append(TimestampPacket(timestamp=np.floor(event_start_time_list[0] * CLOCK_CYCLE * units.mus/units.s)) ) # s
+                    packets[-1].chip_key = Key(io_group,0,0)
+                    packets_mc_evt.append([-1])
+                    packets_mc_trk.append([-1] * (ASSOCIATION_COUNT_TO_STORE * 2))
+                    packets_frac.append([0] * (ASSOCIATION_COUNT_TO_STORE*2))
+
                 packets_mc_evt.append([event])
                 packets_mc_trk.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
+
+                
             else:
                 break
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
-
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])

@@ -760,7 +760,7 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
-        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
+        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) +  (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
@@ -774,8 +774,8 @@ def run_simulation(input_filename,
 
             this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
             # forward sync packets
-            if this_event_time[0] - sync_start > 0:
-                sync_times = cp.arange(sync_start, this_event_time[0], fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+            if this_event_time[0] - sync_start >= 0:
+                sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
                 if len(sync_times) > 0:
                     fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
                     sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
