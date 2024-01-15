@@ -92,6 +92,7 @@ def run_simulation(input_filename,
                    response_file='../larndsim/bin/response_44.npy',
                    light_lut_filename='../larndsim/bin/lightLUT.npz',
                    light_det_noise_filename='../larndsim/bin/light_noise-module0.npy',
+                   light_recomb_filename='../larndsim/bin/dedx_muon_array.npy',
                    light_simulated=None,
                    bad_channels=None,
                    n_events=None,
@@ -339,7 +340,7 @@ def run_simulation(input_filename,
     logger.start()
     logger.take_snapshot()
     start_quenching = time()
-    quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+    quenching.quench[BPG,TPB](tracks, physics.BIRKS, light_recomb_filename)
     end_quenching = time()
     logger.take_snapshot()
     logger.archive('quenching')
