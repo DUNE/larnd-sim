@@ -321,7 +321,6 @@ def export_to_hdf5(event_id_list,
                     packets_mc_evt.append([-1])
                     packets_mc_trk.append([-1] * (ASSOCIATION_COUNT_TO_STORE * 2))
                     packets_frac.append([0] * (ASSOCIATION_COUNT_TO_STORE*2))
-
                 packets_mc_evt.append([event])
                 packets_mc_trk.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])

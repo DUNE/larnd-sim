@@ -754,7 +754,7 @@ def run_simulation(input_filename,
         logger.take_snapshot()
 
         track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
+        segment_ids_arr = cp.asarray(segment_ids)
         # We divide the sample in portions that can be processed by the GPU
         is_first_batch = True
         logger.start()
@@ -954,7 +954,7 @@ def run_simulation(input_filename,
                 results_acc['unique_pix'].append(unique_pix)
                 results_acc['current_fractions'].append(current_fractions)
                 #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-                track_pixel_map[track_pixel_map != -1] = track_ids[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
                 # ~~~ Light detector response simulation ~~~
