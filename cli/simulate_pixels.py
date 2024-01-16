@@ -776,8 +776,10 @@ def run_simulation(input_filename,
             # forward sync packets
             if this_event_time[0] - sync_start >= 0:
                 sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
+                sync_times_export = cp.full( sync_times.shape, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) 
                 if len(sync_times) > 0:
-                    fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
+                    fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
                     sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
             if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
