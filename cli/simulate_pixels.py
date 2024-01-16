@@ -754,13 +754,13 @@ def run_simulation(input_filename,
         logger.take_snapshot()
 
         track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
-
+        segment_ids_arr = cp.asarray(segment_ids)
         # We divide the sample in portions that can be processed by the GPU
         is_first_batch = True
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
-        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
+        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) +  (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
@@ -774,11 +774,13 @@ def run_simulation(input_filename,
 
             this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
             # forward sync packets
-            if this_event_time[0] - sync_start > 0:
-                sync_times = cp.arange(sync_start, this_event_time[0], fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+            if this_event_time[0] - sync_start >= 0:
+                sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
+                sync_times_export = cp.full( sync_times.shape, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) 
                 if len(sync_times) > 0:
-                    fee.export_sync_to_hdf5(output_filename, sync_times, i_mod)
-                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD
+                    fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
+                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
             if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
                 fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
@@ -790,7 +792,10 @@ def run_simulation(input_filename,
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                     save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
                     del null_light_results_acc['light_event_id']
+                # Nothing to simulate for charge readout?
                 continue
+
+                
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
@@ -951,7 +956,7 @@ def run_simulation(input_filename,
                 results_acc['unique_pix'].append(unique_pix)
                 results_acc['current_fractions'].append(current_fractions)
                 #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-                track_pixel_map[track_pixel_map != -1] = track_ids[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
                 # ~~~ Light detector response simulation ~~~
