@@ -11,7 +11,7 @@ import cupy as cp
 from .consts import detector, physics, light
 
 @cuda.jit
-def quench(tracks, mode, recomb_file):
+def quench(tracks, mode, light_recomb):
     """
     This CUDA kernel takes as input an array of track segments and calculates
     the number of electrons and photons that reach the anode plane after recombination.
@@ -45,8 +45,7 @@ def quench(tracks, mode, recomb_file):
             recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
         elif mode == physics.BIRKS:
             # Amoruso, et al NIM A 523 (2004) 275
-            recomb_array = cp.load(recomb_file)
-            moyald = MIP_dEdx(recomb_array)
+            moyald = MIP_dEdx(light_recomb)
             recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * moyald / (detector.E_FIELD * detector.LAR_DENSITY))
             #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
             #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * 1.85 / (detector.E_FIELD * detector.LAR_DENSITY))
