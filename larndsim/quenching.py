@@ -10,17 +10,6 @@ from numba import cuda
 from .consts import detector, physics, light
 
 @cuda.jit
-def random_value_from_distribution(x_vals, normalized_distribution):
-    return np.random.choice(x_vals, p=normalized_distribution/np.sum(normalized_distribution))
-
-@cuda.jit
-def MIP_dEdx(mc_array):
-    bin_centers = mc_array[:,0]
-    fitted_data = mc_array[:,1]
-    random_sample = random_value_from_distribution(bin_centers, fitted_data)
-    return random_sample
-
-@cuda.jit
 def quench(tracks, mode, recomb_file):
     """
     This CUDA kernel takes as input an array of track segments and calculates
@@ -32,6 +21,16 @@ def quench(tracks, mode, recomb_file):
         tracks (:obj:`numpy.ndarray`): array containing the tracks segment information
         mode (int): recombination model (physics.BOX or physics.BIRKS).
     """
+
+    def random_value_from_distribution(x_vals, normalized_distribution):
+        return np.random.choice(x_vals, p=normalized_distribution/np.sum(normalized_distribution))
+
+    def MIP_dEdx(mc_array):
+        bin_centers = mc_array[:,0]
+        fitted_data = mc_array[:,1]
+        random_sample = random_value_from_distribution(bin_centers, fitted_data)
+        return random_sample
+        
     itrk = cuda.grid(1)
 
     if itrk < tracks.shape[0]:
