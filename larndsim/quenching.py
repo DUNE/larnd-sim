@@ -44,7 +44,8 @@ def quench(tracks, mode, recomb_file):
             recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
         elif mode == physics.BIRKS:
             # Amoruso, et al NIM A 523 (2004) 275
-            moyald = MIP_dEdx(recomb_file)
+            recomb_array = np.load(recomb_file)
+            moyald = MIP_dEdx(recomb_array)
             recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * moyald / (detector.E_FIELD * detector.LAR_DENSITY))
             #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
             #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * 1.85 / (detector.E_FIELD * detector.LAR_DENSITY))
