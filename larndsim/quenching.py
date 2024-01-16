@@ -5,6 +5,7 @@ through the detector
 
 from math import log, isnan
 from numba import cuda
+import cupy as cp
 #import random
 
 from .consts import detector, physics, light
@@ -23,7 +24,7 @@ def quench(tracks, mode, recomb_file):
     """
 
     def random_value_from_distribution(x_vals, normalized_distribution):
-        return np.random.choice(x_vals, p=normalized_distribution/np.sum(normalized_distribution))
+        return cp.random.choice(x_vals, p=normalized_distribution/cp.sum(normalized_distribution))
 
     def MIP_dEdx(mc_array):
         bin_centers = mc_array[:,0]
