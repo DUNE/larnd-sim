@@ -7,7 +7,7 @@ from math import log, isnan
 from numba import cuda
 #import cupy as cp
 #from cupy.random import choice
-#import random
+import random
 
 from .consts import detector, physics, light
 
