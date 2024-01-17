@@ -12,7 +12,7 @@ import random
 from .consts import detector, physics, light
 
 @cuda.jit
-def quench(tracks, mode, light_recomb):
+def quench(tracks, mode):  #, light_recomb):
     """
     This CUDA kernel takes as input an array of track segments and calculates
     the number of electrons and photons that reach the anode plane after recombination.
