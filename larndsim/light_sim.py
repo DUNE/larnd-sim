@@ -373,10 +373,10 @@ def gen_light_detector_noise(shape, light_det_noise):
     noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
     if shape[1] < 2:
         # special case where inverse FFT does not exist - just generate one sample
-        noise = cp.round(cp.real(noise)) * 2**(16-LIGHT_NBIT) #* 0
+        noise = cp.round(cp.real(noise)) * 2**(16-LIGHT_NBIT) * 0
     else:
         # invert FFT to create a noise waveform
-        noise = cp.round(cp.fft.irfft(noise, axis=-1)) * 2**(16-LIGHT_NBIT) #* 0
+        noise = cp.round(cp.fft.irfft(noise, axis=-1)) * 2**(16-LIGHT_NBIT) * 0
 
     if noise.shape[1] < shape[1]:
         # FFT must have even samples, so append 0 if an odd number of samples is requested
@@ -552,8 +552,8 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     pre_digit_ticks = int(ceil(LIGHT_TRIG_WINDOW[0]/LIGHT_TICK_SIZE))
     if trigger_idx.min() - pre_digit_ticks < 0:
         pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx.min()))
-        #signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]*0), signal], axis=-1)
-        signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]), signal], axis=-1)
+        signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]*0), signal], axis=-1)
+        #signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]), signal], axis=-1)
         signal_true_track_id = cp.concatenate([cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype), signal_true_track_id], axis=-2)
         signal_true_photons = cp.concatenate([cp.zeros(pad_shape + signal_true_photons.shape[-1:], signal_true_photons.dtype), signal_true_photons], axis=-2)
         padded_trigger_idx += pad_shape[1]
@@ -563,8 +563,8 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
         pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))
 
-        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]*0)], axis=-1)
-        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
+        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]*0)], axis=-1)
+        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
 
@@ -572,8 +572,8 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     if cp.any(~cp.isin(op_channel_idx, signal_op_channel_idx)):
         missing = cp.unique(op_channel_idx[~cp.isin(op_channel_idx, signal_op_channel_idx)])
         pad_shape = (missing.shape[0], signal.shape[-1])
-        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing]*0)], axis=0)
-        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing])], axis=0)
+        signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing]*0)], axis=0)
+        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing])], axis=0)
         signal_op_channel_idx = cp.concatenate([signal_op_channel_idx, missing], axis=0)
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=0)
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=0)
