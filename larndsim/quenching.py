@@ -48,8 +48,8 @@ def quench(tracks, mode):  #, light_recomb):
             # Amoruso, et al NIM A 523 (2004) 275
             #moyald = MIP_dEdx(light_recomb)
             #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * moyald / (detector.E_FIELD * detector.LAR_DENSITY))
-            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
-            #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * 1.85 / (detector.E_FIELD * detector.LAR_DENSITY))
+            #recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * 1.85 / (detector.E_FIELD * detector.LAR_DENSITY))
         else:
             raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
 
