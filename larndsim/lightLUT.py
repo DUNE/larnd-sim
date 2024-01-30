@@ -89,8 +89,9 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
         # Defining number of produced photons from quencing.py
         n_photons = tracks['n_photons'][itrk]
 
-        # Identifies which tpc event takes place in
+        # Identifies which tpc and module event takes place in
         itpc = tracks["pixel_plane"][itrk]
+        imod = itpc // 2
 
         # ignore any edeps with the default itpc value,
         # they are outside any tpc
@@ -111,14 +112,23 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
             # Calls T1 data for the voxel
             T1_dat = lut_vox['t0']
 
+            # When mod2mod variation is enabled, we simulate one module at a
+            # time. In that case, use channel_offset to go from "relative" to
+            # "absolute" channels when doing lookups in e.g.
+            # OP_CHANNEL_EFFICIENCY.
+            if light_incidence.shape[1] < light.N_OP_CHANNEL:
+                channel_offset = light_incidence.shape[1] * imod
+            else:
+                channel_offset = 0
+
             # Assigns the LUT data to the light_incidence array
-            for output_i in range(light.N_OP_CHANNEL):
-                op_channel_index = output_i
+            for output_i in range(light_incidence.shape[1]):
+                op_channel_index = output_i + channel_offset
                 lut_index = output_i % vis_dat.shape[0]
 
-                eff = light.OP_CHANNEL_EFFICIENCY[output_i]
-                vis = vis_dat[lut_index] * (light.OP_CHANNEL_TO_TPC[output_i] == itpc)
+                eff = light.OP_CHANNEL_EFFICIENCY[op_channel_index]
+                vis = vis_dat[lut_index] * (light.OP_CHANNEL_TO_TPC[op_channel_index] == itpc)
                 t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
 
-                light_incidence['n_photons_det'][itrk,op_channel_index] = eff * vis * n_photons
-                light_incidence['t0_det'][itrk,op_channel_index] = t1
+                light_incidence['n_photons_det'][itrk, output_i] = eff * vis * n_photons
+                light_incidence['t0_det'][itrk, output_i] = t1
