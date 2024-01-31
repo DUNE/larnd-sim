@@ -643,8 +643,8 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         if waveforms_true_track_id.size > 0:
             truth_dtype = np.dtype([('track_id', 'i8'), ('tick', 'i8'), ('pe_current', 'f8')])
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
-            nonzero_idx = cp.transpose(cp.nonzero(waveforms_true_photons))
-            ticks = cp.nonzero(waveforms_true_photons)[2]
+            nonzero_idx = np.transpose(np.nonzero(waveforms_true_photons))
+            ticks = np.nonzero(waveforms_true_photons)[2]
             truth_data['track_id'] = waveforms_true_track_id[nonzero_idx] #can we index like this?
             truth_data['tick'] = ticks
             truth_data['pe_current'] = waveforms_true_photons[nonzero_idx]
