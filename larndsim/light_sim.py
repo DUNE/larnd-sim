@@ -667,7 +667,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
                 if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
                     f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
                     if waveforms_true_track_id.size > 0:
-                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,None,None))
+                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,None))
                 else:
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
@@ -682,7 +682,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             if 'light_wvfm' not in f:
                 f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
                 if waveforms_true_track_id.size > 0:
-                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
+                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None))
             else:
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
@@ -764,4 +764,4 @@ def merge_module_light_wvfm_same_trigger(output_filename):
         f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))
         if have_mc_assn:
             del f['light_wvfm_mc_assn']
-            f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None,None))
+            f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None))
