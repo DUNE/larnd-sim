@@ -643,14 +643,12 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         if waveforms_true_track_id.size > 0:
             truth_dtype = np.dtype([('track_id', 'i8'), ('tick', 'i8'), ('pe_current', 'f8')])
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
-            print(truth_data.shape)
-            nonzero_idx = np.nonzero(waveforms_true_photons)
-            ticks = nonzero_idx[2]
-            print(waveforms_true_track_id[nonzero_idx].shape)
-            print(ticks.shape)
-            truth_data['track_id'] = waveforms_true_track_id[nonzero_idx] #can we index like this?
+            nonzero_idx = np.nonzero(waveforms_true_photons) # a tuple of 4 arrays
+            ticks = nonzero_idx[2] # the 3rd array is the tick index (need to check if we have to do a +1 or -1)
+
+            truth_data['track_id'] = waveforms_true_track_id[[nonzero_idx[0], nonzero_idx[1], nonzero_idx[2], nonzero_idx[3]]]
             truth_data['tick'] = ticks
-            truth_data['pe_current'] = waveforms_true_photons[nonzero_idx]
+            truth_data['pe_current'] = waveforms_true_photons[[nonzero_idx[0], nonzero_idx[1], nonzero_idx[2], nonzero_idx[3]]]
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
