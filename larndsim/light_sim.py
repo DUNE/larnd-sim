@@ -645,7 +645,6 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
             nonzero_idx = np.nonzero(waveforms_true_photons) # a tuple of 4 arrays
             ticks = nonzero_idx[2] # the 3rd array is the tick index (need to check if we have to do a +1 or -1)
-            print(nonzero_idx.shape)
             print(nonzero_idx[0].shape)
             print(nonzero_idx[0])
             print(np.transpose(nonzero_idx)[0])
