@@ -648,17 +648,17 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             list_of_tuples = [
                 [
                     (
-                        waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx],
-                        tick_idx,
-                        waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx]
+                        [waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])],
+                        [tick_idx for track_idx in range(waveforms_true_track_id.shape[3])],
+                        [waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])]
                     )
-                    for track_idx in range(waveforms_true_track_id.shape[3])
+                    
                 ]
                 for evt_idx, det_idx, tick_idx, _ in nonzero_idx
             ]
             truth_arr = np.asarray(list_of_tuples)
             print(truth_arr.shape)
-            # truth_data = [tuple(zip(*t)) for t in zip(*list_of_tuples)] #[nonzero_idx[:, 0], nonzero_idx[:, 1]]
+            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = truth_arr
             # print(truth_data)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
