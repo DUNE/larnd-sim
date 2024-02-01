@@ -658,7 +658,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             ]
 
             truth_data = [tuple(zip(*t)) for t in zip(*list_of_tuples)] #[nonzero_idx[:, 0], nonzero_idx[:, 1]]
-            print(truth_data.pad_shape)
+            print(truth_data.shape)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
