@@ -658,7 +658,9 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             ]
             truth_arr = np.asarray(list_of_tuples)
             print(truth_arr.shape)
-            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = truth_arr
+            print(truth_data.shape)
+            print(truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]].shape)
+            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = list_of_tuples
             # print(truth_data)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
