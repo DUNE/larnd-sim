@@ -641,7 +641,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_id', 'i8'), ('tick', 'i8'), ('pe_current', 'f8')])
+            truth_dtype = np.dtype([('track_id', 'i8', (waveforms_true_track_id.shape[-1],)), ('tick', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_track_id.shape[-1],))])
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
             nonzero_idx = np.transpose(np.nonzero(waveforms_true_photons))
 
