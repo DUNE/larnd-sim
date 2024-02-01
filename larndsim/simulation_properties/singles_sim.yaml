@@ -6,3 +6,4 @@ if_active_volume_check: 0    # boolean
 event_separator: 'event_id'   # 'eventID'
 tracks_dset_name: 'segments' # or 'segments'
 max_events_per_file: 1000
+spill_period: 1.2e6          # microseconds
