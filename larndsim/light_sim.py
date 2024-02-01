@@ -645,22 +645,30 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
             nonzero_idx = np.transpose(np.nonzero(waveforms_true_photons))
 
-            list_of_tuples = [
-                [
-                    (
-                        [waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])],
-                        [tick_idx for track_idx in range(waveforms_true_track_id.shape[3])],
-                        [waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])]
-                    )
+            # list_of_tuples = [
+            #     [
+            #         (
+            #             [waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])],
+            #             [tick_idx for track_idx in range(waveforms_true_track_id.shape[3])],
+            #             [waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])]
+            #         )
                     
-                ]
+            #     ]
+            #     for evt_idx, det_idx, tick_idx, _ in nonzero_idx
+            # ]
+            list_of_tuples = [
+                (
+                    np.array([waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])]),
+                    np.array([tick_idx for track_idx in range(waveforms_true_track_id.shape[3])]),
+                    np.array([waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx] for track_idx in range(waveforms_true_track_id.shape[3])])
+                )
                 for evt_idx, det_idx, tick_idx, _ in nonzero_idx
             ]
             truth_arr = np.asarray(list_of_tuples)
             print(truth_arr.shape)
             print(truth_data.shape)
             print(truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]].shape)
-            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = list_of_tuples.reshape(-1, 1)
+            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = list_of_tuples
             # print(truth_data)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
