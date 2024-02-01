@@ -641,20 +641,20 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_id', 'i8', (waveforms_true_track_id.shape[-1],)), ('tick', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_track_id.shape[-1],))])
+            truth_dtype = np.dtype([('track_id', 'i8', (waveforms_true_track_id.shape[0],)), ('tick', 'i8', (waveforms_true_track_id.shape[0],)), ('pe_current', 'f8', (waveforms_true_track_id.shape[0],))])
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
             nonzero_idx = np.transpose(np.nonzero(waveforms_true_photons))
 
             list_of_tuples = [
-            [
-                (
-                    waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx],
-                    tick_idx,
-                    waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx]
-                )
-                for track_idx in range(waveforms_true_track_id.shape[3])
-            ]
-            for evt_idx, det_idx, tick_idx, _ in nonzero_idx
+                [
+                    (
+                        waveforms_true_track_id[evt_idx, det_idx, tick_idx, track_idx],
+                        tick_idx,
+                        waveforms_true_photons[evt_idx, det_idx, tick_idx, track_idx]
+                    )
+                    for track_idx in range(waveforms_true_track_id.shape[3])
+                ]
+                for evt_idx, det_idx, tick_idx, _ in nonzero_idx
             ]
 
             truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = [tuple(zip(*t)) for t in zip(*list_of_tuples)]
