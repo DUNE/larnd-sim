@@ -641,7 +641,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
 
         # skip creating the truth dataset if there is no truth information to store
         if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_id', 'i8', (waveforms_true_track_id.shape[0],)), ('tick', 'i8', (waveforms_true_track_id.shape[0],)), ('pe_current', 'f8', (waveforms_true_track_id.shape[0],))])
+            truth_dtype = np.dtype([('track_id', 'i8', (waveforms_true_track_id.shape[-1],)), ('tick', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_track_id.shape[-1],))])
             truth_data = np.empty(waveforms_true_track_id.shape[:-2], dtype=truth_dtype)
             nonzero_idx = np.transpose(np.nonzero(waveforms_true_photons))
 
@@ -657,7 +657,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
                 for evt_idx, det_idx, tick_idx, _ in nonzero_idx
             ]
 
-            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = [tuple(zip(*t)) for t in zip(*list_of_tuples)]
+            truth_data = [tuple(zip(*t)) for t in zip(*list_of_tuples)] #[nonzero_idx[:, 0], nonzero_idx[:, 1]]
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
