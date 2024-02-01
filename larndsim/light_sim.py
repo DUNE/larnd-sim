@@ -657,8 +657,8 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             for evt_idx, det_idx, tick_idx, _ in nonzero_idx
             ]
             print(len(list_of_tuples))
-            print(list_of_tuples)
-            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = np.array(zip(*list_of_tuples), dtype=truth_dtype)
+
+            truth_data[nonzero_idx[:, 0], nonzero_idx[:, 1]] = np.array(tuple(zip(*list_of_tuples)), dtype=truth_dtype)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
