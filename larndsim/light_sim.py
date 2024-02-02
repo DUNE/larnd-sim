@@ -622,6 +622,28 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
+def zero_suppress_waveform_truth(spill, waveforms_true_track_id, waveforms_true_photons):
+    event_id, det_id, track_id, photons, tick = [[] for i in range(5)]
+    indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
+    truth_dtype = np.dtype([('event_id','i4'),('det_id','i4'),('track_id','i8'),('pe_current','f8'),('tick','i4')])
+    for i in range(len(indices)):
+        itrig=indices[i][0]
+        idet_module=indices[i][1]
+        isample=indices[i][2]
+        icontent=indices[i][3]
+        event_id.append(spill)
+        det_id.append(idet_module)
+        track_id.append(waveforms_true_track_id[itrig][idet_module][isample][icontent])
+        photons.append(waveforms_true_photons[itrig][idet_module][isample][icontent])
+        tick.append(isample)
+    truth_data = np.empty(len(indices), dtype=truth_dtype)
+    truth_data['event_id'] = np.array(event_id)
+    truth_data['det_id'] = np.array(det_id)
+    truth_data['track_id'] = np.array(track_id)
+    truth_data['pe_current'] = np.array(photons)
+    truth_data['tick'] = np.array(tick)
+    return truth_data
+
 def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod=-1):
     """
     Saves waveforms to output file
@@ -640,11 +662,9 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
     with h5py.File(output_filename, 'a') as f:
 
         # skip creating the truth dataset if there is no truth information to store
+        truth_data=None
         if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_ids', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_photons.shape[-1],))])
-            truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
-            truth_data['track_ids'] = waveforms_true_track_id
-            truth_data['pe_current'] = waveforms_true_photons
+            truth_data = zero_suppress_waveform_truth(event_id[0], waveforms_true_track_id, waveforms_true_photons)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
@@ -656,7 +676,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
                 if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
                     f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
                     if waveforms_true_track_id.size > 0:
-                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,None,None))
+                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,))
                 else:
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
@@ -671,7 +691,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             if 'light_wvfm' not in f:
                 f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
                 if waveforms_true_track_id.size > 0:
-                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
+                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,))
             else:
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
