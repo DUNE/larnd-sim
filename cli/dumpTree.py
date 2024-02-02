@@ -14,11 +14,11 @@ import glob
 from ROOT import TG4Event, TFile, TMap
 
 # Output array datatypes
-segments_dtype = np.dtype([("eventID","u4"),("vertexID", "u8"), ("segment_id", "u4"),
-                           ("z_end", "f4"),("trackID", "u4"), ("tran_diff", "f4"),
+segments_dtype = np.dtype([("event_id","u4"),("vertex_id", "u8"), ("segment_id", "u4"),
+                           ("z_end", "f4"),("traj_id", "u4"), ("file_traj_id", "u4"), ("tran_diff", "f4"),
                            ("z_start", "f4"), ("x_end", "f4"),
                            ("y_end", "f4"), ("n_electrons", "u4"),
-                           ("pdgId", "i4"), ("x_start", "f4"),
+                           ("pdg_id", "i4"), ("x_start", "f4"),
                            ("y_start", "f4"), ("t_start", "f4"),
                            ("t0_start", "f8"), ("t0_end", "f8"), ("t0", "f8"),
                            ("dx", "f4"), ("long_diff", "f4"),
@@ -27,17 +27,17 @@ segments_dtype = np.dtype([("eventID","u4"),("vertexID", "u8"), ("segment_id", "
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
                            ("n_photons","f4")], align=True)
 
-trajectories_dtype = np.dtype([("eventID","u4"), ("vertexID", "u8"),
-                               ("trackID", "u4"), ("local_trackID", "u4"), ("parentID", "i4"),
-                               ("pxyz_start", "f4", (3,)),
-                               ("xyz_start", "f4", (3,)), ("t_start", "f4"),
-                               ("pxyz_end", "f4", (3,)),
-                               ("xyz_end", "f4", (3,)), ("t_end", "f4"),
-                               ("pdgId", "i4"), ("start_process", "u4"),
+trajectories_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"),
+                               ("traj_id", "u4"), ("file_traj_id", "u4"), ("parent_id", "i4"), ("primary", "?"),
+                               ("E_start", "f4"), ("pxyz_start", "f4", (3,)),
+                               ("xyz_start", "f4", (3,)), ("t_start", "f8"),
+                               ("E_end", "f4"), ("pxyz_end", "f4", (3,)),
+                               ("xyz_end", "f4", (3,)), ("t_end", "f8"),
+                               ("pdg_id", "i4"), ("start_process", "u4"),
                                ("start_subprocess", "u4"), ("end_process", "u4"),
                                ("end_subprocess", "u4")], align=True)
 
-vertices_dtype = np.dtype([("eventID","u4"), ("vertexID","u8"),
+vertices_dtype = np.dtype([("event_id","u4"), ("vertex_id","u8"),
                            ("x_vert","f4"), ("y_vert","f4"), ("z_vert","f4"),
                            ("t_vert","f4"), ("t_event","f4")], align=True)
 
@@ -168,7 +168,7 @@ def updateHDF5File(output_file, trajectories, segments, vertices):
                 f['vertices'][nvert:] = vertices
 
 # Read a file and dump it.
-def dump(input_file, output_file):
+def dump(input_file, output_file, keep_all_dets=False):
 
     """
     Script to convert edep-sim root output to an h5 file formatted in a way
@@ -194,6 +194,17 @@ def dump(input_file, output_file):
     # event = TG4Event()
     # inputTree.SetBranchAddress("Event",event)
 
+    # map that gives which spill each event lives in
+    event_spill_map = inputFile.Get("event_spill_map")
+
+    if not event_spill_map:
+        spillPeriod_s = 0.
+    else:
+        spillPeriod_s = inputFile.Get("spillPeriod_s").GetVal()
+        # for setting t_spill
+        spillCounter = -1
+        lastSpill = None        # Most-recent global spill ID
+
     # Read all of the events.
     entries = inputTree.GetEntriesFast()
 
@@ -211,11 +222,18 @@ def dump(input_file, output_file):
         # IF CRASH: Comment this line (also see IF CRASH above)
         event = inputTree.Event
 
-        # Dummy values
-        spill_it = 0
-        t_spill = 0
+        globalVertexID = (event.RunId * 1E6) + event.EventId
 
-        #print("event",event.EventId,"in spill",spill_it)
+        if not event_spill_map:
+            spill_it = globalVertexID
+            t_spill = 0.
+        else:
+            spill_it_tobj = event_spill_map.GetValue(f"{event.RunId} {event.EventId}")
+            spill_it = int(spill_it_tobj.GetName())
+            if spill_it != lastSpill: # New spill?
+                spillCounter += 1
+                lastSpill = spill_it
+            t_spill = spillCounter * spillPeriod_s * 1E6 # convert to us
 
         # write to file
         if len(trajectories_list) >= 1000 or nb <= 0:
@@ -232,25 +250,26 @@ def dump(input_file, output_file):
         if nb <= 0:
             continue
 
-        no_active_hits = True
-        for containerName, hitSegments in event.SegmentDetectors:
-            if not containerName == 'volLArActive' and not containerName == 'TPCActive_shape': # 2x2 and ND active volume respectively
+        if keep_all_dets:
+            if len(event.SegmentDetectors) == 0:
                 continue
-            no_active_hits = False
-        if no_active_hits:
-            continue
+        else:
+            # If ARCUBE_ACTIVE_VOLUME is not set, default to previously hard
+            # coded containerName.
+            #if not any(containerName == os.environ.get("ARCUBE_ACTIVE_VOLUME", "volLArActive")
+            if not any(containerName == os.environ.get("ARCUBE_ACTIVE_VOLUME", "volTPCActive")
+                       for containerName, _hits in event.SegmentDetectors):
+                continue
 
-        #print("Class: ", event.ClassName())
-        #print("Event number:", event.EventId)
-
-        globalVertexID = (event.RunId * 1E6) + event.EventId
+        # Count total number of vertices and trajectories
+        n_traj = 0
 
         # Dump the primary vertices
         vertices = np.empty(len(event.Primaries), dtype=vertices_dtype)
         for iVtx, primaryVertex in enumerate(event.Primaries):
             #printPrimaryVertex("PP", primaryVertex)
-            vertices[iVtx]["eventID"] = event.EventId
-            vertices[iVtx]["vertexID"] = iVtx
+            vertices[iVtx]["event_id"] = event.EventId
+            vertices[iVtx]["vertex_id"] = iVtx
             vertices[iVtx]["x_vert"] = primaryVertex.GetPosition().X() * edep2cm
             vertices[iVtx]["y_vert"] = primaryVertex.GetPosition().Y() * edep2cm
             vertices[iVtx]["z_vert"] = primaryVertex.GetPosition().Z() * edep2cm
@@ -262,55 +281,115 @@ def dump(input_file, output_file):
         trackMap = {}
 
         # Dump the trajectories
-        #print("Number of trajectories ", len(event.Trajectories))
-        trajectories = np.empty(len(event.Trajectories), dtype=trajectories_dtype)
+        trajectories = np.full(len(event.Trajectories), np.iinfo(trajectories_dtype['traj_id']).max, dtype=trajectories_dtype)
         for iTraj, trajectory in enumerate(event.Trajectories):
             fileTrackID = trackCounter
             trackCounter += 1
             trackMap[trajectory.GetTrackId()] = fileTrackID
 
-            start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
-            trajectories[iTraj]["eventID"] = event.EventId
-            trajectories[iTraj]["vertexID"] = globalVertexID
+            if trajectory.GetParentId() == -1:
+                start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
+                trajectories[n_traj]["event_id"] = spill_it
+                trajectories[n_traj]["vertex_id"] = globalVertexID
 
-            trajectories[iTraj]["trackID"] = fileTrackID
-            trajectories[iTraj]["local_trackID"] = trajectory.GetTrackId()
-            trajectories[iTraj]["parentID"] = -1 if trajectory.GetParentId() == -1 \
-                else trackMap[trajectory.GetParentId()]
+                trajectories[n_traj]["traj_id"] = trajectory.GetTrackId()
+                trajectories[n_traj]["file_traj_id"] = trackMap[trajectory.GetTrackId()]
+                trajectories[n_traj]["parent_id"] = trajectory.GetParentId()
+                trajectories[n_traj]["primary"] = True if trajectory.GetParentId() == -1 else False # primary particle parents trajectory id are -1
 
-            trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
-            trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
-            trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
-            trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
-            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() * edep2us
-            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() * edep2us
-            trajectories[iTraj]["start_process"] = start_pt.GetProcess()
-            trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
-            trajectories[iTraj]["end_process"] = end_pt.GetProcess()
-            trajectories[iTraj]["end_subprocess"] = end_pt.GetSubprocess()
-            trajectories[iTraj]["pdgId"] = trajectory.GetPDGCode()
+                mass = trajectory.GetInitialMomentum().M()
+                p_start = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                p_end = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
 
-        trajectories_list.append(trajectories)
+                trajectories[n_traj]["pxyz_start"] = p_start #(start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                trajectories[n_traj]["pxyz_end"] = p_end #(end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+                trajectories[n_traj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
+                trajectories[n_traj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
+                trajectories[n_traj]["E_start"] = np.sqrt(np.sum(np.square(p_start)) + mass**2)
+                trajectories[n_traj]["E_end"] = np.sqrt(np.sum(np.square(p_end)) + mass**2)
+                trajectories[n_traj]["t_start"] = start_pt.GetPosition().T() * edep2us
+                trajectories[n_traj]["t_end"] = end_pt.GetPosition().T() * edep2us
+                trajectories[n_traj]["start_process"] = start_pt.GetProcess()
+                trajectories[n_traj]["start_subprocess"] = start_pt.GetSubprocess()
+                trajectories[n_traj]["end_process"] = end_pt.GetProcess()
+                trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
+                trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
+
+                n_traj += 1
+
+            else:
+                continue
 
         # Dump the segment containers
-        #print("Number of segment containers:", event.SegmentDetectors.size())
         for containerName, hitSegments in event.SegmentDetectors:
-            if not containerName == 'volLArActive' and not containerName == 'TPCActive_shape': # 2x2 and ND active volume respectively
+            # If ARCUBE_ACTIVE_VOLUME is not set, default to previously hard
+            # coded containerName.
+            #if (not keep_all_dets) and containerName != os.environ.get("ARCUBE_ACTIVE_VOLUME", "volLArActive"):
+            if (not keep_all_dets) and containerName != os.environ.get("ARCUBE_ACTIVE_VOLUME", "volTPCActive"):
                 continue
             segment = np.empty(len(hitSegments), dtype=segments_dtype)
             for iHit, hitSegment in enumerate(hitSegments):
-                segment[iHit]["eventID"] = event.EventId
-                segment[iHit]["vertexID"] = globalVertexID
+                segment[iHit]["event_id"] = event.EventId
+                segment[iHit]["vertex_id"] = globalVertexID
                 segment[iHit]["segment_id"] = segment_id
                 segment_id += 1
                 try:
-                    segment[iHit]["trackID"] = trackMap[hitSegment.Contrib[0]]
+                    segment[iHit]["traj_id"] = hitSegment.Contrib[0]
+                    segment[iHit]["file_traj_id"] = trackMap[hitSegment.Contrib[0]]
+                    seg_traj_id = hitSegment.Contrib[0]
+                    if segment[iHit]["traj_id"] not in trajectories["traj_id"]:
+                        # Given event.Trajectories is ordered by traj_id (trajectory.GetTrackId())
+                        trajectory = event.Trajectories[seg_traj_id]
+                        # Trace back in the family tree
+                        while trajectory.GetParentId() >= -1:
+                            if trajectory.GetTrackId() in trajectories["traj_id"]: # trajectories is reinitialized for each interaction
+                                if trajectory.GetParentId() == -1:
+                                    break
+                                else:
+                                    parent_traj_id = trajectory.GetParentId()
+                                    trajectory = event.Trajectories[parent_traj_id]
+                                continue
+
+                            start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
+                            trajectories[n_traj]["event_id"] = spill_it
+                            trajectories[n_traj]["vertex_id"] = globalVertexID
+
+                            trajectories[n_traj]["traj_id"] = trajectory.GetTrackId()
+                            trajectories[n_traj]["file_traj_id"] = trackMap[trajectory.GetTrackId()]
+                            trajectories[n_traj]["parent_id"] = trajectory.GetParentId()
+                            trajectories[n_traj]["primary"] = True if trajectory.GetParentId() == -1 else False # primary particle parents trajectory id are -1
+
+                            mass = trajectory.GetInitialMomentum().M()
+                            p_start = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                            p_end = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+
+                            trajectories[n_traj]["pxyz_start"] = p_start #(start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                            trajectories[n_traj]["pxyz_end"] = p_end #(end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+                            trajectories[n_traj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
+                            trajectories[n_traj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
+                            trajectories[n_traj]["E_start"] = np.sqrt(np.sum(np.square(p_start)) + mass**2)
+                            trajectories[n_traj]["E_end"] = np.sqrt(np.sum(np.square(p_end)) + mass**2)
+                            trajectories[n_traj]["t_start"] = start_pt.GetPosition().T() * edep2us
+                            trajectories[n_traj]["t_end"] = end_pt.GetPosition().T() * edep2us
+                            trajectories[n_traj]["start_process"] = start_pt.GetProcess()
+                            trajectories[n_traj]["start_subprocess"] = start_pt.GetSubprocess()
+                            trajectories[n_traj]["end_process"] = end_pt.GetProcess()
+                            trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
+                            trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
+                            n_traj += 1
+                            if trajectories[n_traj-1]["parent_id"] == -1:
+                                break
+                            else:
+                                parent_traj_id = trajectory.GetParentId()
+                                trajectory = event.Trajectories[parent_traj_id]
+
                 except IndexError as e:
                     print(e)
                     print("iHit:",iHit)
                     print("len(segment):",len(segment))
                     print("hitSegment.Contrib[0]:",hitSegment.Contrib[0])
                     print("len(trajectories):",len(trajectories))
+
                 segment[iHit]["x_start"] = hitSegment.GetStart().X() * edep2cm
                 segment[iHit]["y_start"] = hitSegment.GetStart().Y() * edep2cm
                 segment[iHit]["z_start"] = hitSegment.GetStart().Z() * edep2cm
@@ -333,7 +412,7 @@ def dump(input_file, output_file):
                 segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
                 segment[iHit]["t"] = 0
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
-                segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
+                segment[iHit]["pdg_id"] = trajectories[trajectories["traj_id"]==hitSegment.Contrib[0]]["pdg_id"]
                 segment[iHit]["n_electrons"] = 0
                 segment[iHit]["long_diff"] = 0
                 segment[iHit]["tran_diff"] = 0
@@ -341,6 +420,7 @@ def dump(input_file, output_file):
                 segment[iHit]["n_photons"] = 0
 
             segments_list.append(segment)
+        trajectories_list.append(trajectories[:n_traj])
 
     # save any lingering data not written to file
     updateHDF5File(
