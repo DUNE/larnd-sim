@@ -722,6 +722,7 @@ def run_simulation(input_filename,
                 n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
 
                 light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 light_response_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
                 light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
 
@@ -794,8 +795,6 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
                 continue
-
-                
 
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
@@ -1019,7 +1018,7 @@ def run_simulation(input_filename,
                     light_sim.calc_light_detector_response[BPG, TPB](
                         light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                         light_response, light_response_true_track_id, light_response_true_photons)
-                    light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+                    #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                     RangePop()
 
                     RangePush("sim_light_triggers")
