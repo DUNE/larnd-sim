@@ -23,6 +23,11 @@ module0:
     LIGHT_DET_NOISE: light_noise_2x2_4mod_July2023.npy
     MOD2MOD_VARIATION: False
 
+# 2x2 (same module configuration), mpvmpr
+2x2_mpvmpr:
+    <<: *2x2main
+    SIM_PROPERTIES:  singles_sim.yaml
+
 # 2x2 (same module configuration), non-beam
 2x2_non_beam:
     <<: *2x2main

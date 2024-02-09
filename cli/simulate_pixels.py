@@ -422,8 +422,8 @@ def run_simulation(input_filename,
     importlib.reload(lightLUT)
     importlib.reload(fee)
 
-    if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
-        raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
+    #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
+    #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
     RangePush("load_pixel_thresholds")
     if pixel_thresholds_file is not None:
@@ -1075,19 +1075,19 @@ def run_simulation(input_filename,
         all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
         all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
-        # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
-        # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
-        # once mod2mod variation is enabled, the light threshold triggering does not work properly
-        # compare the light trigger between different module and digitize afterwards should solve the issue
-        if light.LIGHT_TRIG_MODE == 1:
-            light_event_id = np.unique(localSpillIDs)
-            light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
-            light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
-            light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
-            light_event_times = light_event_id * sim.SPILL_PERIOD # us
+    # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
+    # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
+    # once mod2mod variation is enabled, the light threshold triggering does not work properly
+    # compare the light trigger between different module and digitize afterwards should solve the issue
+    if light.LIGHT_TRIG_MODE == 1:
+        light_event_id = np.unique(localSpillIDs) if sim.IS_SPILL_SIM else vertices['event_id']
+        light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
+        light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
+        light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
+        light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
 
-            light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
-            #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
+        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+        #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
     #if light.LIGHT_TRIG_MODE == 0:
