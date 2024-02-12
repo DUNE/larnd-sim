@@ -622,25 +622,33 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def zero_suppress_waveform_truth(spill, waveforms_true_track_id, waveforms_true_photons):
-    event_id, det_id, track_id, photons, tick = [[] for i in range(5)]
+
+def zero_suppress_waveform_truth(spill, waveforms_true_track_id, waveforms_true_photons, i_mod):
+    opdet_index_offset=0
+    if i_mod!=-1:
+        n_opdet_per_module = light.N_OP_CHANNEL / len(detector.MODULE_TO_TPCS.keys())
+        opdet_index_offset= (i_mod-1)*n_opdet_per_module 
+    
+    event_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(5)]
     indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
-    truth_dtype = np.dtype([('event_id','i4'),('det_id','i4'),('track_id','i8'),('pe_current','f8'),('tick','i4')])
+    truth_dtype = np.dtype([('event_id','i4'),('op_channel_id','i4'),('segment_id','i8'),('pe_current','f8'),('tick','i4')])
     for i in range(len(indices)):
         itrig=indices[i][0]
         idet_module=indices[i][1]
         isample=indices[i][2]
         icontent=indices[i][3]
+
         event_id.append(spill)
-        det_id.append(idet_module)
-        track_id.append(waveforms_true_track_id[itrig][idet_module][isample][icontent])
-        photons.append(waveforms_true_photons[itrig][idet_module][isample][icontent])
+        op_channel_id.append(opdet_index_offset + idet_module)
+        segment_id.append(waveforms_true_track_id[itrig][idet_module][isample][icontent])
+        pe_current.append(waveforms_true_photons[itrig][idet_module][isample][icontent])
         tick.append(isample)
+        
     truth_data = np.empty(len(indices), dtype=truth_dtype)
     truth_data['event_id'] = np.array(event_id)
-    truth_data['det_id'] = np.array(det_id)
-    truth_data['track_id'] = np.array(track_id)
-    truth_data['pe_current'] = np.array(photons)
+    truth_data['op_channel_id'] = np.array(op_channel_id)
+    truth_data['segment_id'] = np.array(segment_id)
+    truth_data['pe_current'] = np.array(pe_current)
     truth_data['tick'] = np.array(tick)
     return truth_data
 
@@ -664,7 +672,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         # skip creating the truth dataset if there is no truth information to store
         truth_data=None
         if waveforms_true_track_id.size > 0:
-            truth_data = zero_suppress_waveform_truth(event_id[0], waveforms_true_track_id, waveforms_true_photons)
+            truth_data = zero_suppress_waveform_truth(event_id[0], waveforms_true_track_id, waveforms_true_photons, i_mod)
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
@@ -675,13 +683,14 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             if i_mod > 0:
                 if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
                     f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
-                    if waveforms_true_track_id.size > 0:
+                    #if waveforms_true_track_id.size > 0:
+                    if truth_data.shape[0] > 0:
                         f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,))
                 else:
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
 
-                    if waveforms_true_track_id.size > 0:
+                    if truth_data.shape[0] > 0:
                         f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].resize(f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].shape[0] + truth_data.shape[0], axis=0)
                         f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'][-truth_data.shape[0]:] = truth_data
             else:
@@ -696,7 +705,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
                 
-                if waveforms_true_track_id.size > 0:
+                if truth_data.shape[0] > 0:
                     f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
                     f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
 
@@ -757,20 +766,10 @@ def merge_module_light_wvfm_same_trigger(output_filename):
         for i_, i_mod in enumerate(detector.MOD_IDS):
             if i_ == 0:  
                 merged_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
-                if have_mc_assn:
-                    merged_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
             else:
                 mod_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
                 if mod_wvfm.shape[0] != merged_wvfm.shape[0]:
                     raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform).")
-                if have_mc_assn:
-                    mod_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
-                    if mod_wvfm_mc_assn.shape[0] != merged_wvfm_mc_assn.shape[0]:
-                        raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform mc assn).")
-                    merged_wvfm_mc_assn = np.append(merged_wvfm_mc_assn, mod_wvfm_mc_assn, axis=1)
                 merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
         del f['light_wvfm']
         f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))
-        if have_mc_assn:
-            del f['light_wvfm_mc_assn']
-            f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None,None))
