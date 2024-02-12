@@ -622,25 +622,25 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def zero_suppress_waveform_truth(spill, waveforms_true_track_id, waveforms_true_photons):
-    event_id, det_id, track_id, photons, tick = [[] for i in range(5)]
+def zero_suppress_waveform_truth(evt_id, waveforms_true_track_id, waveforms_true_photons):
+    event_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(5)]
     indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
-    truth_dtype = np.dtype([('event_id','i4'),('det_id','i4'),('track_id','i8'),('pe_current','f8'),('tick','i4')])
+    truth_dtype = np.dtype([('event_id','i4'),('op_channel_id','i4'),('segment_id','i8'),('pe_current','f8'),('tick','i4')])
     for i in range(len(indices)):
         itrig=indices[i][0]
         idet_module=indices[i][1]
         isample=indices[i][2]
         icontent=indices[i][3]
-        event_id.append(spill)
-        det_id.append(idet_module)
-        track_id.append(waveforms_true_track_id[itrig][idet_module][isample][icontent])
-        photons.append(waveforms_true_photons[itrig][idet_module][isample][icontent])
+        event_id.append(evt_id)
+        op_channel_id.append(idet_module)
+        segment_id.append(waveforms_true_track_id[itrig][idet_module][isample][icontent])
+        pe_current.append(waveforms_true_photons[itrig][idet_module][isample][icontent])
         tick.append(isample)
     truth_data = np.empty(len(indices), dtype=truth_dtype)
     truth_data['event_id'] = np.array(event_id)
-    truth_data['det_id'] = np.array(det_id)
-    truth_data['track_id'] = np.array(track_id)
-    truth_data['pe_current'] = np.array(photons)
+    truth_data['op_channel_id'] = np.array(op_channel_id)
+    truth_data['segment_id'] = np.array(segment_id)
+    truth_data['pe_current'] = np.array(pe_current)
     truth_data['tick'] = np.array(tick)
     return truth_data
 
