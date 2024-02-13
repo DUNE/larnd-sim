@@ -622,7 +622,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def zero_suppress_waveform_truth(i_evt, waveforms_true_track_id, waveforms_true_photons, i_mod=-1):
+def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, i_evt, i_trig, i_mod=-1):
     """
     Filter empty light waveform backtracking which is filled with the default value '-1', and flatten the backtracking info to 1D array.
 
@@ -630,35 +630,41 @@ def zero_suppress_waveform_truth(i_evt, waveforms_true_track_id, waveforms_true_
         i_evt(int): event id
         waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
         waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        i_evt(int): true event id 
+        i_trig(int): light trigger or light event id
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
+
+    Returns:
+        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on arecorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
     event_id, trigger_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(6)]
     indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
-    truth_dtype = np.dtype([('event_id','i4'), ('trigger_id', 'i4'), ('op_channel_id','i4'), ('segment_id','i8'), ('pe_current','f8'), ('tick','i4')])
+    truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
     for i in range(len(indices)):
-        i_trig=indices[i][0]
-        i_op_channel=indices[i][1]
-        i_sample=indices[i][2]
-        i_content=indices[i][3]
-        event_id.append(i_evt)
+        this_trig = indices[i][0]
+        i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
+        i_op_channel = indices[i][1]
+        i_sample = indices[i][2]
+        i_content = indices[i][3]
         trigger_id.append(i_trig)
         op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
-        segment_id.append(waveforms_true_track_id[i_trig][i_op_channel][i_sample][i_content])
-        pe_current.append(waveforms_true_photons[i_trig][i_op_channel][i_sample][i_content])
         tick.append(i_sample)
+        event_id.append(i_evt)
+        segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
+        pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
     truth_data = np.empty(len(indices), dtype=truth_dtype)
-    truth_data['event_id'] = np.array(event_id)
     truth_data['trigger_id'] = np.array(trigger_id)
     truth_data['op_channel_id'] = np.array(op_channel_id)
+    truth_data['tick'] = np.array(tick)
+    truth_data['event_id'] = np.array(event_id)
     truth_data['segment_id'] = np.array(segment_id)
     truth_data['pe_current'] = np.array(pe_current)
-    truth_data['tick'] = np.array(tick)
     return truth_data
 
-def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod=-1):
+def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1):
     """
     Saves waveforms to output file
     
@@ -702,7 +708,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         # skip creating the truth dataset if there is no truth information to store
         truth_data=None
         if light.MAX_MC_TRUTH_IDS > 0:
-            truth_data = zero_suppress_waveform_truth(event_id[0], waveforms_true_track_id, waveforms_true_photons, i_mod)
+            truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, event_id[0], i_trig, i_mod)
             if truth_data.shape[0] > 0:
                 if f'light_wvfm_mc_assn' not in f:
                     f.create_dataset(f'light_wvfm_mc_assn', data=truth_data, maxshape=(None,))
