@@ -629,7 +629,49 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod=-1):
+def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, i_evt, i_trig, i_mod=-1):
+    """
+    Filter empty light waveform backtracking which is filled with the default value '-1', and flatten the backtracking info to 1D array.
+
+    Args:
+        i_evt(int): event id
+        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        i_evt(int): true event id 
+        i_trig(int): light trigger or light event id
+        i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
+
+    Returns:
+        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on arecorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
+    """
+
+    op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
+
+    event_id, trigger_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(6)]
+    indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
+    truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
+    for i in range(len(indices)):
+        this_trig = indices[i][0]
+        i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
+        i_op_channel = indices[i][1]
+        i_sample = indices[i][2]
+        i_content = indices[i][3]
+        trigger_id.append(i_trig)
+        op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
+        tick.append(i_sample)
+        event_id.append(i_evt)
+        segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
+        pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
+    truth_data = np.empty(len(indices), dtype=truth_dtype)
+    truth_data['trigger_id'] = np.array(trigger_id)
+    truth_data['op_channel_id'] = np.array(op_channel_id)
+    truth_data['tick'] = np.array(tick)
+    truth_data['event_id'] = np.array(event_id)
+    truth_data['segment_id'] = np.array(segment_id)
+    truth_data['pe_current'] = np.array(pe_current)
+    return truth_data
+
+def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1):
     """
     Saves waveforms to output file
     
@@ -637,21 +679,15 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         event_id(array): shape `(ntrigs,)`, event id for each trigger
         waveforms(array): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
         output_filename(str): output hdf5 file path
-        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples, ntruth)`, segment ids contributing to each sample
-        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples, ntruth)`, true photocurrent at each sample
+        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
     
     """
     if event_id.shape[0] == 0:
         return
     
     with h5py.File(output_filename, 'a') as f:
-
-        # skip creating the truth dataset if there is no truth information to store
-        if waveforms_true_track_id.size > 0:
-            truth_dtype = np.dtype([('track_ids', 'i8', (waveforms_true_track_id.shape[-1],)), ('pe_current', 'f8', (waveforms_true_photons.shape[-1],))])
-            truth_data = np.empty(waveforms_true_track_id.shape[:-1], dtype=truth_dtype)
-            truth_data['track_ids'] = waveforms_true_track_id
-            truth_data['pe_current'] = waveforms_true_photons
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
         # it would take too much memory if we hold the information until all the modules been simulated
@@ -662,30 +698,30 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             if i_mod > 0:
                 if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
                     f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
-                    if waveforms_true_track_id.size > 0:
-                        f.create_dataset(f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}', data=truth_data, maxshape=(None,None,None))
                 else:
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
-
-                    if waveforms_true_track_id.size > 0:
-                        f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].resize(f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'].shape[0] + truth_data.shape[0], axis=0)
-                        f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}'][-truth_data.shape[0]:] = truth_data
             else:
                 raise ValueError("Mod2mod variation is activated, but the module id is not provided correctly.")
 
         else:
             if 'light_wvfm' not in f:
                 f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
-                if waveforms_true_track_id.size > 0:
-                    f.create_dataset('light_wvfm_mc_assn', data=truth_data, maxshape=(None,None,None))
             else:
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
                 
-                if waveforms_true_track_id.size > 0:
-                    f['light_wvfm_mc_assn'].resize(f['light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
-                    f['light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
+        # Store the light truth backtracking, in the same way for module variation turned on and off
+        # skip creating the truth dataset if there is no truth information to store
+        truth_data=None
+        if light.MAX_MC_TRUTH_IDS > 0:
+            truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, event_id[0], i_trig, i_mod)
+            if truth_data.shape[0] > 0:
+                if f'light_wvfm_mc_assn' not in f:
+                    f.create_dataset(f'light_wvfm_mc_assn', data=truth_data, maxshape=(None,))
+                else:
+                    f[f'light_wvfm_mc_assn'].resize(f[f'light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
+                    f[f'light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
 
 def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times):
     """
@@ -731,33 +767,25 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
         waveforms(array): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
         output_filename(str): output hdf5 file path
         event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
-        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples, ntruth)`, segment ids contributing to each sample
-        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples, ntruth)`, true photocurrent at each sample
+        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
 
     """
     export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times)
     export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod)
 
 def merge_module_light_wvfm_same_trigger(output_filename):
+    """
+    Merge light waveforms for each module if the modular variation is activated
+    """
     with h5py.File(output_filename, 'a') as f:
-        have_mc_assn = 'light_wvfm_mc_assn' in f.keys()
         for i_, i_mod in enumerate(detector.MOD_IDS):
             if i_ == 0:  
                 merged_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
-                if have_mc_assn:
-                    merged_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
             else:
                 mod_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
                 if mod_wvfm.shape[0] != merged_wvfm.shape[0]:
                     raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform).")
-                if have_mc_assn:
-                    mod_wvfm_mc_assn = f[f'light_wvfm_mc_assn/light_wvfm_mc_assn_mod{i_mod-1}']
-                    if mod_wvfm_mc_assn.shape[0] != merged_wvfm_mc_assn.shape[0]:
-                        raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform mc assn).")
-                    merged_wvfm_mc_assn = np.append(merged_wvfm_mc_assn, mod_wvfm_mc_assn, axis=1)
                 merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
         del f['light_wvfm']
         f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))
-        if have_mc_assn:
-            del f['light_wvfm_mc_assn']
-            f.create_dataset(f'light_wvfm_mc_assn', data=merged_wvfm_mc_assn, maxshape=(None,None,None))

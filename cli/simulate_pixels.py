@@ -135,7 +135,7 @@ def run_simulation(input_filename,
             store memory snapshot information
     """
     # Define a nested function to save the results
-    def save_results(event_times, is_first_batch, results, i_mod=-1, light_only=False):
+    def save_results(event_times, is_first_batch, results, i_trig, i_mod=-1, light_only=False):
         '''
         results is a dictionary with the following keys
 
@@ -214,6 +214,7 @@ def run_simulation(input_filename,
                                                     output_filename,
                                                     results['light_waveforms_true_track_id'],
                                                     results['light_waveforms_true_photons'],
+                                                    i_trig,
                                                     i_mod)
         if is_first_batch:
             is_first_batch = False
@@ -761,6 +762,7 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
+        i_trig = 0
         sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) +  (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
@@ -791,7 +793,8 @@ def run_simulation(input_filename,
             if len(track_subset) == 0:
                 if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                    save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                    i_trig += 1 # add to the trigger counter
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
                 continue
@@ -831,7 +834,8 @@ def run_simulation(input_filename,
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                         null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                        save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                        i_trig += 1 # add to the trigger counter
                         del null_light_results_acc['light_event_id']
                     continue
 
@@ -853,7 +857,8 @@ def run_simulation(input_filename,
                 if not unique_pix.shape[0]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                         null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, is_first_batch, null_light_results_acc, i_mod, light_only=True)
+                        save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                        i_trig += 1 # add to the trigger counter
                         del null_light_results_acc['light_event_id']
                     continue
 
@@ -1048,9 +1053,11 @@ def run_simulation(input_filename,
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=False)
+                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=False)
+                    i_trig += 1 # add to the trigger counter
                 elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
-                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
+                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
+                    i_trig += 1 # add to the trigger counter
                 results_acc = defaultdict(list)
 
             logger.take_snapshot([len(logger.log)])
@@ -1059,9 +1066,11 @@ def run_simulation(input_filename,
         RangePush('save_results')
         # Always save results after last iteration
         if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=False)
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=False)
+            i_trig += 1 # add to the trigger counter
         elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_mod, light_only=True)
+            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
+            i_trig += 1 # add to the trigger counter
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
