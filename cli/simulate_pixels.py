@@ -1108,14 +1108,16 @@ def run_simulation(input_filename,
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
-        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
-        # To distinguish from the "old" files that had z=drift in 'tracks':
-        output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
         # We previously called swap_coordinates(tracks), but we want to write
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
-        swap_coordinates(tracks)
+        swap_coordinates(all_mod_tracks)
+
+        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
+
+        # To distinguish from the "old" files that had z=drift in 'tracks':
+        output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
 
         if light.LIGHT_SIMULATED:
             # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
