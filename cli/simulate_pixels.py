@@ -620,6 +620,8 @@ def run_simulation(input_filename,
 
     RangePop()                  # prep_simulation
 
+    lut = None
+                     
     # Convention module counting start from 1
     for i_mod in mod_ids:
         if mod2mod_variation:
@@ -687,7 +689,8 @@ def run_simulation(input_filename,
             logger.start()
             logger.take_snapshot()
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
-            lut = np.load(light_lut)['arr']
+            if lut is None:
+                lut = np.load(light_lut)['arr']
 
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
@@ -1073,6 +1076,10 @@ def run_simulation(input_filename,
             is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
         RangePop()
+
+        if i_mod != mod_ids[-1] and light_lut_filename[i_mod-1] != light_lut_filename[i_mod]:
+            del lut
+            lut = None
 
     logger.take_snapshot([len(logger.log)])
 
