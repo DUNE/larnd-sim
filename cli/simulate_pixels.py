@@ -1077,7 +1077,7 @@ def run_simulation(input_filename,
             i_trig += 1 # add to the trigger counter
         RangePop()
 
-        if i_mod != mod_ids[-1] and light_lut_filename[i_mod-1] != light_lut_filename[i_mod]:
+        if i_mod == mod_ids[-1] or light_lut_filename[i_mod-1] != light_lut_filename[i_mod]:
             del lut
             lut = None
 
