@@ -755,7 +755,7 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
-def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_mod):
+def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod):
     """
     Saves waveforms to output file
 
@@ -772,7 +772,7 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
 
     """
     export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times)
-    export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_mod)
+    export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod)
 
 def merge_module_light_wvfm_same_trigger(output_filename):
     """
