@@ -207,6 +207,7 @@ def run_simulation(input_filename,
                                          uniq_event_times,
                                          results['light_waveforms_true_track_id'],
                                          results['light_waveforms_true_photons'],
+                                         i_trig,
                                          i_mod)
             elif light.LIGHT_TRIG_MODE == 1:
                 light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
