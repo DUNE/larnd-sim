@@ -651,7 +651,7 @@ def run_simulation(input_filename,
         # find the module that triggers
         io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
         if light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1:
-            trig_module = np.argwhere(io_groups==fee.TRIG_IO)[0][0] + 1 # module id (i_mod) counts from 1
+            trig_module = np.argwhere(io_groups==fee.get_trig_io())[0][0] + 1 # module id (i_mod) counts from 1
 
         RangePush("run_simulation")
         TPB = 256
