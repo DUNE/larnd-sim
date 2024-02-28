@@ -711,8 +711,8 @@ def run_simulation(input_filename,
             logger.take_snapshot()
             logger.archive('light')
 
-            # Prepare the light waveform padding (only necessary for module variation)
-            if mod2mod_variation:
+            # Prepare the light waveform padding
+            if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                 null_light_results_acc = defaultdict(list)
                 trigger_idx = cp.array([0], dtype=int)
                 op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
