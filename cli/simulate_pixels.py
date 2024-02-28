@@ -648,6 +648,11 @@ def run_simulation(input_filename,
             segment_ids = all_mod_segment_ids[module_tracks_mask]
             RangePop()
 
+        # find the module that triggers
+        io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
+        if light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1:
+            trig_module = np.argwhere(io_groups==fee.get_trig_io())[0][0] + 1 # module id (i_mod) counts from 1
+
         RangePush("run_simulation")
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
@@ -786,7 +791,7 @@ def run_simulation(input_filename,
                     fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
                     sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
-            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and i_mod == 1:
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
                 fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
 
             # generate light waveforms for null signal in the module
