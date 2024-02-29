@@ -67,16 +67,22 @@ UNCORRELATED_NOISE_CHARGE = 500 * e
 DISCRIMINATOR_NOISE = 650 * e 
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
-#: Beam trig io group
-BEAM_TRIG_IO = 1
-#: Threshold/LRS trig io group
-THRES_TRIG_IO = 2
 
 import logging
 logging.basicConfig()
 logger = logging.getLogger('fee')
 logger.setLevel(logging.WARNING)
 logger.info("ELECTRONICS SIMULATION")
+
+def get_trig_io():
+    """
+    Returns the io_group if the trigger is only forwarded to one pacman
+    """
+    if light.LIGHT_TRIG_MODE == 0: #: Threshold/LRS trigger
+        trig_io = 2
+    elif light.LIGHT_TRIG_MODE == 1: #: Beam trigger
+        trig_io = 1
+    return trig_io
 
 def rotate_tile(pixel_id, tile_id):
     """
@@ -265,10 +271,8 @@ def export_to_hdf5(event_id_list,
                                         packets_frac.append([0] * current_fractions.shape[2])
                                 # redundant here
                                 elif light.LIGHT_TRIG_MODE == 1:
-                                    if module_trig == 1: #beam trigger
-                                        io_group = BEAM_TRIG_IO
-                                    elif module_trig == 0: #threshold trigger
-                                        io_group = THRES_TRIG_IO
+                                    if module_trig == 1 or module_trig == 0: #1, beam trigger; 2, threshold trigger
+                                        io_group = get_trig_io()
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
                                     packets_mc_evt.append([-1])
                                     packets_mc_trk.append([-1] * track_ids.shape[1])
@@ -450,10 +454,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
 
         t_trig = int(np.floor(evt_time / CLOCK_CYCLE)) % CLOCK_RESET_PERIOD # tick
 
-        if light.LIGHT_TRIG_MODE == 0:
-            io_group = THRES_TRIG_IO
-        if light.LIGHT_TRIG_MODE == 1:
-            io_group = BEAM_TRIG_IO
+        io_group = get_trig_io()
 
         # timestamp packets
         packets.append(TimestampPacket(timestamp=evt_time*units.mus/units.s)) # s
