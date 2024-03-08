@@ -580,7 +580,7 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = fee.gen_event_times(num_evids, 0)
+        event_times = fee.gen_event_times(num_evids, 500)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
         # create "t_event" in vertices dataset in case it doesn't exist
