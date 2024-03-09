@@ -35,7 +35,7 @@ module0:
     DET_PROPERTIES:  2x2_non_beam.yaml
 
 # 2x2 (differnt module configuration), beam
-2x2_mod2mod_variation:
+2x2_mod2mod_variation: &2x2modvar
     <<: *2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim_mod2mod_variation.yaml
     DET_PROPERTIES:  2x2_mod2mod_variation.yaml
@@ -49,6 +49,11 @@ module0:
     LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz] 
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
+
+# 2x2 (differnt module configuration), mpvmpr
+2x2_mod2mod_variation_mpvmpr:
+    <<: *2x2modvar
+    SIM_PROPERTIES:  singles_sim.yaml
 
 # nd-lar (same module configuration)
 # NuMI beam (not realistic)
