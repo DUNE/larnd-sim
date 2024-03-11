@@ -1064,7 +1064,7 @@ def run_simulation(input_filename,
                 elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
                     is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
-                results_acc = defaultdict(list)
+                results_acc = defaultdict(list) # reinitialize after each save_results
 
             logger.take_snapshot([len(logger.log)])
         RangePop()                  # run_simulation
@@ -1077,6 +1077,7 @@ def run_simulation(input_filename,
         elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
             is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
+        results_acc = defaultdict(list) # reinitialize after each save_results
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
