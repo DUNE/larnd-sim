@@ -35,7 +35,7 @@ trajectories_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"),
                                ("xyz_end", "f4", (3,)), ("t_end", "f8"),
                                ("pdg_id", "i4"), ("start_process", "u4"),
                                ("start_subprocess", "u4"), ("end_process", "u4"),
-                               ("end_subprocess", "u4")], align=True)
+                               ("end_subprocess", "u4"),("dist_travel", "f4")], align=True)
 
 vertices_dtype = np.dtype([("event_id","u4"), ("vertex_id","u8"),
                            ("x_vert","f4"), ("y_vert","f4"), ("z_vert","f4"),
@@ -313,6 +313,9 @@ def dump(input_file, output_file, keep_all_dets=False):
                 trajectories[n_traj]["end_process"] = end_pt.GetProcess()
                 trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
                 trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
+                trajectories[n_traj]["dist_travel"]=0
+                for i in range(len(trajectory.Points)-1):
+                    trajectories[n_traj]["dist_travel"]+=(trajectory.Points[i].GetPosition()-trajectory.Points[i+1].GetPosition()).Vect().Mag()* edep2cm
 
                 n_traj += 1
 
@@ -374,6 +377,9 @@ def dump(input_file, output_file, keep_all_dets=False):
                             trajectories[n_traj]["end_process"] = end_pt.GetProcess()
                             trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
                             trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
+                            trajectories[n_traj]["dist_travel"]=0
+                            for i in range(len(trajectory.Points)-1):
+                                trajectories[n_traj]["dist_travel"]+=(trajectory.Points[i].GetPosition()-trajectory.Points[i+1].GetPosition()).Vect().Mag()* edep2cm
                             n_traj += 1
                             if trajectories[n_traj-1]["parent_id"] == -1:
                                 break
