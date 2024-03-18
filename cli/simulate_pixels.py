@@ -541,6 +541,7 @@ def run_simulation(input_filename,
     # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
     # Therefore, to run the detector simulation we reset the t0 to reflect that
     # When storing the mc truth, revert this change and store the "real" segment time
+    # The event times are added to segments in the event building stage. This step is not needed for non-beam simulation
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period so t0 is wrt the corresponding spill start time.
         # The spill starts are marking the start of
@@ -1083,7 +1084,7 @@ def run_simulation(input_filename,
         if i_mod <= 1: # i_mod counts from 1 for module to module variation, otherwise i_mod is set to -1
             segments_to_files = tracks # segments are only updated in quenching and drifting, otherwise this part should be in the batching loop
         else:
-            segments_to_files = np.append(segments_to_files, tracks, axis=1)
+            segments_to_files = np.append(segments_to_files, tracks)
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
@@ -1091,10 +1092,16 @@ def run_simulation(input_filename,
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+        localSpillIDs = segments_to_files[sim.EVENT_SEPARATOR] - (segments_to_files[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        seg_event_times_padding = localSpillIDs*sim.SPILL_PERIOD
+    else:
+        uniq_seg_ev, counts_seg_ev = np.unique(segments_to_files[sim.EVENT_SEPARATOR], return_counts=True)
+        event_times_in_use = cp.take(event_times, uniq_seg_ev) # event_times is defined in the preparation stage
+        seg_event_times_padding = np.repeat(event_times_in_use.get(), counts_seg_ev)
+
+    segments_to_files['t0_start'] = segments_to_files['t0_start'] + seg_event_times_padding
+    segments_to_files['t0_end'] = segments_to_files['t0_end'] + seg_event_times_padding
+    segments_to_files['t0'] = segments_to_files['t0'] + seg_event_times_padding
 
     # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
