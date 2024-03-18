@@ -1,0 +1,50 @@
+# Argon properties
+temperature: 87.17 # K # Default temp in ndlar_flow
+e_field: 0.50 # kV/cm
+lifetime: 1.9e+3 # us
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+singlet_fraction: 0.3 # central value for cosmics given in Peter Madigan's thesis (DUNE DocDB 29848)
+tau_s: 0.001 # us
+tau_t: 0.75 # us # Measured value from Module 0 data given in Peter Madigan's thesis (DUNE DocDB 29848)
+#tau_t: 0.620 # us
+
+# Charge simulation parameters
+drift_length: 30.27225 # cm
+time_interval: [0, 200.] # us                   
+response_sampling: 0.1 # us
+#response_sampling: 0.05 # us
+response_bin_size: 0.04434 # cm
+time_padding: 190 # us
+time_window: 189.1 # us
+
+# Charge geometry parameters
+tpc_offsets: # cm
+  - [0, -21.8236, 0]
+tile_map:
+  - [[8,5,3,1],[7,6,4,2]] # switched tiles 7 and 8 for module 1 vs. module 0
+  - [[16,14,12,10],[15,13,11,9]]
+module_to_io_groups:
+  1: [1,2]
+
+# Light simulation parameters
+light_gain: [-7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0, -7.0] # PE/us / ADC
+light_det_noise_sample_spacing: 0.016 # us2,
+light_digit_sample_spacing: 0.016 # us
+light_trig_threshold: [
+  -4500, -2000, -4500, -2000, -4500, -2000, -4500, -2000, -4500, -2000, -4500, -2000, -4500, -2000, -4500, -2000] # Notes from Module 0 --> ArcLight=~no trigger, LCM=-1500 ADC, every 6 channels summed  
+light_trig_mode: 1
+light_window: [0, 16] # us
+light_trig_window: [1.6, 14.4] # us
+light_nbit: 14
+op_channel_efficiency: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] # 0.38 used for Module 0 as ad hoc PDE scale factor to better improve data/sim agreement
+max_light_truth_ids: 50 # set to zero to disable light truth backtracking
+mc_truth_threshold: 0.1 # pe/us
+
+# Light geometry parameters
+n_op_channel: 96
+tpc_to_op_channel:
+    - [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+    - [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95]
+module_to_tpcs:
+  1: [0, 1]

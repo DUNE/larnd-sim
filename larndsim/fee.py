@@ -27,7 +27,7 @@ ASSOCIATION_COUNT_TO_STORE = 10
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 20
 #: Discrimination threshold in e-
-DISCRIMINATION_THRESHOLD = 7e3 * e
+DISCRIMINATION_THRESHOLD = 4.5e3 * e #7e3 * e changed to 4.5e3 * e to match Module 1 Cosmics data settings (see Slide 7 here: https://indico.fnal.gov/event/52817/contributions/234480/attachments/151969/196540/Module1_Charge_Readout_Update___ArgonCube_Engineering___Russell___021122.pdf)
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles

@@ -10,6 +10,18 @@ module0:
     LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
 
+# module 1 (single 2x2 module), non-beam
+module1:
+    SIM_PROPERTIES:  singles_sim.yaml
+    PIXEL_LAYOUT:    module1_layout-2.3.16.yaml
+    DET_PROPERTIES:  module1.yaml
+    RESPONSE:        response_44.npy
+    # Path to light LUT at NERSC
+    # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
+    # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz
+    LIGHT_DET_NOISE: larndsim/bin/Mod1_2Files_LightNoise.npy
+
 # 2x2 (same module configuration), beam
 2x2: &2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim.yaml
