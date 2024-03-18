@@ -1078,6 +1078,12 @@ def run_simulation(input_filename,
             is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
         results_acc = defaultdict(list) # reinitialize after each save_results
+
+        # Collect updated true segments
+        if i_mod <= 1: # i_mod counts from 1 for module to module variation, otherwise i_mod is set to -1
+            segments_to_files = tracks # segments are only updated in quenching and drifting, otherwise this part should be in the batching loop
+        else:
+            segments_to_files = np.append(segments_to_files, tracks, axis=1)
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
@@ -1118,10 +1124,10 @@ def run_simulation(input_filename,
         # We previously called swap_coordinates(tracks), but we want to write
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
-        swap_coordinates(all_mod_tracks)
+        swap_coordinates(segments_to_files)
 
-        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
+        # Store all simulated segments/tracks to the output
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
