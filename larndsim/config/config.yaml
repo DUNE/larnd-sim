@@ -1,6 +1,6 @@
 # module 0 (single 2x2 module), non-beam
 module0:
-    SIM_PROPERTIES:  singles_sim.yaml
+    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.3.16.yaml
     DET_PROPERTIES:  module0.yaml
     RESPONSE:        response_44.npy
