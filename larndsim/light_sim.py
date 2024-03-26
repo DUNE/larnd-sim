@@ -534,7 +534,7 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                             digit_signal_true_track_id[itrig,idet_module,isample,itrue] = signal_true_track_id[idet_signal,itick0,jtrue]
                             itrue += 1
                             # interpolate true photons
-                            photons0 = signal_true_photons[idet,itick0,jtrue]
+                            photons0 = signal_true_photons[idet_signal,itick0,jtrue]
                             
                             if abs(photons0) < light.MC_TRUTH_THRESHOLD:
                                 continue
