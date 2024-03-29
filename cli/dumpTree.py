@@ -365,10 +365,13 @@ def dump(input_file, output_file, keep_all_dets=False):
                     segment[iHit]["traj_id"] = hitSegment.Contrib[0]
                     segment[iHit]["file_traj_id"] = trackMap[hitSegment.Contrib[0]]
                     seg_traj_id = hitSegment.Contrib[0]
+                    if seg_traj_id in vertexMap.keys():
+                        primary_traj_id = seg_traj_id
                     if seg_traj_id not in trajectories["traj_id"]: # trajectories is reinitialized for each edep event
                         for i_primary in range(len(daughters)):
                             if seg_traj_id in daughters[i_primary]:
                                 this_line = daughters[i_primary]
+                                this_line.reverse()
                                 break
                         # Find the primary trackID
                         for traj_id in this_line:
