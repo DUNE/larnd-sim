@@ -153,8 +153,9 @@ def scintillation_model(time_tick):
     return (p1 + p3) * (time_tick >= 0)
 
 
-@cuda.jit
-def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons):
+# @cuda.jit
+@nb.njit
+def calc_scintillation_effect(idet, itick, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons):
     """
     Applies a smearing effect due to the liquid argon scintillation time profile using
     a two decay component scintillation model.
@@ -163,7 +164,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
         light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
         light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
     """
-    idet,itick = cuda.grid(2)
+    # idet,itick = cuda.grid(2)
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
@@ -225,8 +226,9 @@ def xoroshiro128p_poisson_int32(mean, states, index):
     return max(int(cuda.random.xoroshiro128p_normal_float32(states, index) * sqrt(mean) + mean),0)
     
                 
-@cuda.jit
-def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
+# @cuda.jit
+@nb.njit
+def calc_stat_fluctuations(idet, itick, light_sample_inc, light_sample_inc_disc, rng_states):
     """
     Simulates Poisson fluctuations in the number of PE per time tick.
     
@@ -235,7 +237,7 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
         light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stocastic fluctuations)
         rng_states(array): shape `(>ndet*ntick,)`, random number states
     """
-    idet,itick = cuda.grid(2)
+    # idet,itick = cuda.grid(2)
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
@@ -309,7 +311,14 @@ def sipm_response_model(idet, time_tick):
             
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
+def calc_light_detector_response(rng_states, light_sample_inc, light_sample_inc_disc,
+                                 light_sample_inc_true_track_id,
+                                 light_sample_inc_true_photons,
+                                 light_sample_inc_scint,
+                                 light_sample_inc_scint_true_track_id,
+                                 light_sample_inc_scint_true_photons,
+                                 light_response,
+                                 light_response_true_track_id, light_response_true_photons):
     """
     Simulates the SiPM reponse and digit
     
@@ -319,13 +328,24 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
     """
     idet,itick = cuda.grid(2)
 
-    if idet < light_sample_inc.shape[0]:
-        if itick < light_sample_inc.shape[1]:
+    calc_scintillation_effect(idet, itick, light_sample_inc,
+                              light_sample_inc_true_track_id,
+                              light_sample_inc_true_photons,
+                              light_sample_inc_scint,
+                              light_sample_inc_scint_true_track_id,
+                              light_sample_inc_scint_true_photons)
+
+    calc_stat_fluctuations(idet, itick, light_sample_inc_scint,
+                           light_sample_inc_disc, rng_states)
+
+    if idet < light_sample_inc_disc.shape[0]:
+        if itick < light_sample_inc_disc.shape[1]:
+
             conv_ticks = ceil((LIGHT_WINDOW[1] - LIGHT_WINDOW[0])/LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response_model(idet, itick-jtick)
-                light_response[idet,itick] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
+                light_response[idet,itick] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc_disc[idet,jtick]
                     
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
