@@ -18,6 +18,7 @@ IS_SPILL_SIM = True
 IF_ACTIVE_VOLUME_CHECK = False
 SPILL_PERIOD = 1.2e6  # units = microseconds
 TRACKS_DSET_NAME = 'segments'
+LRS_TRIG_TO_SINGLE_PACMAN = True
 
 # We mod event IDs by MAX_EVENTS_PER_FILE to get zero-based IDs for indexing
 # purposes; see comments in simulate_pixels.py
@@ -44,6 +45,7 @@ def set_simulation_properties(simprop_file):
     global MAX_EVENTS_PER_FILE
     global TRACKS_DSET_NAME
     global MOD2MOD_VARIATION
+    global LRS_TRIG_TO_SINGLE_PACMAN
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -58,5 +60,6 @@ def set_simulation_properties(simprop_file):
         SPILL_PERIOD = float(simprop.get('spill_period', SPILL_PERIOD))
         MAX_EVENTS_PER_FILE = simprop.get('max_events_per_file', MAX_EVENTS_PER_FILE)
         TRACKS_DSET_NAME = simprop.get('tracks_dset_name', TRACKS_DSET_NAME)
+        LRS_TRIG_TO_SINGLE_PACMAN = bool(simprop.get('lrs_trig_to_single_pacman', LRS_TRIG_TO_SINGLE_PACMAN))
     except:
         print("Check if all the necessary simulation properties are set. Taking some default values")

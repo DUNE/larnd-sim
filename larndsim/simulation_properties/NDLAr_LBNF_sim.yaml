@@ -9,3 +9,4 @@ spill_period: 1.2e6          # microseconds
 event_separator: 'event_id'  # 'event_id'
 tracks_dset_name: 'segments' # or 'segments'
 max_events_per_file: 1000
+lrs_trig_to_single_pacman: True # boolean describing settings related to whether threshold triggers are forwarded to one or multiple pacmans

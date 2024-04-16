@@ -20,7 +20,7 @@ module1:
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
     LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz
-    LIGHT_DET_NOISE: larndsim/bin/Mod1_2Files_LightNoise.npy
+    LIGHT_DET_NOISE: Mod1_2Files_LightNoise.npy
 
 # 2x2 (same module configuration), beam
 2x2: &2x2main

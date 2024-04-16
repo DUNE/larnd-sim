@@ -6,3 +6,4 @@ if_active_volume_check: 0    # boolean
 event_separator: 'event_id'   # 'eventID'
 tracks_dset_name: 'segments' # or 'segments'
 max_events_per_file: 100000
+lrs_trig_to_single_pacman: False # boolean describing settings related to whether threshold triggers are forwarded to one or multiple pacmans

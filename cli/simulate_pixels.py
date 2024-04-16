@@ -580,7 +580,11 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = fee.gen_event_times(num_evids, 0)
+        event_times = cp.arange(num_evids) * sim.SPILL_PERIOD #artificially set up event times with spill structure for now
+        #event_times = fee.gen_event_times(num_evids, 0)
+    print("Event times generated:", event_times)
+    print("Number of events:", num_evids)
+    print("Event times if spill sim:", cp.arange(num_evids) * sim.SPILL_PERIOD)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
         # create "t_event" in vertices dataset in case it doesn't exist
@@ -791,7 +795,9 @@ def run_simulation(input_filename,
                     fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
                     sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
-            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1) and (sim.LRS_TRIG_TO_SINGLE_PACMAN==True):
+                fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+            elif (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (sim.LRS_TRIG_TO_SINGLE_PACMAN==False):
                 fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
 
             # generate light waveforms for null signal in the module
