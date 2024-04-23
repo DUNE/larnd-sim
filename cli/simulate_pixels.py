@@ -1105,19 +1105,28 @@ def run_simulation(input_filename,
 
     logger.take_snapshot([len(logger.log)])
 
+    quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
+    drifting.drift[BPG,TPB](all_mod_tracks)
+
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        localSpillIDs = segments_to_files[sim.EVENT_SEPARATOR] - (segments_to_files[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        seg_event_times_padding = localSpillIDs*sim.SPILL_PERIOD
-    else:
-        uniq_seg_ev, counts_seg_ev = np.unique(segments_to_files[sim.EVENT_SEPARATOR], return_counts=True)
-        event_times_in_use = cp.take(event_times, uniq_seg_ev) # event_times is defined in the preparation stage
-        seg_event_times_padding = np.repeat(event_times_in_use.get(), counts_seg_ev)
+        localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
-    segments_to_files['t0_start'] = segments_to_files['t0_start'] + seg_event_times_padding
-    segments_to_files['t0_end'] = segments_to_files['t0_end'] + seg_event_times_padding
-    segments_to_files['t0'] = segments_to_files['t0'] + seg_event_times_padding
+    #    # write the true timing structure to the file, not t0 wrt event time .....
+    #    localSpillIDs = segments_to_files[sim.EVENT_SEPARATOR] - (segments_to_files[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+    #    seg_event_times_padding = localSpillIDs*sim.SPILL_PERIOD
+    #else:
+    #    uniq_seg_ev, counts_seg_ev = np.unique(segments_to_files[sim.EVENT_SEPARATOR], return_counts=True)
+    #    event_times_in_use = cp.take(event_times, uniq_seg_ev) # event_times is defined in the preparation stage
+    #    seg_event_times_padding = np.repeat(event_times_in_use.get(), counts_seg_ev)
+
+    #segments_to_files['t0_start'] = segments_to_files['t0_start'] + seg_event_times_padding
+    #segments_to_files['t0_end'] = segments_to_files['t0_end'] + seg_event_times_padding
+    #segments_to_files['t0'] = segments_to_files['t0'] + seg_event_times_padding
 
     # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
@@ -1147,10 +1156,15 @@ def run_simulation(input_filename,
         # We previously called swap_coordinates(tracks), but we want to write
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
-        swap_coordinates(segments_to_files)
+        swap_coordinates(all_mod_tracks)
 
-        # Store all simulated segments/tracks to the output
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+        # Store all tracks in the gdml module volume, could have small differences because of the active volume check
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
+
+        #swap_coordinates(segments_to_files)
+
+        ## Store all simulated segments/tracks to the output
+        #output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
