@@ -761,7 +761,6 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot()
 
-        track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
         segment_ids_arr = cp.asarray(segment_ids)
         # We divide the sample in portions that can be processed by the GPU
         is_first_batch = True
