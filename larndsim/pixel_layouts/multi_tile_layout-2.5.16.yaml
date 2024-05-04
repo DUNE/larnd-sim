@@ -19200,7 +19200,7 @@ chip_channel_to_position:
   - 76
   - 7
 multitile_layout_version: 2.5.16
-pixel_pitch: 3.8
+pixel_pitch: 3.87975
 tile_chip_to_io:
   1:
     11: 1001
