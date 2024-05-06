@@ -972,7 +972,7 @@ def run_simulation(input_filename,
                 if light.LIGHT_SIMULATED:
                     RangePush("sum_light_signals")
                     light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
-                    selected_track_id = np.ascontiguousarray(selected_tracks["segment_id"])
+                    selected_track_id = cp.array(selected_tracks["segment_id"])
                     n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                     n_light_ticks = min(n_light_ticks,int(5E4))
                     # at least the optical channels from a whole module are activated together
