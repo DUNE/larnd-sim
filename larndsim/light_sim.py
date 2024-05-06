@@ -311,8 +311,7 @@ def sipm_response_model(idet, time_tick):
             
 
 @cuda.jit
-def calc_light_detector_response(rng_states, light_sample_inc, light_sample_inc_disc,
-                                 light_sample_inc_true_track_id,
+def calc_light_detector_response(rng_states, light_sample_inc, light_sample_inc_true_track_id,
                                  light_sample_inc_true_photons,
                                  light_sample_inc_scint,
                                  light_sample_inc_scint_true_track_id,
@@ -336,16 +335,16 @@ def calc_light_detector_response(rng_states, light_sample_inc, light_sample_inc_
                               light_sample_inc_scint_true_photons)
 
     calc_stat_fluctuations(idet, itick, light_sample_inc_scint,
-                           light_sample_inc_disc, rng_states)
+                           light_sample_inc, rng_states)
 
-    if idet < light_sample_inc_disc.shape[0]:
-        if itick < light_sample_inc_disc.shape[1]:
+    if idet < light_sample_inc.shape[0]:
+        if itick < light_sample_inc.shape[1]:
 
             conv_ticks = ceil((LIGHT_WINDOW[1] - LIGHT_WINDOW[0])/LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response_model(idet, itick-jtick)
-                light_response[idet,itick] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc_disc[idet,jtick]
+                light_response[idet,itick] += LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
                     
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):

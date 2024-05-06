@@ -695,7 +695,7 @@ def run_simulation(input_filename,
                 #     light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
                 #     light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
 
-                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                # light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 # light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
@@ -704,8 +704,7 @@ def run_simulation(input_filename,
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                 light_sim.calc_light_detector_response[BPG, TPB](
-                    rng_states, light_sample_inc, light_sample_inc_disc,
-                    light_sample_inc_true_track_id, light_sample_inc_true_photons,
+                    rng_states, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons,
                     light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                     light_response, light_response_true_track_id, light_response_true_photons)
                 light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
