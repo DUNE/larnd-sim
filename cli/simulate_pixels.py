@@ -761,7 +761,6 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot()
 
-        track_ids = cp.asarray(np.arange(segment_ids.shape[0], dtype=int))
         segment_ids_arr = cp.asarray(segment_ids)
         # We divide the sample in portions that can be processed by the GPU
         is_first_batch = True
@@ -973,7 +972,7 @@ def run_simulation(input_filename,
                 if light.LIGHT_SIMULATED:
                     RangePush("sum_light_signals")
                     light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
-                    selected_track_id = track_ids[batch_mask][itrk:itrk+sim.BATCH_SIZE]
+                    selected_track_id = segment_ids_arr[batch_mask][itrk:itrk+sim.BATCH_SIZE]#cp.array(selected_tracks["segment_id"])
                     n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                     n_light_ticks = min(n_light_ticks,int(5E4))
                     # at least the optical channels from a whole module are activated together
