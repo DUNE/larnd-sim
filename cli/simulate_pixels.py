@@ -1081,6 +1081,9 @@ def run_simulation(input_filename,
 
     logger.take_snapshot([len(logger.log)])
 
+    quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
+    drifting.drift[BPG,TPB](all_mod_tracks)
+
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
