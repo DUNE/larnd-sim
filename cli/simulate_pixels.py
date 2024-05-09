@@ -1081,6 +1081,12 @@ def run_simulation(input_filename,
 
     logger.take_snapshot([len(logger.log)])
 
+    # FIXME
+    # A hotfix: to update the truth information filled in quenching and drifting stage
+    # all_mod_tracks is passed as tracks in modular variation loop (even mod2mod_variation is not activated)
+    # We are not saving aggregated segments from modular variation loop because a combination of both issues (also see Git Issue#216):
+    # 1. The module active volume selection removes some segments
+    # 2. ndlar_flow throws an error if not all the segments are passed
     quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
     drifting.drift[BPG,TPB](all_mod_tracks)
 
