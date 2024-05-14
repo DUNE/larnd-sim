@@ -405,9 +405,9 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
             sync_tick = sync_tick // CLOCK_RESET_PERIOD * CLOCK_RESET_PERIOD
         for io_group in io_groups:
             packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))
-            packets_mc_evt.append([-1])
-            packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
-            packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+            packets_mc_evt.append(np.array([-1]))
+            packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+            packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
@@ -459,15 +459,15 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
         # timestamp packets
         packets.append(TimestampPacket(timestamp=evt_time*units.mus/units.s)) # s
         packets[-1].chip_key = Key(io_group,0,0)
-        packets_mc_evt.append([-1])
-        packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
-        packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+        packets_mc_evt.append(np.array([-1]))
+        packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+        packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
         # trigger packets
         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig)) # tick
-        packets_mc_evt.append([-1])
-        packets_mc_trk.append([-1] * ASSOCIATION_COUNT_TO_STORE)
-        packets_frac.append([0] * ASSOCIATION_COUNT_TO_STORE)
+        packets_mc_evt.append(np.array([-1]))
+        packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+        packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
