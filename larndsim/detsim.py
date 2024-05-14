@@ -472,13 +472,14 @@ def sign(x):
 def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals):
     """
     This function sums the induced current signals on the same pixel.
+    Converting "signals" from per segment to per pixel ("pixel_signals" and "pixels_tracks_signals")
 
     Args:
         pixels_signals (:obj:`numpy.ndarray`): 2D array that will contain the
             summed signal for each pixel. First dimension is the pixel ID, second
             dimension is the time tick
         signals (:obj:`numpy.ndarray`): 3D array with dimensions S x P x T,
-            where S is the number of track segments, P is the number of pixels, and T is
+            where S is the total number of track segments, P is the max number of pixels for any segment, and T is
             the number of time ticks.
         track_starts (:obj:`numpy.ndarray`): 1D array containing the starting time of
             each track
@@ -489,6 +490,12 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
         pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
             for each pixel and each track that induced current on the pixel.
     """
+    # itrk goes up to the total number of the segments in this batch
+    # ipix goes up to the max number of pixel for any segment
+    # itick is time ticks along the entire drift span
+
+    # pixel_index goes up to the total number of pixels in this batch
+    # track_index (counter) goes up to "MAX_TRACKS_PER_PIXEL"
     itrk, ipix, itick = cuda.grid(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
@@ -497,23 +504,23 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
         start_tick = round(track_starts[itrk] / detector.TIME_SAMPLING)
 
         if pixel_index >= 0:
-            counter = 0
+            counter = -99
             for track_idx in range(track_pixel_map[pixel_index].shape[0]):
                 if itrk == -1:
                     continue
                 if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
+                    if counter >= 0 and itick < signals.shape[2]:
+                        itime = start_tick + itick
+                        if itime < pixels_signals.shape[1] and itime > -1:
+                            cuda.atomic.add(pixels_signals,
+                                            (pixel_index, itime),
+                                            signals[itrk][ipix][itick])
+                            cuda.atomic.add(pixels_tracks_signals,
+                                            (pixel_index, itime, counter),
+                                            signals[itrk][ipix][itick])
                     break
 
-            if itick < signals.shape[2]:
-                itime = start_tick + itick
-                if itime < pixels_signals.shape[1] and itime > -1:
-                    cuda.atomic.add(pixels_signals,
-                                    (pixel_index, itime),
-                                    signals[itrk][ipix][itick])
-                    cuda.atomic.add(pixels_tracks_signals,
-                                    (pixel_index, itime, counter),
-                                    signals[itrk][ipix][itick])
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
