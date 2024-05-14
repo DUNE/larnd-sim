@@ -666,7 +666,7 @@ def run_simulation(input_filename,
         quenching.quench[BPG,TPB](tracks, physics.BIRKS)
         end_quenching = time()
         logger.take_snapshot()
-        logger.archive('quenching')
+        logger.archive(f'quenching_mod{i_mod}')
         print(f" {end_quenching-start_quenching:.2f} s")
 
         print("Drifting electrons...", end="")
@@ -676,7 +676,7 @@ def run_simulation(input_filename,
         drifting.drift[BPG,TPB](tracks)
         end_drifting = time()
         logger.take_snapshot()
-        logger.archive('drifting')
+        logger.archive(f'drifting_mod{i_mod}')
         print(f" {end_drifting-start_drifting:.2f} s")
 
         # Set up light simulation data objects and calculate the optical responses
@@ -714,7 +714,7 @@ def run_simulation(input_filename,
             light_sim_dat_acc.append(light_sim_dat)
 
             logger.take_snapshot()
-            logger.archive('light')
+            logger.archive(f'light_mod{i_mod}')
 
             # Prepare the light waveform padding
             if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
@@ -1080,6 +1080,15 @@ def run_simulation(input_filename,
         RangePop()
 
     logger.take_snapshot([len(logger.log)])
+
+    # FIXME
+    # A hotfix: to update the truth information filled in quenching and drifting stage
+    # all_mod_tracks is passed as tracks in modular variation loop (even mod2mod_variation is not activated)
+    # We are not saving aggregated segments from modular variation loop because a combination of both issues (also see Git Issue#216):
+    # 1. The module active volume selection removes some segments
+    # 2. ndlar_flow throws an error if not all the segments are passed
+    quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
+    drifting.drift[BPG,TPB](all_mod_tracks)
 
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
