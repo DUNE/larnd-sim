@@ -323,8 +323,8 @@ def export_to_hdf5(event_id_list,
                     packets.append(TimestampPacket(timestamp=np.floor(event_start_time_list[0] * CLOCK_CYCLE * units.mus/units.s)) ) # s
                     packets[-1].chip_key = Key(io_group,0,0)
                     packets_mc_evt.append([-1])
-                    packets_mc_trk.append([-1] * (ASSOCIATION_COUNT_TO_STORE * 2))
-                    packets_frac.append([0] * (ASSOCIATION_COUNT_TO_STORE*2))
+                    packets_mc_trk.append([-1] * track_ids.shape[1])
+                    packets_frac.append([0] * current_fractions.shape[2])
                 packets_mc_evt.append([event])
                 packets_mc_trk.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
