@@ -522,7 +522,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                     break
 
             if counter < 0:
-                print("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value.")
+                print("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, ", MAX_TRACKS_PER_PIXEL)
 
 
 @cuda.jit
