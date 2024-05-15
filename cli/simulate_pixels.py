@@ -694,6 +694,16 @@ def run_simulation(input_filename,
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
             lut = np.load(light_lut)['arr']
 
+            # check if the light LUT matches with the number of optical channels
+            # lut (x, y, z, n_op_ch) for one TPC
+            # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
+            if mod2mod_variation:
+                warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
+            else:
+                warn_n_op_ch = (n_light_channel != lut.shape[3]*2*n_modules)
+            if warn_n_op_ch:
+                warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
+
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
             lut['vis'][~mask] = lut['vis'][mask].min()
