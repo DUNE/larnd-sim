@@ -35,13 +35,13 @@ module0:
     DET_PROPERTIES:  2x2_non_beam.yaml
 
 # 2x2 (differnt module configuration), beam
-2x2_mod2mod_variation:
+2x2_mod2mod_variation: &2x2modvar
     <<: *2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim_mod2mod_variation.yaml
     DET_PROPERTIES:  2x2_mod2mod_variation.yaml
     PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.5.16.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
-    RESPONSE:        [response_44.npy, response_38.npy]
+    RESPONSE:        [response_44_v2a_50ns.npy, response_38_v2b_50ns.npy]
     RESPONSE_ID:     [0, 0, 1, 0] 
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
@@ -49,6 +49,12 @@ module0:
     LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024.npz] 
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
+
+# 2x2 (differnt module configuration), beam, old response
+2x2_mod2mod_variation_old_response:
+    <<: *2x2modvar
+    DET_PROPERTIES:  2x2_mod2mod_variation_old_response.yaml
+    RESPONSE:        [response_44.npy, response_38.npy]
 
 # nd-lar (same module configuration)
 # NuMI beam (not realistic)
