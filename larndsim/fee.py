@@ -25,7 +25,7 @@ from .consts import units
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 10
 #: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 20
+MAX_ADC_VALUES = 30
 #: Discrimination threshold in e-
 DISCRIMINATION_THRESHOLD = 7e3 * e
 #: ADC hold delay in clock cycles

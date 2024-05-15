@@ -14,7 +14,7 @@ from numba.cuda.random import xoroshiro128p_normal_float32
 from .consts import detector
 from .pixels_from_track import id2pixel
 
-MAX_TRACKS_PER_PIXEL = 20
+MAX_TRACKS_PER_PIXEL = 50
 MIN_STEP_SIZE = 0.001 # cm
 MC_SAMPLE_MULTIPLIER = 1
 
@@ -506,7 +506,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
         if pixel_index >= 0:
             counter = -99
             for track_idx in range(track_pixel_map[pixel_index].shape[0]):
-                if itrk == -1:
+                if itrk == -1: # would itrk ever be -1?
                     continue
                 if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
@@ -520,6 +520,9 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                                             (pixel_index, itime, counter),
                                             signals[itrk][ipix][itick])
                     break
+
+            if counter < 0:
+                print("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value.")
 
 
 @cuda.jit
