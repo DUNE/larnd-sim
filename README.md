@@ -127,6 +127,6 @@ For all light related datasets, as `larnd-sim` currently does not consider a com
 ## Future developments
 `larnd-sim` is fairly mature for the detector simulation that it is in vision to be. However, various developments are still needed to further improve the simulation. [The Git Issues](https://github.com/DUNE/larnd-sim/issues) provides a peek into the wishlist. We welcome your contribution!
 
-Currently, the development of `larnd-sim` is organised by Kevin Wood (@krwood, LBNL), Yifan Chen (@YifanC, SLAC) and Matt Kramer (@mjkramer, LBNL), as part of the 2x2 simulation effort. The future simulation group of ND-LAr and/or its prototype will continue managing and maintaining `larnd-sim`. Please contact us if you have any suggestions, questions or concerns regarding `larnd-sim`.
+Currently, the development of `larnd-sim` is coordinated by Jaafar Chakrani (@jaafar-chakrani, LBNL), Kevin Wood (@krwood, LBNL), Yifan Chen (@YifanC, SLAC) and Matt Kramer (@mjkramer, LBNL), as part of the 2x2 simulation effort. The future simulation group of ND-LAr and/or its prototype will continue managing and maintaining `larnd-sim`. Please contact us if you have any suggestions, questions or concerns regarding `larnd-sim`.
 
 Here, we would also like to acknowledge the initial authors of `larnd-sim`, Roberto Soleti (@soleti) and Peter Madigan (@peter-madigan). Thank you and many other contributors that have built `larnd-sim`.
