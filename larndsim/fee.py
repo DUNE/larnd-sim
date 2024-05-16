@@ -21,6 +21,7 @@ from .pixels_from_track import id2pixel
 
 from .consts.units import mV, e
 from .consts import units
+from .detsim import MAX_TRACKS_PER_PIXEL
 
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 10
@@ -323,8 +324,8 @@ def export_to_hdf5(event_id_list,
                     packets.append(TimestampPacket(timestamp=np.floor(event_start_time_list[0] * CLOCK_CYCLE * units.mus/units.s)) ) # s
                     packets[-1].chip_key = Key(io_group,0,0)
                     packets_mc_evt.append(np.array([-1]))
-                    packets_mc_trk.append(np.array([-1] * track_ids.shape[1]))
-                    packets_frac.append(np.array([0] * current_fractions.shape[2]))
+                    packets_mc_trk.append(np.array([-1] * MAX_TRACKS_PER_PIXEL))
+                    packets_frac.append(np.array([0] * MAX_TRACKS_PER_PIXEL))
                 packets_mc_evt.append([event])
                 packets_mc_trk.append(track_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
