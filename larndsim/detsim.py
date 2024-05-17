@@ -542,6 +542,9 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
             track.
     """
     # index of unique_pix array
+    # although this function could get rid of some segments depending on MAX_TRACKS_PER_PIXEL
+    # the index is with respect to the total number segments in the batch
+    # so when it is translated to "segment_id", it is correct
     index = cuda.grid(1)
 
     upix = unique_pix[index]
