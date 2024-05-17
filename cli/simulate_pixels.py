@@ -916,12 +916,18 @@ def run_simulation(input_filename,
                 pixels_tracks_signals = cp.zeros((len(unique_pix),
                                                   len(detector.TIME_TICKS),
                                                   track_pixel_map.shape[1]))
+                overflow_flag = cp.array([0])
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
                                                   track_starts,
                                                   pixel_index_map,
                                                   track_pixel_map,
-                                                  pixels_tracks_signals)
+                                                  pixels_tracks_signals,
+                                                  overflow_flag)
+                if overflow_flag[0]:
+                    warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
+                                  + f"{detsim.MAX_TRACKS_PER_PIXEL}")
+
                 RangePop()
 
                 RangePush("get_adc_values")

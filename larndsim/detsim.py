@@ -469,7 +469,8 @@ def sign(x):
     return 1 if x >= 0 else -1
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals):
+def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals,
+                      overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
     Converting "signals" from per segment to per pixel ("pixel_signals" and "pixels_tracks_signals")
@@ -489,6 +490,8 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
             the unique pixels array and the array containing the pixels for each track.
         pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
             for each pixel and each track that induced current on the pixel.
+        overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
+            MAX_TRACKS_PER_PIXEL is insufficient
     """
     # itrk goes up to the total number of the segments in this batch
     # ipix goes up to the max number of pixel for any segment
@@ -522,7 +525,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                     break
 
             if counter < 0:
-                print("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, ", MAX_TRACKS_PER_PIXEL)
+                overflow_flag[0] = 1
 
 
 @cuda.jit
