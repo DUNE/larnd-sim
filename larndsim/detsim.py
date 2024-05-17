@@ -525,7 +525,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                     break
 
             if counter < 0:
-                overflow_flag[0] = 1
+                overflow_flag[pixel_index] = 1
 
 
 @cuda.jit
