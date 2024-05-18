@@ -541,6 +541,7 @@ def run_simulation(input_filename,
     # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
     # Therefore, to run the detector simulation we reset the t0 to reflect that
     # When storing the mc truth, revert this change and store the "real" segment time
+    # The event times are added to segments in the spill building stage. This step is not needed for non-beam simulation
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period so t0 is wrt the corresponding spill start time.
         # The spill starts are marking the start of
