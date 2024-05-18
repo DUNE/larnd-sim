@@ -541,6 +541,7 @@ def run_simulation(input_filename,
     # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
     # Therefore, to run the detector simulation we reset the t0 to reflect that
     # When storing the mc truth, revert this change and store the "real" segment time
+    # The event times are added to segments in the spill building stage. This step is not needed for non-beam simulation
     if sim.IS_SPILL_SIM:
         # "Reset" the spill period so t0 is wrt the corresponding spill start time.
         # The spill starts are marking the start of
@@ -582,6 +583,7 @@ def run_simulation(input_filename,
     else:
         event_times = fee.gen_event_times(num_evids, 0)
 
+    # broadcast the event times to vertices
     if input_has_vertices and not sim.IS_SPILL_SIM:
         # create "t_event" in vertices dataset in case it doesn't exist
         if 't_event' not in vertices.dtype.names:
@@ -589,11 +591,26 @@ def run_simulation(input_filename,
             dtype = [("t_event","f4")] + dtype
             new_vertices = np.empty(vertices.shape, dtype=np.dtype(dtype, align=True))
             for field in dtype[1:]:
+                if len(field[0]) == 0: continue
                 new_vertices[field[0]] = vertices[field[0]]
             vertices = new_vertices
         uniq_ev, counts = np.unique(vertices[sim.EVENT_SEPARATOR], return_counts=True)
         event_times_in_use = cp.take(event_times, uniq_ev)
         vertices['t_event'] = np.repeat(event_times_in_use.get(),counts)
+
+    # copy the event times to mc_hdr
+    if input_has_mc_hdr and input_has_vertices:
+        if 't_event' not in mc_hdr.dtype.names:
+            dtype = mc_hdr.dtype.descr
+            dtype = [("t_event","f4")] + dtype
+            new_mc_hdr = np.empty(mc_hdr.shape, dtype=np.dtype(dtype, align=True))
+            for field in dtype[1:]:
+                if len(field[0]) == 0: continue
+                new_mc_hdr[field[0]] = mc_hdr[field[0]]
+            mc_hdr = new_mc_hdr
+        mc_hdr['t_event'] = vertices['t_event']
+        if len(vertices[sim.EVENT_SEPARATOR]) != len(mc_hdr[sim.EVENT_SEPARATOR]):
+            raise ValueError("vertices and mc_hdr datasets have different number of vertices! The number should be the same.")
 
     # accumulate results for periodic file saving
     results_acc = defaultdict(list)

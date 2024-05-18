@@ -1,6 +1,6 @@
 # module 0 (single 2x2 module), non-beam
 module0:
-    SIM_PROPERTIES:  singles_sim.yaml
+    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.3.16.yaml
     DET_PROPERTIES:  module0.yaml
     RESPONSE:        response_44.npy
@@ -55,6 +55,11 @@ module0:
     <<: *2x2modvar
     DET_PROPERTIES:  2x2_mod2mod_variation_old_response.yaml
     RESPONSE:        [response_44.npy, response_38.npy]
+
+# 2x2 (differnt module configuration), mpvmpr
+2x2_mod2mod_variation_mpvmpr:
+    <<: *2x2modvar
+    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
 
 # nd-lar (same module configuration)
 # NuMI beam (not realistic)
