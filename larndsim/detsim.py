@@ -14,7 +14,7 @@ from numba.cuda.random import xoroshiro128p_normal_float32
 from .consts import detector
 from .pixels_from_track import id2pixel
 
-MAX_TRACKS_PER_PIXEL = 20
+MAX_TRACKS_PER_PIXEL = 50
 MIN_STEP_SIZE = 0.001 # cm
 MC_SAMPLE_MULTIPLIER = 1
 
@@ -469,16 +469,18 @@ def sign(x):
     return 1 if x >= 0 else -1
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals):
+def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals,
+                      overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
+    Converting "signals" from per segment to per pixel ("pixel_signals" and "pixels_tracks_signals")
 
     Args:
         pixels_signals (:obj:`numpy.ndarray`): 2D array that will contain the
             summed signal for each pixel. First dimension is the pixel ID, second
             dimension is the time tick
         signals (:obj:`numpy.ndarray`): 3D array with dimensions S x P x T,
-            where S is the number of track segments, P is the number of pixels, and T is
+            where S is the total number of track segments, P is the max number of pixels for any segment, and T is
             the number of time ticks.
         track_starts (:obj:`numpy.ndarray`): 1D array containing the starting time of
             each track
@@ -488,7 +490,15 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
             the unique pixels array and the array containing the pixels for each track.
         pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
             for each pixel and each track that induced current on the pixel.
+        overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
+            MAX_TRACKS_PER_PIXEL is insufficient
     """
+    # itrk goes up to the total number of the segments in this batch
+    # ipix goes up to the max number of pixel for any segment
+    # itick is time ticks along the entire drift span
+
+    # pixel_index goes up to the total number of pixels in this batch
+    # track_index (counter) goes up to "MAX_TRACKS_PER_PIXEL"
     itrk, ipix, itick = cuda.grid(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
@@ -497,23 +507,26 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
         start_tick = round(track_starts[itrk] / detector.TIME_SAMPLING)
 
         if pixel_index >= 0:
-            counter = 0
+            counter = -99
             for track_idx in range(track_pixel_map[pixel_index].shape[0]):
-                if itrk == -1:
+                if itrk == -1: # would itrk ever be -1?
                     continue
                 if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
+                    if counter >= 0 and itick < signals.shape[2]:
+                        itime = start_tick + itick
+                        if itime < pixels_signals.shape[1] and itime > -1:
+                            cuda.atomic.add(pixels_signals,
+                                            (pixel_index, itime),
+                                            signals[itrk][ipix][itick])
+                            cuda.atomic.add(pixels_tracks_signals,
+                                            (pixel_index, itime, counter),
+                                            signals[itrk][ipix][itick])
                     break
 
-            if itick < signals.shape[2]:
-                itime = start_tick + itick
-                if itime < pixels_signals.shape[1] and itime > -1:
-                    cuda.atomic.add(pixels_signals,
-                                    (pixel_index, itime),
-                                    signals[itrk][ipix][itick])
-                    cuda.atomic.add(pixels_tracks_signals,
-                                    (pixel_index, itime, counter),
-                                    signals[itrk][ipix][itick])
+            if counter < 0:
+                overflow_flag[pixel_index] = 1
+
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
@@ -529,6 +542,9 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
             track.
     """
     # index of unique_pix array
+    # although this function could get rid of some segments depending on MAX_TRACKS_PER_PIXEL
+    # the index is with respect to the total number segments in the batch
+    # so when it is translated to "segment_id", it is correct
     index = cuda.grid(1)
 
     upix = unique_pix[index]
