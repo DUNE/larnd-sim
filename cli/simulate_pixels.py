@@ -619,21 +619,47 @@ def run_simulation(input_filename,
     # Allow module to module variance in the configuration files
     # Loop over all modules
     # First copy all tracks and segment_ids
+
     all_mod_tracks = tracks
     all_mod_segment_ids = segment_ids
     if mod2mod_variation == None or mod2mod_variation == False:
         mod_ids = [-1]
-        # Sub-select only segments in active volumes
-        if sim.IF_ACTIVE_VOLUME_CHECK:
-            print("Skipping non-active volumes..." , end="")
-            start_mask = time()
-            active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-            tracks = all_mod_tracks[active_tracks_mask]
-            segment_ids = all_mod_segment_ids[active_tracks_mask]
-            end_mask = time()
-            print(f" {end_mask-start_mask:.2f} s")
     else:
         mod_ids = consts.detector.get_n_modules(detector_properties)
+
+    consts.detector.set_detector_properties(detector_properties, pixel_layout[0])
+    from larndsim.consts import detector
+    print("before len(tracks): ", len(tracks))
+    # Sub-select only segments in active volumes
+    if mod2mod_variation or sim.IF_ACTIVE_VOLUME_CHECK:
+        print("Skipping non-active volumes..." , end="")
+        start_mask = time()
+        active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
+        tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
+        segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
+        end_mask = time()
+        print(f" {end_mask-start_mask:.2f} s")
+
+    #all_mod_tracks = tracks
+    #all_mod_segment_ids = segment_ids
+    #if mod2mod_variation == None or mod2mod_variation == False:
+    #    mod_ids = [-1]
+    #    # Sub-select only segments in active volumes
+    #    if sim.IF_ACTIVE_VOLUME_CHECK:
+    #        print("Skipping non-active volumes..." , end="")
+    #        start_mask = time()
+    #        active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
+    #        tracks = all_mod_tracks[active_tracks_mask]
+    #        segment_ids = all_mod_segment_ids[active_tracks_mask]
+    #        end_mask = time()
+    #        print(f" {end_mask-start_mask:.2f} s")
+    #else:
+    #    mod_ids = consts.detector.get_n_modules(detector_properties)
+
+    print("after len(tracks): ", len(tracks))
+    print("after len(all_mod_tracks): ", len(all_mod_tracks))
+    print("after len(segment_ids): ", len(segment_ids))
+    print("after len(all_mod_segment_ids): ", len(all_mod_segment_ids))
 
     RangePop()                  # prep_simulation
 
@@ -1112,26 +1138,45 @@ def run_simulation(input_filename,
         results_acc = defaultdict(list) # reinitialize after each save_results
         RangePop()
 
+        # Collect updated true segments
+        if i_mod <= 1: # i_mod counts from 1 for module to module variation, otherwise i_mod is set to -1
+            segments_to_files = tracks # segments are only updated in quenching and drifting, otherwise this part should be in the batching loop
+        else:
+            segments_to_files = np.append(segments_to_files, tracks)
+
+        print("len(segments_to_files): ", len(segments_to_files))
+        print("len(tracks): ", len(tracks))
+
     logger.take_snapshot([len(logger.log)])
 
-    # FIXME
-    # A hotfix: to update the truth information filled in quenching and drifting stage
-    # all_mod_tracks is passed as tracks in modular variation loop (even mod2mod_variation is not activated)
-    # We are not saving aggregated segments from modular variation loop because a combination of both issues (also see Git Issue#216):
-    # 1. The module active volume selection removes some segments
-    # 2. ndlar_flow throws an error if not all the segments are passed
-    TPB = 256
-    BPG = max(ceil(all_mod_tracks.shape[0] / TPB),1)
-    quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
-    drifting.drift[BPG,TPB](all_mod_tracks)
+    ## FIXME
+    ## A hotfix: to update the truth information filled in quenching and drifting stage
+    ## all_mod_tracks is passed as tracks in modular variation loop (even mod2mod_variation is not activated)
+    ## We are not saving aggregated segments from modular variation loop because a combination of both issues (also see Git Issue#216):
+    ## 1. The module active volume selection removes some segments
+    ## 2. ndlar_flow throws an error if not all the segments are passed
+    #TPB = 256
+    #BPG = max(ceil(all_mod_tracks.shape[0] / TPB),1)
+    #quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
+    #drifting.drift[BPG,TPB](all_mod_tracks)
 
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
         # write the true timing structure to the file, not t0 wrt event time .....
-        localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
+        localSpillIDs = segments_to_files[sim.EVENT_SEPARATOR] - (segments_to_files[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        seg_event_times_padding = localSpillIDs*sim.SPILL_PERIOD
+    else:
+        uniq_seg_ev, counts_seg_ev = np.unique(segments_to_files[sim.EVENT_SEPARATOR], return_counts=True)
+        event_times_in_use = cp.take(event_times, uniq_seg_ev) # event_times is defined in the preparation stage
+        seg_event_times_padding = np.repeat(event_times_in_use.get(), counts_seg_ev)
+
+    segments_to_files['t0_start'] = segments_to_files['t0_start'] + seg_event_times_padding
+    segments_to_files['t0_end'] = segments_to_files['t0_end'] + seg_event_times_padding
+    segments_to_files['t0'] = segments_to_files['t0'] + seg_event_times_padding
+        #localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+        #all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
+        #all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
+        #all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
     # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
@@ -1161,10 +1206,12 @@ def run_simulation(input_filename,
         # We previously called swap_coordinates(tracks), but we want to write
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
-        swap_coordinates(all_mod_tracks)
+        swap_coordinates(segments_to_files)
+        #swap_coordinates(all_mod_tracks)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+        #output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
