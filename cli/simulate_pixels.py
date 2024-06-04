@@ -617,9 +617,7 @@ def run_simulation(input_filename,
     light_sim_dat_acc = list()
 
     # Allow module to module variance in the configuration files
-    # Loop over all modules
     # First copy all tracks and segment_ids
-
     all_mod_tracks = tracks
     all_mod_segment_ids = segment_ids
     if mod2mod_variation == None or mod2mod_variation == False:
@@ -627,9 +625,12 @@ def run_simulation(input_filename,
     else:
         mod_ids = consts.detector.get_n_modules(detector_properties)
 
-    consts.detector.set_detector_properties(detector_properties, pixel_layout[0])
-    from larndsim.consts import detector
-    print("before len(tracks): ", len(tracks))
+    # Select segments that are in the active volume
+    # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
+    # For this purpose, it doesn't matter which pixel_layout to use
+    if mod2mod_variation:
+        consts.detector.set_detector_properties(detector_properties, pixel_layout[0])
+        from larndsim.consts import detector
     # Sub-select only segments in active volumes
     if mod2mod_variation or sim.IF_ACTIVE_VOLUME_CHECK:
         print("Skipping non-active volumes..." , end="")
@@ -640,30 +641,10 @@ def run_simulation(input_filename,
         end_mask = time()
         print(f" {end_mask-start_mask:.2f} s")
 
-    #all_mod_tracks = tracks
-    #all_mod_segment_ids = segment_ids
-    #if mod2mod_variation == None or mod2mod_variation == False:
-    #    mod_ids = [-1]
-    #    # Sub-select only segments in active volumes
-    #    if sim.IF_ACTIVE_VOLUME_CHECK:
-    #        print("Skipping non-active volumes..." , end="")
-    #        start_mask = time()
-    #        active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-    #        tracks = all_mod_tracks[active_tracks_mask]
-    #        segment_ids = all_mod_segment_ids[active_tracks_mask]
-    #        end_mask = time()
-    #        print(f" {end_mask-start_mask:.2f} s")
-    #else:
-    #    mod_ids = consts.detector.get_n_modules(detector_properties)
-
-    print("after len(tracks): ", len(tracks))
-    print("after len(all_mod_tracks): ", len(all_mod_tracks))
-    print("after len(segment_ids): ", len(segment_ids))
-    print("after len(all_mod_segment_ids): ", len(all_mod_segment_ids))
-
     RangePop()                  # prep_simulation
 
     # Convention module counting start from 1
+    # Loop over all modules
     for i_mod in mod_ids:
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
@@ -1144,21 +1125,7 @@ def run_simulation(input_filename,
         else:
             segments_to_files = np.append(segments_to_files, tracks)
 
-        print("len(segments_to_files): ", len(segments_to_files))
-        print("len(tracks): ", len(tracks))
-
     logger.take_snapshot([len(logger.log)])
-
-    ## FIXME
-    ## A hotfix: to update the truth information filled in quenching and drifting stage
-    ## all_mod_tracks is passed as tracks in modular variation loop (even mod2mod_variation is not activated)
-    ## We are not saving aggregated segments from modular variation loop because a combination of both issues (also see Git Issue#216):
-    ## 1. The module active volume selection removes some segments
-    ## 2. ndlar_flow throws an error if not all the segments are passed
-    #TPB = 256
-    #BPG = max(ceil(all_mod_tracks.shape[0] / TPB),1)
-    #quenching.quench[BPG,TPB](all_mod_tracks, physics.BIRKS)
-    #drifting.drift[BPG,TPB](all_mod_tracks)
 
     # revert the mc truth information modified for larnd-sim consumption 
     if sim.IS_SPILL_SIM:
@@ -1173,10 +1140,6 @@ def run_simulation(input_filename,
     segments_to_files['t0_start'] = segments_to_files['t0_start'] + seg_event_times_padding
     segments_to_files['t0_end'] = segments_to_files['t0_end'] + seg_event_times_padding
     segments_to_files['t0'] = segments_to_files['t0'] + seg_event_times_padding
-        #localSpillIDs = all_mod_tracks[sim.EVENT_SEPARATOR] - (all_mod_tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        #all_mod_tracks['t0_start'] = all_mod_tracks['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        #all_mod_tracks['t0_end'] = all_mod_tracks['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        #all_mod_tracks['t0'] = all_mod_tracks['t0'] + localSpillIDs*sim.SPILL_PERIOD
 
     # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
@@ -1207,11 +1170,9 @@ def run_simulation(input_filename,
         # all truth info in the edep-sim convention (z = beam coordinate). So
         # temporarily undo the swap. It's easier than reorganizing the code!
         swap_coordinates(segments_to_files)
-        #swap_coordinates(all_mod_tracks)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
         output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
-        #output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
