@@ -1167,8 +1167,7 @@ def run_simulation(input_filename,
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
         # We previously called swap_coordinates(tracks), but we want to write
-        # all truth info in the edep-sim convention (z = beam coordinate). So
-        # temporarily undo the swap. It's easier than reorganizing the code!
+        # all truth info in the edep-sim convention (z = beam coordinate).
         swap_coordinates(segments_to_files)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
