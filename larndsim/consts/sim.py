@@ -15,7 +15,6 @@ WRITE_BATCH_SIZE = 1  # units = N batches
 EVENT_SEPARATOR = 'event_id'  # 'spillID' or 'vertexID'
 
 IS_SPILL_SIM = True
-IF_ACTIVE_VOLUME_CHECK = False
 SPILL_PERIOD = 1.2e6  # units = microseconds
 TRACKS_DSET_NAME = 'segments'
 
@@ -39,7 +38,6 @@ def set_simulation_properties(simprop_file):
     global WRITE_BATCH_SIZE
     global EVENT_SEPARATOR
     global IS_SPILL_SIM
-    global IF_ACTIVE_VOLUME_CHECK
     global SPILL_PERIOD
     global MAX_EVENTS_PER_FILE
     global TRACKS_DSET_NAME
@@ -54,7 +52,6 @@ def set_simulation_properties(simprop_file):
         WRITE_BATCH_SIZE = simprop.get('write_batch_size', WRITE_BATCH_SIZE)
         EVENT_SEPARATOR = simprop.get('event_separator', EVENT_SEPARATOR)
         IS_SPILL_SIM = bool(simprop.get('is_spill_sim', IS_SPILL_SIM))
-        IF_ACTIVE_VOLUME_CHECK = bool(simprop.get('if_active_volume_check', IF_ACTIVE_VOLUME_CHECK))
         SPILL_PERIOD = float(simprop.get('spill_period', SPILL_PERIOD))
         MAX_EVENTS_PER_FILE = simprop.get('max_events_per_file', MAX_EVENTS_PER_FILE)
         TRACKS_DSET_NAME = simprop.get('tracks_dset_name', TRACKS_DSET_NAME)

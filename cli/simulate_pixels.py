@@ -625,21 +625,20 @@ def run_simulation(input_filename,
     else:
         mod_ids = consts.detector.get_n_modules(detector_properties)
 
-    # Select segments that are in the active volume
     # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
     if mod2mod_variation:
         consts.detector.set_detector_properties(detector_properties, pixel_layout[0])
         from larndsim.consts import detector
+
     # Sub-select only segments in active volumes
-    if mod2mod_variation or sim.IF_ACTIVE_VOLUME_CHECK:
-        print("Skipping non-active volumes..." , end="")
-        start_mask = time()
-        active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-        tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
-        segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
-        end_mask = time()
-        print(f" {end_mask-start_mask:.2f} s")
+    print("Skipping non-active volumes..." , end="")
+    start_mask = time()
+    active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
+    tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
+    segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
+    end_mask = time()
+    print(f" {end_mask-start_mask:.2f} s")
 
     RangePop()                  # prep_simulation
 
