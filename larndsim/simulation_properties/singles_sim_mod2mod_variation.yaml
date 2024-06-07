@@ -2,7 +2,6 @@ batch_size: 10000             # track segments
 event_batch_size: 2          # tpcs
 write_batch_size: 1          # batches
 is_spill_sim: 0              # boolean
-if_active_volume_check: 0    # boolean
 event_separator: 'event_id'   # 'eventID'
 tracks_dset_name: 'segments' # or 'segments'
 max_events_per_file: 1000
