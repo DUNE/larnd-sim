@@ -338,6 +338,8 @@ def export_to_hdf5(event_id_list,
                 packets_mc_trj.append(traj_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
+                print("event: ", event)
+                print("event_id_list: ", event_id_list)
 
                 
             else:
@@ -435,6 +437,8 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
     packets_mc_evt = []
     packets_mc_trk = []
     packets_frac = []
+    packets_mc_trj = []
+    packets_frac_trj =[]
 
     sync_ticks = sync_times / CLOCK_CYCLE # us -> time tick
     for sync_tick in sync_ticks:
@@ -446,6 +450,8 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
             packets_mc_evt.append(np.array([-1]))
             packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
             packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
+            packets_mc_trj.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+            packets_frac_trj.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
@@ -453,16 +459,23 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({ASSOCIATION_COUNT_TO_STORE},)f8'),]
+                          )
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
         packets_frac = np.array(packets_frac)
         packets_mc_trk   = np.array(packets_mc_trk)
         packets_mc_evt   = np.array(packets_mc_evt)
+        packets_mc_trj = np.array(packets_mc_trj)
+        packets_frac_trj = np.array(packets_frac_trj)
 
         packets_mc_ds['event_ids'] = packets_mc_evt
         packets_mc_ds['segment_ids'] = packets_mc_trk
         packets_mc_ds['fraction' ] = packets_frac
+        packets_mc_ds['file_traj_ids'] = packets_mc_trj
+        packets_mc_ds['fraction_traj'] = packets_frac_trj
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
@@ -488,6 +501,9 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
     packets_mc_evt = []
     packets_mc_trk = []
     packets_frac = []
+    packets_mc_trj = []
+    packets_frac_trj =[]
+
     for evt_time in event_start_times:
 
         t_trig = int(np.floor(evt_time / CLOCK_CYCLE)) % CLOCK_RESET_PERIOD # tick
@@ -500,12 +516,16 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
         packets_mc_evt.append(np.array([-1]))
         packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
         packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trj.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+        packets_frac_trj.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
         # trigger packets
         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig)) # tick
         packets_mc_evt.append(np.array([-1]))
         packets_mc_trk.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
         packets_frac.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trj.append(np.array([-1] * ASSOCIATION_COUNT_TO_STORE))
+        packets_frac_trj.append(np.array([0] * ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
@@ -513,16 +533,23 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({ASSOCIATION_COUNT_TO_STORE},)f8'),]
+                          )
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
         packets_frac = np.array(packets_frac)
         packets_mc_trk   = np.array(packets_mc_trk)
         packets_mc_evt   = np.array(packets_mc_evt)
+        packets_mc_trj = np.array(packets_mc_trj)
+        packets_frac_trj = np.array(packets_frac_trj)
 
         packets_mc_ds['event_ids'] = packets_mc_evt
         packets_mc_ds['segment_ids'] = packets_mc_trk
         packets_mc_ds['fraction' ] = packets_frac
+        packets_mc_ds['file_traj_ids'] = packets_mc_trj
+        packets_mc_ds['fraction_traj'] = packets_frac_trj
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
