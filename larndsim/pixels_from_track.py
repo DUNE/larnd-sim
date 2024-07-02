@@ -8,6 +8,8 @@ from numba import cuda
 #from .consts.detector import PIXEL_PITCH, N_PIXELS, TPC_BORDERS
 from .consts import detector
 
+MAX_NEIGHBOR_BACKTRACK_DISTANCE=4
+
 @nb.njit
 def pixel2id(pixel_x, pixel_y, pixel_plane):
     """
@@ -63,7 +65,7 @@ def max_pixels(tracks, n_max_pixels):
         cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
 
 @cuda.jit
-def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius):
+def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_pixels_list, radius):
     """
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
@@ -77,6 +79,9 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments and the ones next to them
+        neighboring_radius (:obj:`numpy.ndarray`): array where we store
+            the distance to the pixels directly below the projection of
+            the segments
         n_pixels_list (:obj:`numpy.ndarray`): number of total involved
             pixels
         radius (int): number of pixels around the active pixels that
@@ -100,7 +105,8 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, n_pixels_list, radius)
                           t["pixel_plane"], active_pixels[itrk])
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
                                                      radius,
-                                                     neighboring_pixels[itrk])
+                                                     neighboring_pixels[itrk],
+                                                     neighboring_radius[itrk])
 
 @nb.njit
 def get_num_active_pixels(x0, y0, x1, y1, plane_id):
@@ -193,7 +199,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
             tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
 @cuda.jit(device=True)
-def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
+def get_neighboring_pixels(active_pixels, radius, neighboring_pixels, neighboring_radius):
     """
     For each active_pixel, it includes all
     neighboring pixels within a specified radius
@@ -207,6 +213,9 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments and the ones next to them
+        neighboring_radius (:obj:`numpy.ndarray`): array where we store
+            the distance to the pixels directly below the projection of
+            the segments
 
     Returns:
         int: number of total involved pixels
@@ -234,6 +243,30 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels):
 
                     if is_unique:
                         neighboring_pixels[count] = new_pixel
+                        dist=pow(x_r**2+y_r**2,0.5)
+
+                        dx,dy = abs(x_r),abs(y_r)
+                        dmax,dmin = max(dx,dy),min(dx,dy)
+                        dsum = dmax+dmin
+                        if dsum > MAX_NEIGHBOR_BACKTRACK_DISTANCE:
+                            dist = -1
+                        elif dsum <=1: 
+                            dist = dsum
+                        elif dsum == 2:
+                            dist = 2 if dmax==1 else 3
+                        elif dsum == 3:
+                            dist = 4 if dmax==2 else 5
+                        elif dsum == 4:
+                            if dmax == 2:
+                                dist = 6
+                            elif dmax == 3:
+                                dist = 7
+                            elif dmax == 4:
+                                dist = 8
+                        else:
+                            print('Unsupported dsum',dsum)
+                            dist=-1
+                        neighboring_radius[count] = dist
                         count += 1
 
     return count

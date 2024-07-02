@@ -24,7 +24,7 @@ from .consts import units
 from .detsim import MAX_TRACKS_PER_PIXEL
 
 #: Number of back-tracked segments to be recorded
-ASSOCIATION_COUNT_TO_STORE = 10
+ASSOCIATION_COUNT_TO_STORE = 20
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 30
 #: Discrimination threshold in e-
@@ -135,6 +135,7 @@ def export_to_hdf5(event_id_list,
                    unique_pix,
                    current_fractions,
                    track_ids,
+                   traj_ids,
                    filename,
                    event_start_times,
                    is_first_batch,
@@ -172,6 +173,7 @@ def export_to_hdf5(event_id_list,
     packets = []
     packets_mc_evt = []
     packets_mc_trk = []
+    packets_mc_trj = []
     packets_frac = []
 
     #if is_first_batch:
@@ -251,14 +253,17 @@ def export_to_hdf5(event_id_list,
                         for io_group in io_groups:
                             packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
                             packets[-1].chip_key = Key(io_group,0,0)
-                            packets_mc_evt.append(np.array([-1]))
-                            packets_mc_trk.append(np.array([-1] * track_ids.shape[1]))
-                            packets_frac.append(np.array([0] * current_fractions.shape[2]))
+
+                            packets_mc_evt.append([-1])
+                            packets_mc_trk.append([-1] * track_ids.shape[1])
+                            packets_mc_trj.append([-1] * traj_ids.shape[1])
+                            packets_frac.append([0] * current_fractions.shape[2])
 
                             packets.append(SyncPacket(sync_type=b'S', timestamp=time_tick , io_group=io_group))
-                            packets_mc_evt.append(np.array([-1]))
-                            packets_mc_trk.append(np.array([-1] * track_ids.shape[1]))
-                            packets_frac.append(np.array([0] * current_fractions.shape[2]))
+                            packets_mc_evt.append([-1])
+                            packets_mc_trk.append([-1] * track_ids.shape[1])
+                            packets_mc_trj.append([-1] * traj_ids.shape[1])
+                            packets_frac.append([0] * current_fractions.shape[2])
 
                         trig_mask = light_trigger_event_id == event
                         if any(trig_mask):
@@ -267,17 +272,19 @@ def export_to_hdf5(event_id_list,
                                 if light.LIGHT_TRIG_MODE == 0:
                                     for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                        packets_mc_evt.append(np.array([-1]))
-                                        packets_mc_trk.append(np.array([-1] * track_ids.shape[1]))
-                                        packets_frac.append(np.array([0] * current_fractions.shape[2]))
+                                        packets_mc_evt.append([-1])
+                                        packets_mc_trk.append([-1] * track_ids.shape[1])
+                                        packets_mc_trj.append([-1] * traj_ids.shape[1])
+                                        packets_frac.append([0] * current_fractions.shape[2])
                                 # redundant here
                                 elif light.LIGHT_TRIG_MODE == 1:
                                     if module_trig == 1 or module_trig == 0: #1, beam trigger; 2, threshold trigger
                                         io_group = get_trig_io()
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                    packets_mc_evt.append(np.array([-1]))
-                                    packets_mc_trk.append(np.array([-1] * track_ids.shape[1]))
-                                    packets_frac.append(np.array([0] * current_fractions.shape[2]))
+                                    packets_mc_evt.append([-1])
+                                    packets_mc_trk.append([-1] * track_ids.shape[1])
+                                    packets_mc_trj.append([-1] * traj_ids.shape[1])
+                                    packets_frac.append([0] * current_fractions.shape[2])
                         last_event = event
 
                 p = Packet_v2()
@@ -308,7 +315,6 @@ def export_to_hdf5(event_id_list,
                         if channel in bad_channels_list[chip_key]:
                             logger.info(f"Channel {channel} on chip {chip_key} disabled")
                             continue
-
                 p.chip_key = chip_key
                 p.channel_id = channel
                 p.receipt_timestamp = time_tick
@@ -323,11 +329,13 @@ def export_to_hdf5(event_id_list,
                     last_time_tick = time_tick
                     packets.append(TimestampPacket(timestamp=np.floor(event_start_time_list[0] * CLOCK_CYCLE * units.mus/units.s)) ) # s
                     packets[-1].chip_key = Key(io_group,0,0)
-                    packets_mc_evt.append(np.array([-1]))
-                    packets_mc_trk.append(np.array([-1] * MAX_TRACKS_PER_PIXEL))
-                    packets_frac.append(np.array([0] * MAX_TRACKS_PER_PIXEL))
+                    packets_mc_evt.append([-1])
+                    packets_mc_trk.append([-1] * (ASSOCIATION_COUNT_TO_STORE * 2))
+                    packets_mc_trj.append([-1] * (ASSOCIATION_COUNT_TO_STORE * 2))
+                    packets_frac.append([0] * (ASSOCIATION_COUNT_TO_STORE*2))
                 packets_mc_evt.append([event])
                 packets_mc_trk.append(track_ids[itick])
+                packets_mc_trj.append(traj_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
 
@@ -340,25 +348,30 @@ def export_to_hdf5(event_id_list,
         hdf5format.to_file(filename, packet_list, workers=1)
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8')])
+                          ('fraction', f'({ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({ASSOCIATION_COUNT_TO_STORE},)f8'),]
+                          )
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
         # First, sort the back-tracking information by the magnitude of the fraction
         packets_frac = np.array(packets_frac)
-        packets_mc_trk   = np.array(packets_mc_trk)
-        packets_mc_evt   = np.array(packets_mc_evt)
+        packets_mc_trk = np.array(packets_mc_trk)
+        packets_mc_trj = np.array(packets_mc_trj)
+        packets_mc_evt = np.array(packets_mc_evt)
         
-        frac_order = np.flip(np.argsort(np.abs(packets_frac),axis=1),axis=1)
-        ass_track_ids = np.take_along_axis(packets_mc_trk,   frac_order, axis=1)
+        frac_order = np.flip(np.argsort(packets_frac,axis=1),axis=1)
+        ass_segment_ids = np.take_along_axis(packets_mc_trk,   frac_order, axis=1)
+        ass_trajectory_ids = np.take_along_axis(packets_mc_trj, frac_order, axis=1)
         ass_fractions = np.take_along_axis(packets_frac, frac_order, axis=1)
 
         # Second, only store the relevant portion.
-        if ass_track_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
-            packets_mc_ds['segment_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
+        if ass_segment_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
+            packets_mc_ds['segment_ids'] = ass_segment_ids[:,:ASSOCIATION_COUNT_TO_STORE]
             packets_mc_ds['fraction' ] = ass_fractions[:,:ASSOCIATION_COUNT_TO_STORE]
         else:
-            num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
-            packets_mc_ds['segment_ids'] = np.pad(ass_track_ids,
+            num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_segment_ids.shape[1]
+            packets_mc_ds['segment_ids'] = np.pad(ass_segment_ids,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
                 constant_values=-1)
@@ -366,6 +379,30 @@ def export_to_hdf5(event_id_list,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
                 constant_values=0.)
+
+
+        ass_track_ids = np.full(ass_trajectory_ids.shape,fill_value=-1,dtype=np.int32)
+        ass_fractions_track = np.full(ass_fractions.shape,fill_value=0.,dtype=np.float32)
+        for pidx, tids in enumerate(ass_trajectory_ids):
+            mask = tids > -1
+            for tidx, unique_tid in enumerate(np.unique(tids[mask])):
+                ass_track_ids[pidx][tidx] = unique_tid
+                ass_fractions_track[pidx][tidx] = np.sum(ass_fractions[pidx][mask][tids[mask]==unique_tid])
+
+        if ass_segment_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
+            packets_mc_ds['file_traj_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
+            packets_mc_ds['fraction_traj'] = ass_fractions_track[:,:ASSOCIATION_COUNT_TO_STORE]
+        else:
+            num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
+            packets_mc_ds['file_traj_ids'] = np.pad(ass_track_ids,
+                pad_width=((0,0),(0,num_to_pad)),
+                mode='constant',
+                constant_values=-1)
+            packets_mc_ds['fraction_traj' ] = np.pad(ass_fractions_track,
+                pad_width=((0,0),(0,num_to_pad)),
+                mode='constant',
+                constant_values=0.)
+
         packets_mc_ds['event_ids'] = packets_mc_evt
 
         with h5py.File(filename, 'a') as f:
