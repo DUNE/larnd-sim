@@ -338,9 +338,6 @@ def export_to_hdf5(event_id_list,
                 packets_mc_trj.append(traj_ids[itick])
                 packets_frac.append(current_fractions[itick][iadc])
                 packets.append(p)
-                print("event: ", event)
-                print("event_id_list: ", event_id_list)
-
                 
             else:
                 break

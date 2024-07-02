@@ -653,7 +653,7 @@ def run_simulation(input_filename,
     # Convention module counting start from 1
     # Loop over all modules
     for i_mod in mod_ids:
-        print(f'Simulating module {i_mod}')
+        print(f'Simulating module {i_mod-1}')
         if mod2mod_variation:
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             # Currently shouln't be necessary to reload light props, but if
