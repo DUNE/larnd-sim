@@ -932,8 +932,8 @@ def run_simulation(input_filename,
                 #            mymap[pix_idx][curr_idx[pix_idx]]=seg_idx
                 #            curr_idx[pix_idx] += 1
                 #    return mymap
-
-                assmap_pix2seg = invert_array_map(active_pixels,unique_pix)
+                #
+                #assmap_pix2seg = invert_array_map(active_pixels,unique_pix)
 
                 if not unique_pix.shape[0]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
@@ -975,7 +975,8 @@ def run_simulation(input_filename,
 
                 RangePush("track_pixel_map")
                 # Mapping between unique pixel array and track array index
-                max_segments_to_trace = max(assmap_pix2seg.shape[1],detsim.MAX_TRACKS_PER_PIXEL)
+                #max_segments_to_trace = max(assmap_pix2seg.shape[1],detsim.MAX_TRACKS_PER_PIXEL) # currently it doesn't work; see the comment for invert_array_map()
+                max_segments_to_trace = detsim.MAX_TRACKS_PER_PIXEL
                 track_pixel_map = cp.full((unique_pix.shape[0], max_segments_to_trace), -1)
                 TPB = 32
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
