@@ -341,18 +341,19 @@ def run_simulation(input_filename,
             elif isinstance(response_file, list) and len(response_file) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the response files.")
 
-        try:
-            light_lut_id = cfg['LIGHT_LUT_ID']
-            if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
-            else:
-                module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
-                light_lut_filename = module_light_lut_filename
-        except:
-            if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
-            elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
+        if light_simulated is True or None:
+            try:
+                light_lut_id = cfg['LIGHT_LUT_ID']
+                if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
+                    raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
+                else:
+                    module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
+                    light_lut_filename = module_light_lut_filename
+            except:
+                if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
+                    raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
+                elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
+                    warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
         
         if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
             if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:

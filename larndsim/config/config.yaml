@@ -64,7 +64,7 @@ module0:
 # 2x2 (differnt module configuration), mpvmpr, old response
 2x2_mpvmpr_old_response:
     <<: *2x2modvar_old_response
-    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yam
+    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
 
 # nd-lar (same module configuration)
 # NuMI beam (not realistic)
