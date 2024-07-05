@@ -23,7 +23,7 @@ tpc_offsets: # cm
   - [0, -21.8236, 0]
 tile_map:
   - [[8,5,3,1],[7,6,4,2]] # switched tiles 7 and 8 for module 1 vs. module 0
-  - [[16,14,12,10],[15,13,11,9]]
+  - [[15,14,12,10],[16,13,11,9]] # switched tiles 15 and 16 for module 1 vs. module 0
 module_to_io_groups:
   1: [1,2]
 

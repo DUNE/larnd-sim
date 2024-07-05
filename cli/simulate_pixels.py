@@ -580,11 +580,10 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = cp.arange(num_evids) * sim.SPILL_PERIOD #artificially set up event times with spill structure for now
-        #event_times = fee.gen_event_times(num_evids, 0)
-    print("Event times generated:", event_times)
-    print("Number of events:", num_evids)
-    print("Event times if spill sim:", cp.arange(num_evids) * sim.SPILL_PERIOD)
+        event_times = fee.gen_event_times(num_evids, 0)
+    #print("Event times generated:", event_times)
+    #print("Number of events:", num_evids)
+    #print("Event times if spill sim:", cp.arange(num_evids) * sim.SPILL_PERIOD)
 
     if input_has_vertices and not sim.IS_SPILL_SIM:
         # create "t_event" in vertices dataset in case it doesn't exist

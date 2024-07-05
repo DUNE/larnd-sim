@@ -66,7 +66,7 @@ UNCORRELATED_NOISE_CHARGE = 500 * e
 #: Discriminator noise in e-
 DISCRIMINATOR_NOISE = 650 * e 
 #: Average time between events in microseconds
-EVENT_RATE = 100000 # 10Hz
+EVENT_RATE = 16667 # 60Hz
 
 import logging
 logging.basicConfig()
@@ -121,9 +121,19 @@ def gen_event_times(nevents, t0):
     Returns:
         array: shape `(nevents,)`, sequential event times [microseconds]
     """
-    event_start_time = cp.random.exponential(scale=EVENT_RATE, size=int(nevents))
+    # for cosmic events, every other generated event is empty
+    # we account for this by making the empty events start at the same time as the previous event
+    if nevents % 2:
+        nevents = nevents + 1
+    event_start_time = cp.random.exponential(scale=EVENT_RATE, size=int(nevents/2))
     event_start_time = cp.cumsum(event_start_time)
+    event_start_time = np.repeat(event_start_time, 2)
     event_start_time += t0
+    if nevents % 2:
+        event_start_time = event_start_time[:-1]
+
+    if len(event_start_time) != nevents:
+        raise ValueError(f"Generated {len(event_start_time)} event times, expected {nevents}")
 
     return event_start_time
 
