@@ -808,8 +808,13 @@ def run_simulation(input_filename,
             i_batch = i_batch+1
             # grab only tracks from current batch
             track_subset = tracks[batch_mask]
-            # go through all simulated events in all modules even there might be no segments in the module
-            ievd = np.unique(all_mod_tracks[sim.EVENT_SEPARATOR])[i_batch-1]
+            # This is safe as long as you never want to simulate different event_ids (spills) in 
+            # the same batch.
+            if len(track_subset["event_id"]):
+                ievd = track_subset["event_id"][0]
+            else:
+                # If there are no tracks post-masking then just skip.
+                continue
             evt_tracks = track_subset
             #first_trk_id = np.argmax(batch_mask) # first track in batch
 
