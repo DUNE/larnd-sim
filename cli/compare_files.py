@@ -61,6 +61,8 @@ sim_segments = sim_file['segments']
 ref_packets = get_packets(ref_file)
 sim_packets = get_packets(sim_file)
 
+failed_tests = 0
+
 if args.break_file:
     print("Corrupting packets.")
     sim_packets['data']['io_group'][111] = 11
@@ -79,6 +81,7 @@ if args.verbose:
 print("\nChecking 'timestamp' in data/trig/time/sync packets...")
 
 ## Data packet timestamps can vary slightly between runs
+## Groups of packets come in bunches spaced out every 2e6 ticks
 TS_CYCLE = 0.2e7
 for c in range(0, 5):
     offset = c * TS_CYCLE
@@ -89,24 +92,24 @@ for c in range(0, 5):
         print("Data packets timestamp distribution not matching")
         print(f"Difference in bins for range ({c*TS_CYCLE}, {(c+1)*TS_CYCLE})")
         print(ref_hist - sim_hist)
+        failed_tests += 1
 
 ref_data_hist, _ = np.histogram(ref_packets['data']['timestamp']%TS_CYCLE, range=[0, 2000], bins=100)
 sim_data_hist, _ = np.histogram(sim_packets['data']['timestamp']%TS_CYCLE, range=[0, 2000], bins=100)
 test_data_hist = np.all(np.isclose(ref_data_hist, sim_data_hist, args.rel_tol, args.abs_tol))
-
-# np.all(ref_packets['sync']['timestamp'] == 1e7)
-# np.all(sim_packets['sync']['timestamp'] == 1e7)
 
 ## Trigger and sync timestamps should be identical
 test_trig_time = ref_packets['trig']['timestamp'] == sim_packets['trig']['timestamp']
 if not np.all(test_trig_time):
     print("Trigger packets timestamp distribution not matching")
     print(f"Mismatched packets at {np.where(test_trig_time == False)}")
+    failed_tests += 1
 
 test_sync_time = ref_packets['sync']['timestamp'] == sim_packets['sync']['timestamp']
 if not np.all(test_sync_time):
     print("Sync packets timestamp distribution not matching")
     print(f"Mismatched packets at {np.where(test_sync_time == False)}")
+    failed_tests += 1
 
 ref_time_hist, _ = np.histogram(ref_packets['time']['timestamp'], bins=100)
 sim_time_hist, _ = np.histogram(sim_packets['time']['timestamp'], bins=100)
@@ -115,21 +118,28 @@ if not np.all(test_time_hist):
     print("Time packets timestamp distribution not matching")
     print("Difference in bins for time packets:")
     print(ref_time_hist - sim_time_hist)
+    failed_tests += 1
 
 ### Test if all io_groups are present in data packets and similarly distributed
 print("\nChecking 'io_groups' in data packets...")
 
 ref_iog_id, ref_iog_count = np.unique(ref_packets['data']['io_group'], return_counts=True)
 sim_iog_id, sim_iog_count = np.unique(sim_packets['data']['io_group'], return_counts=True)
+if args.verbose:
+    print("Counts of each io_group (1-8):")
+    print("Ref:", ref_iog_count)
+    print("Sim:", sim_iog_count)
 
 if len(ref_iog_id) != len(sim_iog_id):
     print("Missing/wrong io_groups in data packets!")
     print("io_groups:", sim_iog_id)
+    failed_tests += 1
 else:
     test_iog_count = np.isclose(ref_iog_count, sim_iog_count, args.rel_tol, args.abs_tol)
     if not np.all(test_iog_count):
         print("Distribution of io_groups not matching")
         print(ref_iog_count - sim_iog_count)
+        failed_tests += 1
 
 ### Tests checking the 'dataword' distribution of data packets
 print("\nChecking 'dataword' in data packets...")
@@ -144,31 +154,46 @@ if args.verbose:
 test_dword_stat = np.isclose(ref_dword_stat, sim_dword_stat, args.rel_tol, args.abs_tol)
 if not np.all(test_dword_stat):
     print("Dataword summary statistics not matching")
+    failed_tests += 1
 
 ref_dword_hist, _ = np.histogram(ref_packets['data']['dataword'], bins=100)
 sim_dword_hist, _ = np.histogram(ref_packets['data']['dataword'], bins=100)
 test_dword_hist = np.isclose(ref_dword_hist, sim_dword_hist, args.rel_tol, args.abs_tol)
 if not np.all(test_dword_hist):
     print("Distribution (histogram) of dataword in data packets not matching")
+    failed_tests += 1
 
 ### Tests checking the electron and photon distribution in the energy segments
 print("\nChecking drift time, electron, and photon distributions in energy segments...")
 
 ## All three of these should be identical
+## Using stricter tolerances for np.isclose()
+## Not sure what is the best way to include different tolerances for different tests
+## without hard coding them
 test_dtime = np.isclose(ref_segments['t'], sim_segments['t'], 0.01, 10)
 if not np.all(test_dtime):
     print("Drift time distribution does not match")
+    failed_tests += 1
 
 test_nelec = np.isclose(ref_segments['n_electrons'], sim_segments['n_electrons'], 0.01, 10)
 if not np.all(test_nelec):
     print("Electron distribution does not match")
+    failed_tests += 1
 
 test_nphtn = np.isclose(ref_segments['n_photons'], sim_segments['n_photons'], 0.01, 10)
 if not np.all(test_nphtn):
     print("Photon distribution does not match")
+    failed_tests += 1
+
+#This variable is an input to the simulation and is read-only, so it better be identical
+test_dE = np.isclose(ref_segments['dE'], sim_segments['dE'], 0.001, 0)
+if not np.all(test_dE):
+    print("Deposited energy (dE) distribution does not match. This is really bad.")
+    failed_tests += 1
 
 t_end = time.time()
 t_elapse = t_end - t_start
 print("-------------------")
 print(f"Elapsed time: {t_elapse:.3f} s")
+print(f"Failed tests: {failed_tests}")
 print("Finished.")
