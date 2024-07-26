@@ -6,6 +6,8 @@ import numpy as np
 # import matplotlib.pyplot as plt
 import time
 
+np.set_printoptions(precision=3)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--ref_file', default=None, type=str, help='path of the larnd-sim reference simulation file to be considered')
 parser.add_argument('--sim_file', default=None, type=str, help='path of the larnd-sim output simulation file to be considered')
@@ -33,13 +35,24 @@ def get_packets(sim_file):
 
     return packets_dict
 
+def get_light_wvfms(sim_file):
+    larray_geom = np.array([1,1,1,1,1,1,0,0,0,0,0,0]*8*4)
+    lcm_events = [sim_file['light_wvfm'][i][larray_geom==1] for i in range(NUM_LIGHT_EVENTS)]
+    acl_events = [sim_file['light_wvfm'][i][larray_geom!=1] for i in range(NUM_LIGHT_EVENTS)]
+
+    waveforms = {}
+    waveforms['lcm'] = np.array(lcm_events).reshape((NUM_LIGHT_EVENTS * NUM_OPT_CH, SAMPLES))
+    waveforms['acl'] = np.array(acl_events).reshape((NUM_LIGHT_EVENTS * NUM_OPT_CH, SAMPLES))
+    return waveforms
+
 def describe(dataset):
     min = np.min(dataset)
     max = np.max(dataset)
     mean = np.mean(dataset)
     median = np.median(dataset)
     stdev = np.std(dataset)
-    return (min, max, median, mean, stdev)
+    return np.array([min, max, median, mean, stdev])
+    # return (min, max, median, mean, stdev)
 
 print("-----------------------------------------")
 print("Comparing larnd-sim simulation outputs...")
@@ -56,10 +69,24 @@ print("---------------")
 print("Opened files...")
 
 t_start = time.time()
+
+## Define some constants for the simulation (mostly light sim related)
+TS_CYCLE = 0.2e7
+BIT = 4
+PRE_NOISE = 65
+SAMPLES = 1000
+NUM_OPT_CH = 192 # Number of ACL or LCM optical channels
+NUM_LIGHT_EVENTS = 150 # Save processing time
+THRESHOLD = 50 # change this if you want to exclude events from noise analysis
+SAMPLE_RATE = 6.25e7
+
+## Get the various datasets for comparison
 ref_segments = ref_file['segments']
 sim_segments = sim_file['segments']
 ref_packets = get_packets(ref_file)
 sim_packets = get_packets(sim_file)
+ref_light_wvfms = get_light_wvfms(ref_file)
+sim_light_wvfms = get_light_wvfms(sim_file)
 
 failed_tests = 0
 
@@ -69,6 +96,8 @@ if args.break_file:
     sim_packets['sync']['timestamp'][74] = 9e9
     sim_packets['trig']['timestamp'][74] = 9e9
     sim_packets['time']['timestamp'][48] = 9e9
+
+### Charge/packets data tests
 
 if args.verbose:
     print("Packet length comparison (ref vs. sim):")
@@ -82,16 +111,25 @@ print("\nChecking 'timestamp' in data/trig/time/sync packets...")
 
 ## Data packet timestamps can vary slightly between runs
 ## Groups of packets come in bunches spaced out every 2e6 ticks
-TS_CYCLE = 0.2e7
 for c in range(0, 5):
     offset = c * TS_CYCLE
     ref_hist, _ = np.histogram(ref_packets['data']['timestamp']-offset, range=[0, 2000], bins=50)
     sim_hist, _ = np.histogram(sim_packets['data']['timestamp']-offset, range=[0, 2000], bins=50)
-    test = np.all(np.isclose(ref_hist, sim_hist, args.rel_tol, args.abs_tol))
-    if not test:
+    test = np.isclose(ref_hist, sim_hist, args.rel_tol, args.abs_tol)
+    if not np.all(test):
         print("Data packets timestamp distribution not matching")
         print(f"Difference in bins for range ({c*TS_CYCLE}, {(c+1)*TS_CYCLE})")
-        print(ref_hist - sim_hist)
+        abs_diff = (sim_hist - ref_hist)
+        rel_diff = (sim_hist - ref_hist) / ref_hist
+        print(abs_diff)
+        print(rel_diff)
+
+        fail_bins_idx = np.where(test == False)[0]
+        fail_bins_val = sim_hist[fail_bins_idx]
+        ref_bins_val = ref_hist[fail_bins_idx]
+        print("Failed indices:", fail_bins_idx)
+        print("Failed values :", fail_bins_val)
+        print("Reference val :", ref_bins_val)
         failed_tests += 1
 
 ref_data_hist, _ = np.histogram(ref_packets['data']['timestamp']%TS_CYCLE, range=[0, 2000], bins=100)
@@ -190,6 +228,65 @@ test_dE = np.isclose(ref_segments['dE'], sim_segments['dE'], 0.001, 0)
 if not np.all(test_dE):
     print("Deposited energy (dE) distribution does not match. This is really bad.")
     failed_tests += 1
+
+### Light waveform comparisons
+
+def noise_datasets(no_ped_adc):
+    # Onky keep waveforms with a sample above the threshold
+    max_abs_values = np.max(np.abs(no_ped_adc), axis=1)
+    adc_signal_indices = np.flatnonzero(max_abs_values > THRESHOLD)
+    adc_normal_pretrig = no_ped_adc[adc_signal_indices[0:3000], 0:PRE_NOISE]
+    # Normalize waveforms to their max value
+    norms = np.max(np.abs(adc_normal_pretrig), axis=1)
+    ns_wvfms = np.divide(adc_normal_pretrig, norms[:, np.newaxis])
+
+    # Calculate power spectra using FFT
+    freqs = np.fft.fftfreq(PRE_NOISE, 1/SAMPLE_RATE)
+    freqs = freqs[:PRE_NOISE//2] # Keep only positive frequencies
+    freq_matrix = np.tile(freqs, (len(adc_normal_pretrig),1))
+    frequencies = freq_matrix.flatten()
+    spectrum_arr = np.fft.fft(ns_wvfms, axis=1)
+    psds = np.abs(spectrum_arr[:,:PRE_NOISE//2])**2 / (PRE_NOISE * SAMPLE_RATE)
+    psds[:,1:] *= 2 # Double the power except for the DC component
+    power = psds.flatten()
+    p_dbfs = 20 * np.log10(power[power != 0]) #Apparently 'power' can have zeroes, mask them out for now
+    return adc_signal_indices, frequencies[power != 0], adc_normal_pretrig, p_dbfs
+
+def power_hist_max(adc_dataset):
+    adc_freq  = adc_dataset[1]
+    adc_pdbfs = adc_dataset[3]
+    hist, *edges = np.histogram2d(adc_freq[(adc_pdbfs)>-500]/1e6, adc_pdbfs[(adc_pdbfs)>-500], bins=32)
+    ycenters = (edges[1][:-1] + edges[1][1:]) / 2
+    xcenters = (edges[0][:-1] + edges[0][1:]) / 2
+    maxes = []
+    for array in hist:
+        maxes.append(np.where(array == max(array))[0][0])
+    max_bins = np.array([ycenters[i] for i in maxes])
+    return xcenters, max_bins
+
+ref_acl_dset = noise_datasets(-ref_light_wvfms['acl'])
+ref_lcm_dset = noise_datasets(-ref_light_wvfms['lcm'])
+sim_acl_dset = noise_datasets(-sim_light_wvfms['acl'])
+sim_lcm_dset = noise_datasets(-sim_light_wvfms['lcm'])
+
+ref_acl_max = power_hist_max(ref_acl_dset)
+ref_lcm_max = power_hist_max(ref_lcm_dset)
+sim_acl_max = power_hist_max(sim_acl_dset)
+sim_lcm_max = power_hist_max(sim_lcm_dset)
+
+### Tests checking the pre-trigger noise spectrum
+
+## Check if the max power is similar distributed for each light readout
+print("\nChecking pre-trigger noise max power...")
+test_acl_max = np.isclose(ref_acl_max[1], sim_acl_max[1], args.rel_tol, args.abs_tol)
+if not np.all(test_acl_max):
+    print("ArCLight noise max power spectrum does not match")
+    print(ref_acl_max[1] - sim_acl_max[1])
+
+test_lcm_max = np.isclose(ref_lcm_max[1], sim_lcm_max[1], args.rel_tol, args.abs_tol)
+if not np.all(test_lcm_max):
+    print("LCM noise max power spectrum does not match")
+    print(ref_lcm_max[1] - sim_lcm_max[1])
 
 t_end = time.time()
 t_elapse = t_end - t_start
