@@ -930,82 +930,87 @@ def run_simulation(input_filename,
                     pixel_index_map[i_, indices[0]] = indices[1]
                 RangePop()
 
-                RangePush("track_pixel_map")
-                # Mapping between unique pixel array and track array index
-                track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
-                TPB = 32
-                BPG = max(ceil(unique_pix.shape[0] / TPB),1)
-                detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
-                RangePop()
+                all_unique_pix = unique_pix
+                pix_per_batch = 2000
+                for start_pix in range(0, len(all_unique_pix), pix_per_batch):
+                    unique_pix = all_unique_pix[start_pix:start_pix+pix_per_batch]
 
-                RangePush("sum_pixels_signals")
-                # Here we combine the induced current on the same pixels by different tracks
-                TPB = (1,1,64)
-                BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
-                BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
-                BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
-                BPG = (BPG_X, BPG_Y, BPG_Z)
-                pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-                pixels_tracks_signals = cp.zeros((len(unique_pix),
-                                                  len(detector.TIME_TICKS),
-                                                  track_pixel_map.shape[1]))
-                overflow_flag = cp.zeros(len(unique_pix))
-                detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
-                                                  signals,
-                                                  track_starts,
-                                                  pixel_index_map,
-                                                  track_pixel_map,
-                                                  pixels_tracks_signals,
-                                                  overflow_flag)
-                if cp.any(overflow_flag):
-                    warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
-                                  + f"{detsim.MAX_TRACKS_PER_PIXEL}")
+                    RangePush("track_pixel_map")
+                    # Mapping between unique pixel array and track array index
+                    track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
+                    TPB = 32
+                    BPG = max(ceil(unique_pix.shape[0] / TPB),1)
+                    detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
+                    RangePop()
 
-                RangePop()
+                    RangePush("sum_pixels_signals")
+                    # Here we combine the induced current on the same pixels by different tracks
+                    TPB = (1,1,64)
+                    BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
+                    BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
+                    BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
+                    BPG = (BPG_X, BPG_Y, BPG_Z)
+                    pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
+                    pixels_tracks_signals = cp.zeros((len(unique_pix),
+                                                    len(detector.TIME_TICKS),
+                                                    track_pixel_map.shape[1]))
+                    overflow_flag = cp.zeros(len(unique_pix))
+                    detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
+                                                    signals,
+                                                    track_starts,
+                                                    pixel_index_map,
+                                                    track_pixel_map,
+                                                    pixels_tracks_signals,
+                                                    overflow_flag)
+                    if cp.any(overflow_flag):
+                        warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
+                                    + f"{detsim.MAX_TRACKS_PER_PIXEL}")
 
-                RangePush("get_adc_values")
-                # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-                time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
-                integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-                adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-                current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+                    RangePop()
 
-                TPB = 128
-                BPG = ceil(pixels_signals.shape[0] / TPB)
-                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                pixel_thresholds_lut.tpb = TPB
-                pixel_thresholds_lut.bpg = BPG
-                pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+                    RangePush("get_adc_values")
+                    # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
+                    time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
+                    integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
+                    adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
+                    current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
 
-                fee.get_adc_values[BPG, TPB](pixels_signals,
-                                             pixels_tracks_signals,
-                                             time_ticks,
-                                             integral_list,
-                                             adc_ticks_list,
-                                             0,
-                                             rng_states,
-                                             current_fractions,
-                                             pixel_thresholds)
+                    TPB = 128
+                    BPG = ceil(pixels_signals.shape[0] / TPB)
+                    rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                    pixel_thresholds_lut.tpb = TPB
+                    pixel_thresholds_lut.bpg = BPG
+                    pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
 
-                # get list of adc values
-                if pixel_gains_file is not None:
-                    pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                    gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                    adc_list = fee.digitize(integral_list, gain_list)
-                else:
-                    adc_list = fee.digitize(integral_list)
-                
-                adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
-                RangePop()
+                    fee.get_adc_values[BPG, TPB](pixels_signals,
+                                                pixels_tracks_signals,
+                                                time_ticks,
+                                                integral_list,
+                                                adc_ticks_list,
+                                                0,
+                                                rng_states,
+                                                current_fractions,
+                                                pixel_thresholds)
 
-                results_acc['event_id'].append(adc_event_ids)
-                results_acc['adc_tot'].append(adc_list)
-                results_acc['adc_tot_ticks'].append(adc_ticks_list)
-                results_acc['unique_pix'].append(unique_pix)
-                results_acc['current_fractions'].append(current_fractions)
-                #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
-                track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
-                results_acc['track_pixel_map'].append(track_pixel_map)
+                    # get list of adc values
+                    if pixel_gains_file is not None:
+                        pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
+                        gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                        adc_list = fee.digitize(integral_list, gain_list)
+                    else:
+                        adc_list = fee.digitize(integral_list)
+
+                    adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
+                    RangePop()
+
+                    results_acc['event_id'].append(adc_event_ids)
+                    results_acc['adc_tot'].append(adc_list)
+                    results_acc['adc_tot_ticks'].append(adc_ticks_list)
+                    results_acc['unique_pix'].append(unique_pix)
+                    results_acc['current_fractions'].append(current_fractions)
+                    #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+                    track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                    results_acc['track_pixel_map'].append(track_pixel_map)
 
                 # ~~~ Light detector response simulation ~~~
                 if light.LIGHT_SIMULATED:
