@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 # import matplotlib.pyplot as plt
 import time
+import sys
 
 np.set_printoptions(precision=3)
 
@@ -137,17 +138,25 @@ sim_data_hist, _ = np.histogram(sim_packets['data']['timestamp']%TS_CYCLE, range
 test_data_hist = np.all(np.isclose(ref_data_hist, sim_data_hist, args.rel_tol, args.abs_tol))
 
 ## Trigger and sync timestamps should be identical
-test_trig_time = ref_packets['trig']['timestamp'] == sim_packets['trig']['timestamp']
-if not np.all(test_trig_time):
-    print("Trigger packets timestamp distribution not matching")
-    print(f"Mismatched packets at {np.where(test_trig_time == False)}")
-    failed_tests += 1
+if not ref_packets['trig']['timestamp'].shape == sim_packets['trig']['timestamp'].shape:
+    print("Trigger packets shape do not match.")
+    failed_test +=1
+else:
+    test_trig_time = ref_packets['trig']['timestamp'] == sim_packets['trig']['timestamp']
+    if not np.all(test_trig_time):
+        print("Trigger packets timestamp distribution not matching")
+        print(f"Mismatched packets at {np.where(test_trig_time == False)}")
+        failed_tests += 1
 
-test_sync_time = ref_packets['sync']['timestamp'] == sim_packets['sync']['timestamp']
-if not np.all(test_sync_time):
-    print("Sync packets timestamp distribution not matching")
-    print(f"Mismatched packets at {np.where(test_sync_time == False)}")
-    failed_tests += 1
+if not ref_packets['sync']['timestamp'].shape == sim_packets['sync']['timestamp'].shape:
+    print("Sync packets shape do not match.")
+    failed_test +=1
+else:
+    test_sync_time = ref_packets['sync']['timestamp'] == sim_packets['sync']['timestamp']
+    if not np.all(test_sync_time):
+        print("Sync packets timestamp distribution not matching")
+        print(f"Mismatched packets at {np.where(test_sync_time == False)}")
+        failed_tests += 1
 
 ref_time_hist, _ = np.histogram(ref_packets['time']['timestamp'], bins=100)
 sim_time_hist, _ = np.histogram(sim_packets['time']['timestamp'], bins=100)
@@ -294,3 +303,8 @@ print("-------------------")
 print(f"Elapsed time: {t_elapse:.3f} s")
 print(f"Failed tests: {failed_tests}")
 print("Finished.")
+
+if failed_tests > 0:
+    sys.exit(121)
+else:
+    sys.exit(0)
