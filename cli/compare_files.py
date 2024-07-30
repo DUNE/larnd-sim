@@ -98,6 +98,27 @@ if args.break_file:
     sim_packets['trig']['timestamp'][74] = 9e9
     sim_packets['time']['timestamp'][48] = 9e9
 
+### Check if same number of spills
+
+ref_charge_spills = ref_packets['trig'].shape[0]
+sim_charge_spills = sim_packets['trig'].shape[0]
+ref_light_spills = ref_file['light_wvfm'].shape[0]
+sim_light_spills = sim_file['light_wvfm'].shape[0]
+
+if ref_charge_spills != sim_charge_spills:
+    print("Mismatched number of spills according to packets!")
+    failed_tests += 1
+
+if ref_light_spills != sim_light_spills:
+    print("Mismatched number of spills according to light waveforms!")
+    failed_tests += 1
+
+if sim_charge_spills != sim_light_spills:
+    print("Different number of spills from packets and light waveforms!")
+    failed_tests += 1
+
+total_spills = sim_light_spills
+print("Total spills:", total_spills)
 ### Charge/packets data tests
 
 if args.verbose:
@@ -182,7 +203,7 @@ if len(ref_iog_id) != len(sim_iog_id):
     print("io_groups:", sim_iog_id)
     failed_tests += 1
 else:
-    test_iog_count = np.isclose(ref_iog_count, sim_iog_count, args.rel_tol, args.abs_tol)
+    test_iog_count = np.isclose(ref_iog_count, sim_iog_count, 0.01, 0.0)
     if not np.all(test_iog_count):
         print("Distribution of io_groups not matching")
         print(ref_iog_count - sim_iog_count)
@@ -296,6 +317,53 @@ test_lcm_max = np.isclose(ref_lcm_max[1], sim_lcm_max[1], args.rel_tol, args.abs
 if not np.all(test_lcm_max):
     print("LCM noise max power spectrum does not match")
     print(ref_lcm_max[1] - sim_lcm_max[1])
+
+print("\nChecking distribution of largest peak/sample in select waveforms...")
+PEAK_MIN = -128
+channels = np.linspace(0, NUM_OPT_CH * 2, 12, endpoint=False, dtype=np.uint32)
+spills = np.linspace(0, total_spills, 12, endpoint=False, dtype=np.uint32)
+ref_light_wvfms = ref_file['light_wvfm']
+sim_light_wvfms = sim_file['light_wvfm']
+
+def find_corr_peak(wvfm, peak_adc, peak_idx, width):
+    idx_lo = peak_idx - width
+    idx_hi = peak_idx + width
+    wave_slice = wvfm[idx_lo:idx_hi]/4.0
+    threshold = PEAK_MIN / 2.0
+    return np.any(wave_slice < threshold)
+
+print("Looking at the following spills: ", spills)
+print("Looking at the following channels: ", channels)
+print("Peak/sample ADC threshold: ", PEAK_MIN)
+for sp in spills:
+    r_wave = ref_light_wvfms[sp]
+    s_wave = sim_light_wvfms[sp]
+    for ch in channels:
+        r_min_idx = np.argmin(r_wave[ch]/BIT)
+        r_min_val = np.min(r_wave[ch]/BIT)
+        s_min_idx = np.argmin(s_wave[ch]/BIT)
+        s_min_val = np.min(s_wave[ch]/BIT)
+
+        if (r_min_val > PEAK_MIN) or (s_min_val > PEAK_MIN):
+            continue
+
+        test_ref_peak = find_corr_peak(s_wave[ch], r_min_val, r_min_idx, 10)
+        test_sim_peak = find_corr_peak(r_wave[ch], s_min_val, s_min_idx, 10)
+
+        if not test_ref_peak:
+            print("Peak in reference file missing in simulation file. Values for reference peak:")
+            print(f"Spill: {sp}, Channel: {ch}, Sample: {r_min_idx}, ADC: {r_min_val}")
+            failed_tests += 1
+
+        if not test_sim_peak:
+            print("Peak in simulation file missing in reference file. Values for simulation peak:")
+            print(f"Spill: {sp}, Channel: {ch}, Sample: {s_min_idx}, ADC: {s_min_val}")
+            failed_tests += 1
+
+        # if (r_min_val < peak_min) and (s_min_val < peak_min):
+            # diff = np.abs(r_min_idx - s_min_idx)
+            # if diff > 5:
+                # print(i, ch, diff)
 
 t_end = time.time()
 t_elapse = t_end - t_start
