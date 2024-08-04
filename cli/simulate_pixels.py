@@ -803,18 +803,14 @@ def run_simulation(input_filename,
         i_trig = 0
         sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) +  (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
-        for batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
+        # Batching is carried out by simulating detector response with selected segments from X number of tpcs per event
+        # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
+        for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
             i_batch = i_batch+1
-            # grab only tracks from current batch
+            # Grab segments from the current batch
+            # If there are no segments in the batch, we still check if we need to generate null light signals
             track_subset = tracks[batch_mask]
-            # This is safe as long as you never want to simulate different event_ids (spills) in 
-            # the same batch.
-            if len(track_subset["event_id"]):
-                ievd = track_subset["event_id"][0]
-            else:
-                # If there are no tracks post-masking then just skip.
-                continue
             evt_tracks = track_subset
             #first_trk_id = np.argmax(batch_mask) # first track in batch
 
