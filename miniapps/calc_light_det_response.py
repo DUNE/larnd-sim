@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-NITER = 10
-DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev/hackathon2024/miniapp-inputs/calc_light_det_response.pkl'
-
 import argparse
 from functools import partial
 from math import ceil
+import os
 import pickle
 
 from pynvjitlink import patch
@@ -18,6 +16,9 @@ from larndsim import light_sim
 
 # flush on every print
 print = partial(print, flush=True)
+
+NITER = int(os.getenv('LARNDSIM_MINIAPP_NUM_RUNS', '10'))
+DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev/hackathon2024/miniapp-inputs/calc_light_det_response.pkl'
 
 
 def main():
