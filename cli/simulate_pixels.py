@@ -923,7 +923,7 @@ def run_simulation(input_filename,
                 if os.getenv('LARNDSIM_DUMP4MINIAPP_TRACKS_CURRENT_MC'):
                     with open('tracks_current_mc.pkl', 'wb') as f:
                         d = {'neighboring_pixels': np.array(neighboring_pixels.get()),
-                             'selected_tracks': np.array(selected_tracks.get()),
+                             'selected_tracks': selected_tracks,
                              'max_length': cp.asnumpy(max_length)[0]}
                         pickle.dump(d, f)
                     return
@@ -994,11 +994,11 @@ def run_simulation(input_filename,
                 if os.getenv('LARNDSIM_DUMP4MINIAPP_GET_ADC_VALUES'):
                     with open('get_adc_values.pkl', 'wb') as f:
                         d = {'pixels_signals': np.array(pixels_signals.get()),
-                             'pixels_track_signals': np.array(pixels_track_signals.get()),
+                             'pixels_tracks_signals': np.array(pixels_tracks_signals.get()),
                              'nevents': len(unique_eventIDs),
                              'drift_window_usec': detector.TIME_INTERVAL[1],
-                             # 'max_tracks_per_pixel': detsim.MAX_TRACKS_PER_PIXEL,
-                             'max_adc_values': fee.MAX_ADC_VALUES
+                             'max_tracks_per_pixel': detsim.MAX_TRACKS_PER_PIXEL,
+                             'max_adc_values': fee.MAX_ADC_VALUES,
                              'unique_pix': unique_pix}
                         pickle.dump(d, f)
                     return
@@ -1096,7 +1096,7 @@ def run_simulation(input_filename,
 
                     if os.getenv('LARNDSIM_DUMP4MINIAPP_CALC_LIGHT_DET_RESPONSE'):
                         with open('calc_light_det_response.pkl', 'wb') as f:
-                            d = {'light_sample_inc_disc:' np.array(light_sample_inc_disc.get()),
+                            d = {'light_sample_inc_disc': np.array(light_sample_inc_disc.get()),
                                  'light_sample_inc_scint_true_track_id': np.array(light_sample_inc_scint_true_track_id.get()),
                                  'light_sample_inc_scint_true_photons': np.array(light_sample_inc_scint_true_photons.get())}
                             pickle.dump(d, f)
