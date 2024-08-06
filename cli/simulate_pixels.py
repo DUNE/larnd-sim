@@ -922,9 +922,10 @@ def run_simulation(input_filename,
 
                 if os.getenv('LARNDSIM_DUMP4MINIAPP_TRACKS_CURRENT_MC'):
                     with open('tracks_current_mc.pkl', 'wb') as f:
-                        pickle.dump((np.array(neighboring_pixels.get()),
-                                     np.array(selected_tracks.get())),
-                                    f)
+                        d = {'neighboring_pixels': np.array(neighboring_pixels.get()),
+                             'selected_tracks': np.array(selected_tracks.get()),
+                             'max_length': cp.asnumpy(max_length)[0]}
+                        pickle.dump(d, f)
                     return
 
                 RangePush("tracks_current")
@@ -983,20 +984,25 @@ def run_simulation(input_filename,
 
                 RangePop()
 
-                if os.getenv('LARNDSIM_DUMP4MINIAPP_GET_ADC_VALUES'):
-                    with open('get_adc_values.pkl', 'wb') as f:
-                        pickle.dump((np.array(pixels_signals.get()),
-                                     np.array(pixels_track_signals.get())),
-                                    f)
-                    return
-
-
                 RangePush("get_adc_values")
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
                 integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
                 adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
                 current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+
+                if os.getenv('LARNDSIM_DUMP4MINIAPP_GET_ADC_VALUES'):
+                    with open('get_adc_values.pkl', 'wb') as f:
+                        d = {'pixels_signals': np.array(pixels_signals.get()),
+                             'pixels_track_signals': np.array(pixels_track_signals.get()),
+                             'nevents': len(unique_eventIDs),
+                             'drift_window_usec': detector.TIME_INTERVAL[1],
+                             # 'max_tracks_per_pixel': detsim.MAX_TRACKS_PER_PIXEL,
+                             'max_adc_values': fee.MAX_ADC_VALUES
+                             'unique_pix': unique_pix}
+                        pickle.dump(d, f)
+                    return
+
 
                 TPB = 128
                 BPG = ceil(pixels_signals.shape[0] / TPB)
@@ -1090,10 +1096,10 @@ def run_simulation(input_filename,
 
                     if os.getenv('LARNDSIM_DUMP4MINIAPP_CALC_LIGHT_DET_RESPONSE'):
                         with open('calc_light_det_response.pkl', 'wb') as f:
-                            pickle.dump((np.array(light_sample_inc_disc.get()),
-                                         np.array(light_sample_inc_scint_true_track_id.get()),
-                                         np.array(light_sample_inc_scint_true_photons.get())),
-                                        f)
+                            d = {'light_sample_inc_disc:' np.array(light_sample_inc_disc.get()),
+                                 'light_sample_inc_scint_true_track_id': np.array(light_sample_inc_scint_true_track_id.get()),
+                                 'light_sample_inc_scint_true_photons': np.array(light_sample_inc_scint_true_photons.get())}
+                            pickle.dump(d, f)
                         return
 
                     RangePush("sim_light_det_response")
