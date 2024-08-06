@@ -8,6 +8,7 @@ import numpy as np
 patch.patch_numba_linker()
 
 from math import ceil
+import os
 from time import time
 import warnings
 from collections import defaultdict
@@ -17,6 +18,12 @@ import numpy.lib.recfunctions as rfn
 
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
+
+if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
+    # Disable memory pool for device memory (GPU):
+    cp.cuda.set_allocator(None)
+    # Disable memory pool for pinned memory (CPU):
+    cp.cuda.set_pinned_memory_allocator(None)
 
 import fire
 import h5py
@@ -33,8 +40,6 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
-
-import os
 
 SEED = int(time())
 
