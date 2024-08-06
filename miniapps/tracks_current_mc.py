@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 NITER = 10
-DEFAULT_INPUT_FILE = 'tracks_current_mc.pkl'
+DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev/hackathon2024/miniapp-inputs/tracks_current_mc.pkl'
 
 from functools import partial
 from math import ceil

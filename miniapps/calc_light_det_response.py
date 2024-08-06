@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 NITER = 10
-DEFAULT_INPUT_FILE = 'calc_light_det_response.pkl'
+DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev/hackathon2024/miniapp-inputs/calc_light_det_response.pkl'
 
 import argparse
 from functools import partial

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 NITER = 10
-DEFAULT_INPUT_FILE = 'get_adc_values.pkl'
+DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev/hackathon2024/miniapp-inputs/get_adc_values.pkl'
 
 from functools import partial
 from math import ceil
