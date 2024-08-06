@@ -2,6 +2,11 @@
 """
 Command-line interface to larnd-sim module.
 """
+from numba import cuda
+from pynvjitlink import patch
+import numpy as np
+patch.patch_numba_linker()
+
 from math import ceil
 from time import time
 import warnings
