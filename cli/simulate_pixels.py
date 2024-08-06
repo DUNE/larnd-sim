@@ -2,6 +2,9 @@
 """
 Command-line interface to larnd-sim module.
 """
+
+import pickle
+
 from numba import cuda
 from pynvjitlink import patch
 import numpy as np
@@ -917,6 +920,13 @@ def run_simulation(input_filename,
                 detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
                 RangePop()
 
+                if os.getenv('LARNDSIM_DUMP4MINIAPP_TRACKS_CURRENT_MC'):
+                    with open('tracks_current_mc.pkl', 'wb') as f:
+                        pickle.dump((np.array(neighboring_pixels.get()),
+                                     np.array(selected_tracks.get())),
+                                    f)
+                    return
+
                 RangePush("tracks_current")
                 # Here we calculate the induced current on each pixel
                 signals = cp.zeros((selected_tracks.shape[0],
@@ -972,6 +982,14 @@ def run_simulation(input_filename,
                                   + f"{detsim.MAX_TRACKS_PER_PIXEL}")
 
                 RangePop()
+
+                if os.getenv('LARNDSIM_DUMP4MINIAPP_GET_ADC_VALUES'):
+                    with open('get_adc_values.pkl', 'wb') as f:
+                        pickle.dump((np.array(pixels_signals.get()),
+                                     np.array(pixels_track_signals.get())),
+                                    f)
+                    return
+
 
                 RangePush("get_adc_values")
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
@@ -1069,6 +1087,14 @@ def run_simulation(input_filename,
                                                          seed=rand_seed+ievd+itrk, rng_states=rng_states)
                     light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                     RangePop()
+
+                    if os.getenv('LARNDSIM_DUMP4MINIAPP_CALC_LIGHT_DET_RESPONSE'):
+                        with open('calc_light_det_response.pkl', 'wb') as f:
+                            pickle.dump((np.array(light_sample_inc_disc.get()),
+                                         np.array(light_sample_inc_scint_true_track_id.get()),
+                                         np.array(light_sample_inc_scint_true_photons.get())),
+                                        f)
+                        return
 
                     RangePush("sim_light_det_response")
                     light_response = cp.zeros_like(light_sample_inc)
