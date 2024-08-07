@@ -11,6 +11,7 @@ patch.patch_numba_linker()
 
 import cupy as cp
 from numba.cuda.random import create_xoroshiro128p_states
+import numpy as np
 
 from larndsim import fee
 from larndsim.util import CudaDict
@@ -25,6 +26,7 @@ DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input-file', default=DEFAULT_INPUT_FILE)
+    ap.add_argument('--output-file')
     args = ap.parse_args()
 
     print('Loading input... ', end='')
@@ -38,23 +40,29 @@ def main():
     unique_pix = cp.array(d['unique_pix'])
     print('done')
 
-    print('Initializing output... ', end='')
+    print('Initializing constants... ', end='')
     time_ticks = cp.linspace(0, d['nevents'] * d['drift_window_usec'], pixels_signals.shape[1]+1)
-    integral_list = cp.zeros((pixels_signals.shape[0], d['max_adc_values']))
-    adc_ticks_list = cp.zeros((pixels_signals.shape[0], d['max_adc_values']))
-    current_fractions = cp.zeros((pixels_signals.shape[0], d['max_adc_values'],
-                                  d['max_tracks_per_pixel']))
-    print('done')
-
-    print('Running kernel... ', end='')
-    TPB = 128
-    BPG = ceil(pixels_signals.shape[0] / TPB)
-    rng_states = create_xoroshiro128p_states(int(TPB * BPG), seed=321)
     pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
     pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+    print('done')
+
+    TPB = 128
+    BPG = ceil(pixels_signals.shape[0] / TPB)
+
+    rng_states = create_xoroshiro128p_states(int(TPB * BPG), seed=321)
 
     for i in range(NITER):
-        print(f'{i} ', end='')
+        print(f'===== Iteration {i}')
+
+        print('Initializing output... ', end='')
+        integral_list = cp.zeros((pixels_signals.shape[0], d['max_adc_values']))
+        adc_ticks_list = cp.zeros((pixels_signals.shape[0], d['max_adc_values']))
+        current_fractions = cp.zeros((pixels_signals.shape[0], d['max_adc_values'],
+                                      d['max_tracks_per_pixel']))
+        print('done')
+
+
+        print('Running kernel... ', end='')
         fee.get_adc_values[BPG, TPB](pixels_signals,
                                      pixels_tracks_signals,
                                      time_ticks,
@@ -64,7 +72,16 @@ def main():
                                      rng_states,
                                      current_fractions,
                                      pixel_thresholds)
-    print('done')
+
+        if args.output_file and i == 0:
+            print('Writing output... ', end='')
+            out = {'integral_list': np.array(integral_list.get()),
+                   'adc_ticks_list': np.array(adc_ticks_list.get()),
+                   'current_fractions': np.array(current_fractions.get())}
+            with open(args.output_file, 'wb') as f:
+                pickle.dump(out, f)
+            print('done')
+
 
 if __name__ == '__main__':
     main()

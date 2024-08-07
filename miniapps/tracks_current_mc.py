@@ -26,6 +26,7 @@ DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input-file', default=DEFAULT_INPUT_FILE)
+    ap.add_argument('--output-file')
     args = ap.parse_args()
 
     print('Loading input... ', end='')
@@ -40,26 +41,35 @@ def main():
     max_length = d['max_length']
     print('done')
 
-    print('Initializing output... ', end='')
-    signals = cp.zeros((selected_tracks.shape[0],
-                        neighboring_pixels.shape[1],
-                        max_length), dtype=np.float32)
-    print('done')
-
-    print('Running kernel... ', end='')
     TPB = (1,1,64)
-    BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
-    BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
-    BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
+    BPG_X = max(ceil(selected_tracks.shape[0] / TPB[0]),1)
+    BPG_Y = max(ceil(neighboring_pixels.shape[1] / TPB[1]),1)
+    BPG_Z = max(ceil(max_length / TPB[2]),1)
     BPG = (BPG_X, BPG_Y, BPG_Z)
     N = int(np.prod(TPB[:2]) * np.prod(BPG[:2]))
     rng_states = create_xoroshiro128p_states(N, seed=321)
     # rng_states = device_array(N, dtype=rng_states_.dtype)
     # rng_states[:] = rng_states_
+
     for i in range(NITER):
-        print(f'{i} ', end='')
+        print(f'===== Iteration {i}')
+
+        print('Initializing output... ', end='')
+        signals = cp.zeros((selected_tracks.shape[0],
+                            neighboring_pixels.shape[1],
+                            max_length), dtype=np.float32)
+        print('done')
+
+        print('Running kernel... ', end='')
         detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
-    print('done')
+        print('done')
+
+        if args.output_file and i == 0:
+            print('Writing output... ', end='')
+            out = {'signals': np.array(signals.get())}
+            with open(args.output_file, 'wb') as f:
+                pickle.dump(out, f)
+            print('done')
 
 if __name__ == '__main__':
     main()

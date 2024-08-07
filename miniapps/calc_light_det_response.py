@@ -10,6 +10,7 @@ from pynvjitlink import patch
 patch.patch_numba_linker()
 
 import cupy as cp
+import numpy as np
 
 from larndsim import light_sim
 
@@ -24,6 +25,7 @@ DEFAULT_INPUT_FILE = '/global/cfs/cdirs/dune/www/data/2x2/simulation/mkramer_dev
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input-file', default=DEFAULT_INPUT_FILE)
+    ap.add_argument('--output-file')
     args = ap.parse_args()
 
     print('Loading input... ', end='')
@@ -37,22 +39,34 @@ def main():
     light_sample_inc_scint_true_photons = cp.array(d['light_sample_inc_scint_true_photons'])
     print('done')
 
-    print('Initializing output... ', end='')
-    light_response = cp.zeros_like(light_sample_inc_disc)
-    light_response_true_track_id = cp.full_like(light_sample_inc_scint_true_track_id, -1)
-    light_response_true_photons = cp.zeros_like(light_sample_inc_scint_true_photons)
-    print('done')
-
-    print('Running kernel... ', end='')
     TPB = (1,64)
     BPG = (max(ceil(light_sample_inc_disc.shape[0] / TPB[0]),1),
            max(ceil(light_sample_inc_disc.shape[1] / TPB[1]),1))
+
     for i in range(NITER):
-        print(f'{i} ', end='')
+        print(f'===== Iteration {i}')
+
+        print('Initializing output... ', end='')
+        light_response = cp.zeros_like(light_sample_inc_disc)
+        light_response_true_track_id = cp.full_like(light_sample_inc_scint_true_track_id, -1)
+        light_response_true_photons = cp.zeros_like(light_sample_inc_scint_true_photons)
+        print('done')
+
+        print('Running kernel... ', end='')
         light_sim.calc_light_detector_response[BPG, TPB](
             light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
             light_response, light_response_true_track_id, light_response_true_photons)
-    print('done')
+        print('done')
+
+        if args.output_file and i == 0:
+            print('Writing output... ', end='')
+            out = {'light_response': np.array(light_response.get()),
+                   'light_response_true_track_id': np.array(light_response_true_track_id.get()),
+                   'light_response_true_photons': np.array(light_response_true_photons.get())}
+            with open(args.output_file, 'wb') as f:
+                pickle.dump(out, f)
+            print('done')
+
 
 if __name__ == '__main__':
     main()
