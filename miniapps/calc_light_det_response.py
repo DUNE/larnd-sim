@@ -12,7 +12,8 @@ patch.patch_numba_linker()
 import cupy as cp
 import numpy as np
 
-from larndsim import light_sim
+from larndsim import consts, light_sim
+from larndsim.config import get_config
 
 
 # flush on every print
@@ -26,7 +27,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input-file', default=DEFAULT_INPUT_FILE)
     ap.add_argument('--output-file')
+    ap.add_argument('--config', default='2x2')
     args = ap.parse_args()
+
+    cfg = get_config(args.config)
+    consts.load_properties(cfg['DET_PROPERTIES'],
+                           cfg['PIXEL_LAYOUT'],
+                           cfg['SIM_PROPERTIES'])
 
     print('Loading input... ', end='')
     with open(args.input_file, 'rb') as f:

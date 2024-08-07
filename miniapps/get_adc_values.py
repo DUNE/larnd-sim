@@ -13,8 +13,9 @@ import cupy as cp
 from numba.cuda.random import create_xoroshiro128p_states
 import numpy as np
 
-from larndsim import fee
+from larndsim import consts, fee
 from larndsim.util import CudaDict
+from larndsim.config import get_config
 
 # flush on every print
 print = partial(print, flush=True)
@@ -27,7 +28,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input-file', default=DEFAULT_INPUT_FILE)
     ap.add_argument('--output-file')
+    ap.add_argument('--config', default='2x2')
     args = ap.parse_args()
+
+    cfg = get_config(args.config)
+    consts.load_properties(cfg['DET_PROPERTIES'],
+                           cfg['PIXEL_LAYOUT'],
+                           cfg['SIM_PROPERTIES'])
 
     print('Loading input... ', end='')
     with open(args.input_file, 'rb') as f:
