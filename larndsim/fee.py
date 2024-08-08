@@ -53,9 +53,9 @@ GAIN = 4 * mV / (1e3 * e)
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
 BUFFER_RISETIME = 0.100
 #: Common-mode voltage in :math:`mV`
-V_CM = 288 * mV
+V_CM = 478 * mV
 #: Reference voltage in :math:`mV`
-V_REF = 1300 * mV
+V_REF = 1568 * mV
 #: Pedestal voltage in :math:`mV`
 V_PEDESTAL = 580 * mV
 #: Number of ADC counts
