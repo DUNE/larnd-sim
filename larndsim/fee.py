@@ -514,7 +514,10 @@ def digitize(integral_list, gain=GAIN):
 
     return adcs
 
-@cuda.jit
+# @cuda.jit
+# @cuda.jit(lineinfo=True)
+# @cuda.jit(max_registers=16, fastmath=True)
+@cuda.jit(max_registers=64)
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
                    time_ticks,
@@ -567,6 +570,7 @@ def get_adc_values(pixels_signals,
                 conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
                 for jc in range(conv_start, min(ic+1, curre.shape[0])):
                     w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                    # w = exp(np.float32((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME)) * (1 - exp(np.float32(-detector.TIME_SAMPLING/BUFFER_RISETIME)))
                     q += curre[jc] * detector.TIME_SAMPLING * w
 
                     for itrk in range(current_fractions.shape[2]):
@@ -599,6 +603,7 @@ def get_adc_values(pixels_signals,
                         conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
                         for jc in range(conv_start, min(ic+1, curre.shape[0])):
                             w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
+                            # w = exp(np.float32((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME)) * (1 - exp(np.float32(-detector.TIME_SAMPLING/BUFFER_RISETIME)))
                             q += curre[jc] * detector.TIME_SAMPLING * w
 
                             for itrk in range(current_fractions.shape[2]):
