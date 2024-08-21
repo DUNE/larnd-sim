@@ -2,7 +2,16 @@
 """
 Command-line interface to larnd-sim module.
 """
+
+import pickle
+
+from numba import cuda
+from pynvjitlink import patch
+import numpy as np
+patch.patch_numba_linker()
+
 from math import ceil
+import os
 from time import time
 import warnings
 from collections import defaultdict
@@ -12,6 +21,12 @@ import numpy.lib.recfunctions as rfn
 
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
+
+if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
+    # Disable memory pool for device memory (GPU):
+    cp.cuda.set_allocator(None)
+    # Disable memory pool for pinned memory (CPU):
+    cp.cuda.set_pinned_memory_allocator(None)
 
 import fire
 import h5py
@@ -28,8 +43,6 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
-
-import os
 
 SEED = int(time())
 
@@ -908,6 +921,14 @@ def run_simulation(input_filename,
                 detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
                 RangePop()
 
+                if os.getenv('LARNDSIM_DUMP4MINIAPP_TRACKS_CURRENT_MC'):
+                    with open('tracks_current_mc.pkl', 'wb') as f:
+                        d = {'neighboring_pixels': np.array(neighboring_pixels.get()),
+                             'selected_tracks': selected_tracks,
+                             'max_length': cp.asnumpy(max_length)[0]}
+                        pickle.dump(d, f)
+                    return
+
                 RangePush("tracks_current")
                 # Here we calculate the induced current on each pixel
                 signals = cp.zeros((selected_tracks.shape[0],
@@ -973,6 +994,7 @@ def run_simulation(input_filename,
 
                 # TPB = 128
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256] 
+
                 BPG = ceil(pixels_signals.shape[0] / TPB)
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 TPB_lut = 128 # supposed to be 128
@@ -1063,6 +1085,14 @@ def run_simulation(input_filename,
                                                          seed=rand_seed+ievd+itrk, rng_states=rng_states)
                     light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                     RangePop()
+
+                    if os.getenv('LARNDSIM_DUMP4MINIAPP_CALC_LIGHT_DET_RESPONSE'):
+                        with open('calc_light_det_response.pkl', 'wb') as f:
+                            d = {'light_sample_inc_disc': np.array(light_sample_inc_disc.get()),
+                                 'light_sample_inc_scint_true_track_id': np.array(light_sample_inc_scint_true_track_id.get()),
+                                 'light_sample_inc_scint_true_photons': np.array(light_sample_inc_scint_true_photons.get())}
+                            pickle.dump(d, f)
+                        return
 
                     RangePush("sim_light_det_response")
                     light_response = cp.zeros_like(light_sample_inc)
