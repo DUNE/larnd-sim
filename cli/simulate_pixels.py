@@ -999,8 +999,8 @@ def run_simulation(input_filename,
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)               
-                pixel_thresholds_lut.tpb = TPB
-                pixel_thresholds_lut.bpg = BPG
+                pixel_thresholds_lut.tpb = TPB_lut
+                pixel_thresholds_lut.bpg = BPG_lut
                 pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
 
                 fee.get_adc_values[BPG, TPB](pixels_signals,
