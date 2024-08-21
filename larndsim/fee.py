@@ -515,7 +515,8 @@ def digitize(integral_list, gain=GAIN):
     return adcs
 
 # @cuda.jit
-#@cuda.jit(lineinfo=True)
+# @cuda.jit(lineinfo=True)
+# @cuda.jit(max_registers=16, fastmath=True)
 @cuda.jit(max_registers=64)
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
