@@ -971,9 +971,12 @@ def run_simulation(input_filename,
                 adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
                 current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
 
-                TPB = 128
+                # TPB = 128
+                TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256] 
                 BPG = ceil(pixels_signals.shape[0] / TPB)
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                TPB_lut = 128 # supposed to be 128
+                BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)               
                 pixel_thresholds_lut.tpb = TPB
                 pixel_thresholds_lut.bpg = BPG
                 pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
