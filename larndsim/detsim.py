@@ -258,7 +258,8 @@ def overlapping_segment(x, y, start, end, radius):
 
     return new_start, new_end
 
-@cuda.jit
+# @cuda.jit
+@cuda.jit(max_registers=128,  fastmath=True)
 def tracks_current_mc(signals, pixels, tracks, response, rng_states):
     """
     This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
