@@ -815,6 +815,7 @@ def run_simulation(input_filename,
         trajectory_ids_arr = cp.asarray(trajectory_ids)
 
         # We divide the sample in portions that can be processed by the GPU
+        is_first_batch = True
         is_new_event = True
         event_id_buffer = -1
         logger.start()
@@ -827,6 +828,12 @@ def run_simulation(input_filename,
         # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
         for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
+            if is_first_batch:
+                this_ievd = ievd
+            if this_ievd != ievd:
+                is_new_event = True
+                this_ievd = ievd
+                
             i_batch = i_batch+1
             # Grab segments from the current batch
             # If there are no segments in the batch, we still check if we need to generate null light signals
@@ -850,8 +857,9 @@ def run_simulation(input_filename,
                         fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
                         sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
-                if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
+                if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or (i_mod == -1 and is_new_event)):
                     fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+                    is_new_event = False
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
@@ -1209,7 +1217,7 @@ def run_simulation(input_filename,
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
     # once mod2mod variation is enabled, the light threshold triggering does not work properly
     # compare the light trigger between different module and digitize afterwards should solve the issue
-    if light.LIGHT_TRIG_MODE == 1:
+    if light.LIGHT_TRIG_MODE == 1 and light.LIGHT_SIMULATED:
         light_event_id = np.unique(localSpillIDs) if sim.IS_SPILL_SIM else vertices['event_id']
         light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
         light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
