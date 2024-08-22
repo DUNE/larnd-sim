@@ -309,43 +309,49 @@ def sipm_response_model(idet, time_tick):
         # normalize to 1
         impulse /=  light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
         return impulse
-            
 
 @cuda.jit(fastmath=True)
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
+def calc_light_detector_response(
+    light_sample_inc,
+    light_sample_inc_true_track_id,
+    light_sample_inc_true_photons,
+    light_response,
+    light_response_true_track_id,
+    light_response_true_photons
+):
     """
-    Simulates the SiPM reponse and digit
-    
+    Simulates the SiPM response and digit
+
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
         light_response(array): shape `(ndet, ntick)`, ADC value at each time tick
     """
-    idet,itick = cuda.grid(2)
+    idet, itick, ticks_backward = cuda.grid(3)
 
-    if idet < light_sample_inc.shape[0]:
-        if itick < light_sample_inc.shape[1]:
-            conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
-            
-            for jtick in range(max(itick - conv_ticks, 0), itick+1):
-                tick_weight = sipm_response_model(idet, itick-jtick)
-                light_response[idet,itick] += light.LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
-                    
-                # loop over convolution tick truth
-                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                    if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
-                        break
-                        
-                    if abs(tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]) < light.MC_TRUTH_THRESHOLD:
-                        continue
+    conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0]) / light.LIGHT_TICK_SIZE)
 
-                    # loop over current tick truth
-                    for jtrue in range(light_response_true_track_id.shape[-1]):
-                        # apply convolution if convolution tick matches or if available truth slot
-                        if light_sample_inc_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,itick,itrue] or light_sample_inc_true_track_id[idet,itick,jtrue] == -1:
-                            light_response_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,itick,itrue]
-                            light_response_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
-                            break
-                
+    if idet < light_sample_inc.shape[0] and itick < light_sample_inc.shape[1] and ticks_backward < min(conv_ticks, itick):
+        jtick = itick - ticks_backward
+        tick_weight = sipm_response_model(idet, itick - jtick)
+        cuda.atomic.add(light_response,
+                        (idet, itick),
+                        light.LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet, jtick])
+
+        # loop over convolution tick truth
+        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+            if light_sample_inc_true_track_id[idet, jtick, itrue] == -1:
+                break
+            if abs(tick_weight * light_sample_inc_true_photons[idet, jtick, itrue]) < light.MC_TRUTH_THRESHOLD:
+                continue
+            # loop over current tick truth
+            for jtrue in range(light_response_true_track_id.shape[-1]):
+                # apply convolution if convolution tick matches or if available truth slot
+                if light_sample_inc_true_track_id[idet, itick, jtrue] == light_sample_inc_true_track_id[idet, itick, itrue] or light_sample_inc_true_track_id[idet, itick, jtrue] == -1:
+                    light_response_true_track_id[idet, itick, jtrue] = light_sample_inc_true_track_id[idet, itick, itrue]
+                    cuda.atomic.add(light_response_true_photons,
+                                    (idet, itick, jtrue),
+                                    tick_weight * light_sample_inc_true_photons[idet, jtick, itrue])
+                    break
 
 def gen_light_detector_noise(shape, light_det_noise):
     """
