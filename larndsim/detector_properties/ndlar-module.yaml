@@ -256,5 +256,6 @@ light_simulated: 0
 #light_trig_window: [0.9, 1.66] # us
 ## TODO: light_digit_sample_spacing: ?
 #light_nbit: 10
-#light_trig_mode: 0
+# The triggers are forwarded regardless of whether light is simulated.
+light_trig_mode: 1
 #lut_vox_div: [14, 26, 8]

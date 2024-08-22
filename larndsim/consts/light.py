@@ -170,3 +170,5 @@ def set_light_properties(detprop_file):
 
     except KeyError:
         LIGHT_SIMULATED = False
+        LIGHT_TRIG_MODE = int(detprop.get('light_trig_mode', LIGHT_TRIG_MODE))
+        assert LIGHT_TRIG_MODE in (0,1)
