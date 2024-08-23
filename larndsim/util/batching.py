@@ -64,4 +64,4 @@ class TPCBatcher(TrackSegmentBatcher):
         mask = mask & tpc_mask
         self._simulated = self._simulated | mask
 
-        return mask
+        return self._events[self._curr_event], mask
