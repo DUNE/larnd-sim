@@ -138,7 +138,6 @@ def export_to_hdf5(event_id_list,
                    traj_ids,
                    filename,
                    event_start_times,
-                   is_first_batch,
                    light_trigger_times=None,
                    light_trigger_event_id=None,
                    light_trigger_modules=None,
@@ -157,7 +156,6 @@ def export_to_hdf5(event_id_list,
             to each pixel
         filename (str): filename of HDF5 output file
         event_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
-        is_first_batch (bool): `True` if this is the first batch to save to the file
         light_trigger_times (array): 1D array of light trigger timestamps (relative to event t0) [in microseconds]
         light_trigger_event_id (array): 1D array of event id for each light trigger
         light_trigger_modules (array): 1D array of module id for each light trigger
@@ -175,19 +173,6 @@ def export_to_hdf5(event_id_list,
     packets_mc_trk = []
     packets_mc_trj = []
     packets_frac = []
-
-    #if is_first_batch:
-    #    for io_group in io_groups:
-    #        packets.append(TimestampPacket(timestamp=0))
-    #        packets[-1].chip_key = Key(io_group,0,0)
-    #        packets_mc_evt.append([-1])
-    #        packets_mc_trk.append([-1] * track_ids.shape[1])
-    #        packets_frac.append([0] * current_fractions.shape[2])
-
-    #        packets.append(SyncPacket(sync_type=b'S', timestamp=0, io_group=io_group))
-    #        packets_mc_evt.append([-1])
-    #        packets_mc_trk.append([-1] * track_ids.shape[1])
-    #        packets_frac.append([0] * current_fractions.shape[2])
 
     packets_mc_ds = []
     last_event = -1
