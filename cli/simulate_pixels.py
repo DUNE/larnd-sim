@@ -710,8 +710,12 @@ def run_simulation(input_filename,
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
             n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
-            light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                     dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+            if light.LIGHT_TRIG_MODE == 0:
+                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f2'),('t0_det','f2')])
+            else: # light.LIGHT_TRIG_MODE == 1
+                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f2')])
             light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
             track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 

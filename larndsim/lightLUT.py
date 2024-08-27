@@ -109,8 +109,9 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
             # Calls visibility data for the voxel
             vis_dat = lut_vox['vis']
 
-            # Calls T1 data for the voxel
-            T1_dat = lut_vox['t0']
+            if light.LIGHT_TRIG_MODE == 0:
+                # Calls T1 data for the voxel
+                T1_dat = lut_vox['t0']
 
             # When mod2mod variation is enabled, we simulate one module at a
             # time. In that case, use channel_offset to go from "relative" to
@@ -128,7 +129,8 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
 
                 eff = light.OP_CHANNEL_EFFICIENCY[op_channel_index]
                 vis = vis_dat[lut_index] * (light.OP_CHANNEL_TO_TPC[op_channel_index] == itpc)
-                t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
-
                 light_incidence['n_photons_det'][itrk, output_i] = eff * vis * n_photons
-                light_incidence['t0_det'][itrk, output_i] = t1
+
+                if light.LIGHT_TRIG_MODE == 0:
+                    t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
+                    light_incidence['t0_det'][itrk, output_i] = t1

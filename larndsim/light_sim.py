@@ -36,7 +36,8 @@ def get_nticks(light_incidence):
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
     """
     mask = light_incidence['n_photons_det'] > 0
-    if np.any(mask) and not light.LIGHT_TRIG_MODE == 1:
+    # only use the first photon arrival time if it's threshold trigger
+    if np.any(mask) and light.LIGHT_TRIG_MODE == 0:
         start_time = np.min(light_incidence['t0_det'][mask]) - light.LIGHT_WINDOW[0]
         end_time = np.max(light_incidence['t0_det'][mask]) + light.LIGHT_WINDOW[1]
         return int(np.ceil((end_time - start_time)/light.LIGHT_TICK_SIZE)), start_time
