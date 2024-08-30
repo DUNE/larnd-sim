@@ -231,42 +231,45 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels, neighborin
             for y_r in range(-radius, radius+1):
                 active_x, active_y, plane_id = id2pixel(active_pixels[pix])
                 new_x, new_y = active_x + x_r, active_y + y_r
-                is_unique = True
+                is_new = True
 
                 if 0 <= new_x < detector.N_PIXELS[0] and 0 <= new_y < detector.N_PIXELS[1] and 0 <= plane_id < detector.TPC_BORDERS.shape[0]:
                     new_pixel = pixel2id(new_x, new_y, plane_id)
 
                     for ipix in range(neighboring_pixels.shape[0]):
                         if new_pixel == neighboring_pixels[ipix]:
-                            is_unique = False
+                            is_new = False
                             break
 
-                    if is_unique:
-                        neighboring_pixels[count] = new_pixel
-                        dist=pow(x_r**2+y_r**2,0.5)
+                    dist=pow(x_r**2+y_r**2,0.5)
 
-                        dx,dy = abs(x_r),abs(y_r)
-                        dmax,dmin = max(dx,dy),min(dx,dy)
-                        dsum = dmax+dmin
-                        if dsum > MAX_NEIGHBOR_BACKTRACK_DISTANCE:
-                            dist = -1
-                        elif dsum <=1: 
-                            dist = dsum
-                        elif dsum == 2:
-                            dist = 2 if dmax==1 else 3
-                        elif dsum == 3:
-                            dist = 4 if dmax==2 else 5
-                        elif dsum == 4:
-                            if dmax == 2:
-                                dist = 6
-                            elif dmax == 3:
-                                dist = 7
-                            elif dmax == 4:
-                                dist = 8
-                        else:
-                            print('Unsupported dsum',dsum)
-                            dist=-1
+                    dx,dy = abs(x_r),abs(y_r)
+                    dmax,dmin = max(dx,dy),min(dx,dy)
+                    dsum = dmax+dmin
+                    if dsum > MAX_NEIGHBOR_BACKTRACK_DISTANCE:
+                        dist = -1
+                    elif dsum <=1:
+                        dist = dsum
+                    elif dsum == 2:
+                        dist = 2 if dmax==1 else 3
+                    elif dsum == 3:
+                        dist = 4 if dmax==2 else 5
+                    elif dsum == 4:
+                        if dmax == 2:
+                            dist = 6
+                        elif dmax == 3:
+                            dist = 7
+                        elif dmax == 4:
+                            dist = 8
+                    else:
+                        print('Unsupported dsum',dsum)
+                        dist=-1
+
+                    if is_new:
+                        neighboring_pixels[count] = new_pixel
                         neighboring_radius[count] = dist
                         count += 1
+                    elif dist < neighboring_radius[ipix]:
+                        neighboring_radius[ipix] = dist
 
     return count
