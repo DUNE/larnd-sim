@@ -530,7 +530,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                 overflow_flag[pixel_index] = 1
 
 @cuda.jit
-def get_track_pixel_map(track_pixel_map, unique_pix, pixels, distances):
+def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
     """
     This kernel fills a 2D array which contains, for each unique pixel,
     an array with the track indeces associated to that pixel.
