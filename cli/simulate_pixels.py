@@ -246,7 +246,9 @@ def run_simulation(input_filename,
             light_simulated = cfg['LIGHT_SIMULATED']
         except:
             print("The configuration has not specify wether to simulate light. By default the light simulation is activated.")
-    if light_simulated is True or None:
+            light_simulated = True
+
+    if light_simulated:
         if light_lut_filename is None:
             try:
                 light_lut_filename = cfg['LIGHT_LUT']
@@ -341,7 +343,7 @@ def run_simulation(input_filename,
             elif isinstance(response_file, list) and len(response_file) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the response files.")
 
-        if light_simulated is True or None:
+        if light_simulated:
             try:
                 light_lut_id = cfg['LIGHT_LUT_ID']
                 if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
@@ -654,8 +656,8 @@ def run_simulation(input_filename,
     # Convention module counting start from 1
     # Loop over all modules
     for i_mod in mod_ids:
-        print(f'Simulating module {i_mod-1}')
         if mod2mod_variation:
+            print(f'Simulating module {i_mod-1}')
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             # Currently shouln't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
