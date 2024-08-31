@@ -4,7 +4,7 @@ on the pixels
 """
 
 from math import pi, ceil, sqrt, erf, exp, log
-
+import cupy as cp
 import numba as nb
 
 from numba import cuda
@@ -493,12 +493,14 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
         overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
             MAX_TRACKS_PER_PIXEL is insufficient
     """
-    # itrk goes up to the total number of the segments in this batch
-    # ipix goes up to the max number of pixel for any segment
-    # itick is time ticks along the entire drift span
+    # itrk: segment index in signals collection, goes up to the total number of the segments in this batch
+    # ipix: pixel index within signals collection, goes up to the max number of pixel for any segment
+    # itick: time ticks along the entire drift span
 
     # pixel_index goes up to the total number of pixels in this batch
     # track_index (counter) goes up to "MAX_TRACKS_PER_PIXEL"
+    # counter = segment index in pixels_tracks_signals collection, same as track_index ordering
+
     itrk, ipix, itick = cuda.grid(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
@@ -526,7 +528,6 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
 
             if counter < 0:
                 overflow_flag[pixel_index] = 1
-
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
@@ -562,3 +563,48 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
 
                 if imap < track_pixel_map.shape[1]:
                     track_pixel_map[index][imap] = itrk
+
+@cuda.jit
+def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_distance):
+    """
+    This kernel fills a 2D array which contains, for each unique pixel,
+    an array with the track indeces associated to that pixel.
+
+    Args:
+        track_pixel_map_col (:obj:`numpy.ndarray`): 2D array that will contain the
+            association between the unique pixels array and the track indeces
+        unique_pix (:obj:`numpy.ndarray`): 1D array containing the unique pixels
+        pixels (:obj:`numpy.ndarray`): 2D array containing the pixels for each
+            track.
+    """
+    # index of unique_pix array
+    index = cuda.grid(1)
+
+    upix = unique_pix[index]
+
+    for target_dist in range(max_distance):
+    
+        for itrk in range(pixels.shape[0]):
+
+            for ipix in range(pixels.shape[1]):
+                pID  = pixels[itrk][ipix]
+                dist = distances[itrk][ipix]
+
+                if (upix == pID):
+                    if (dist == target_dist): 
+
+                        imap = 0
+                        #while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
+                        while imap < track_pixel_map.shape[1]:
+                            if track_pixel_map[index][imap] == itrk:
+                                imap = -1
+                                break
+                            if track_pixel_map[index][imap] == -1:
+                                break
+                            else:
+                                imap += 1
+
+                        if (imap >= 0) and (imap < track_pixel_map.shape[1]):
+                            track_pixel_map[index][imap] = itrk
+
+                    break

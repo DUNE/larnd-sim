@@ -187,6 +187,7 @@ def run_simulation(input_filename,
                                results['unique_pix'],
                                results['current_fractions'],
                                results['track_pixel_map'],
+                               results['traj_pixel_map'],
                                output_filename, # defined earlier in script
                                uniq_event_times,
                                is_first_batch=is_first_batch,
@@ -245,25 +246,28 @@ def run_simulation(input_filename,
             light_simulated = cfg['LIGHT_SIMULATED']
         except:
             print("The configuration has not specify wether to simulate light. By default the light simulation is activated.")
-    if light_lut_filename is None:
-        try:
-            light_lut_filename = cfg['LIGHT_LUT']
-            if isinstance(light_lut_filename, list):
-                for i_light_lut, f_light_lut in enumerate(light_lut_filename):
-                    if not os.path.isfile(f_light_lut):
-                        light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+            light_simulated = True
+
+    if light_simulated:
+        if light_lut_filename is None:
+            try:
+                light_lut_filename = cfg['LIGHT_LUT']
+                if isinstance(light_lut_filename, list):
+                    for i_light_lut, f_light_lut in enumerate(light_lut_filename):
+                        if not os.path.isfile(f_light_lut):
+                            light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+                            warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
+                else:
+                    if not os.path.isfile(light_lut_filename):
+                        light_lut_filename = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
                         warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
-            else:
-                if not os.path.isfile(light_lut_filename):
-                    light_lut_filename = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
-                    warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
-        except:
-            print("light_lut_filename is not provided (required if light_simulated is True)")
-    if light_det_noise_filename is None:
-        try:
-            light_det_noise_filename = cfg['LIGHT_DET_NOISE']
-        except:
-            print("light_det_noise_filename is not provided (required if light_simulated is True)")
+            except:
+                print("light_lut_filename is not provided (required if light_simulated is True)")
+        if light_det_noise_filename is None:
+            try:
+                light_det_noise_filename = cfg['LIGHT_DET_NOISE']
+            except:
+                print("light_det_noise_filename is not provided (required if light_simulated is True)")
 
     # Assert necessary ones
     assert pixel_layout, 'pixel_layout (file) must be specified.'
@@ -339,18 +343,19 @@ def run_simulation(input_filename,
             elif isinstance(response_file, list) and len(response_file) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the response files.")
 
-        try:
-            light_lut_id = cfg['LIGHT_LUT_ID']
-            if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
-            else:
-                module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
-                light_lut_filename = module_light_lut_filename
-        except:
-            if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
-            elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
+        if light_simulated:
+            try:
+                light_lut_id = cfg['LIGHT_LUT_ID']
+                if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
+                    raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
+                else:
+                    module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
+                    light_lut_filename = module_light_lut_filename
+            except:
+                if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
+                    raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
+                elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
+                    warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
         
         if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
             if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:
@@ -456,6 +461,7 @@ def run_simulation(input_filename,
         tracks = np.array(f['segments'])
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
+            trajectory_ids = tracks['file_traj_id']
         else:
             dtype = tracks.dtype.descr
             dtype = [('segment_id','u4')] + dtype
@@ -465,6 +471,8 @@ def run_simulation(input_filename,
                 new_tracks[field[0]] = tracks[field[0]]
             tracks = new_tracks
             segment_ids = tracks['segment_id']
+            trajectory_ids = tracks['file_traj_id']
+
         try:
             trajectories = np.array(f['trajectories'])
             input_has_trajectories = True
@@ -506,6 +514,7 @@ def run_simulation(input_filename,
         print(f'Selecting only the first {n_events} events for simulation.')
         max_eventID = np.unique(tracks[sim.EVENT_SEPARATOR])[n_events-1]
         segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
+        trajectory_ids = trajectory_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
 
         if input_has_trajectories:
@@ -620,6 +629,7 @@ def run_simulation(input_filename,
     # First copy all tracks and segment_ids
     all_mod_tracks = tracks
     all_mod_segment_ids = segment_ids
+    all_mod_trajectory_ids = trajectory_ids
     if mod2mod_variation == None or mod2mod_variation == False:
         mod_ids = [-1]
     else:
@@ -637,6 +647,7 @@ def run_simulation(input_filename,
     active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
     tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
     segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
+    trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
     end_mask = time()
     print(f" {end_mask-start_mask:.2f} s")
 
@@ -646,6 +657,7 @@ def run_simulation(input_filename,
     # Loop over all modules
     for i_mod in mod_ids:
         if mod2mod_variation:
+            print(f'Simulating module {i_mod-1}')
             consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
             # Currently shouln't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
@@ -669,6 +681,7 @@ def run_simulation(input_filename,
             module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
             tracks = all_mod_tracks[module_tracks_mask]
             segment_ids = all_mod_segment_ids[module_tracks_mask]
+            trajectory_ids = all_mod_trajectory_ids[module_tracks_mask]
             RangePop()
 
         # find the module that triggers
@@ -795,6 +808,8 @@ def run_simulation(input_filename,
         logger.take_snapshot()
 
         segment_ids_arr = cp.asarray(segment_ids)
+        trajectory_ids_arr = cp.asarray(trajectory_ids)
+
         # We divide the sample in portions that can be processed by the GPU
         is_first_batch = True
         logger.start()
@@ -837,7 +852,6 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
                 continue
-
             for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
                 if itrk > 0:
@@ -868,13 +882,14 @@ def run_simulation(input_filename,
 
                 active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
                 neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
+                neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
 
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                         null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                         save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
-                        i_trig += 1 # add to the trigger counter
+                        i_trig += 1 # add to the trigger counter n_max_pixels
                         del null_light_results_acc['light_event_id']
                     continue
 
@@ -882,6 +897,7 @@ def run_simulation(input_filename,
                 pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
                                                       active_pixels,
                                                       neighboring_pixels,
+                                                      neighboring_radius,
                                                       n_pixels_list,
                                                       max_radius)
                 RangePop()
@@ -892,6 +908,37 @@ def run_simulation(input_filename,
                 unique_pix = cp.unique(joined)
                 unique_pix = unique_pix[(unique_pix != -1)]
                 RangePop()
+
+                ###################################
+                # Kazu 2024-07-01 Useful if we modify the output to store all contributions
+                ###################################
+                #def invert_array_map(in_map,pix_set):
+                #    '''
+                #    Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
+                #    pixel index => a set of segment IDs.
+
+                #    Args:
+                #        in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
+                #        pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
+                #    Returns:
+                #        ndarray: 2D array where pixel index => list of segment index
+                #    '''
+                #    pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
+                #    
+                #    pix_id2idx = {val.item():i for i,val in enumerate(pix_set)}
+                #    
+                #    mymap=cp.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
+                #    curr_idx=cp.zeros(shape=(len(pix_id2idx),),dtype=int)
+                #    for seg_idx in range(in_map.shape[0]):
+                #        ass = in_map[seg_idx]
+                #        for pixid in ass:
+                #            if pixid<0: break
+                #            pix_idx = pix_id2idx[pixid.item()]
+                #            mymap[pix_idx][curr_idx[pix_idx]]=seg_idx
+                #            curr_idx[pix_idx] += 1
+                #    return mymap
+                #
+                #assmap_pix2seg = invert_array_map(active_pixels,unique_pix)
 
                 if not unique_pix.shape[0]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
@@ -933,10 +980,18 @@ def run_simulation(input_filename,
 
                 RangePush("track_pixel_map")
                 # Mapping between unique pixel array and track array index
-                track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
+                #max_segments_to_trace = max(assmap_pix2seg.shape[1],detsim.MAX_TRACKS_PER_PIXEL) # currently it doesn't work; see the comment for invert_array_map()
+                max_segments_to_trace = detsim.MAX_TRACKS_PER_PIXEL
+                track_pixel_map = cp.full((unique_pix.shape[0], max_segments_to_trace), -1)
                 TPB = 32
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
-                detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
+                detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
+                    unique_pix,
+                    #active_pixels,
+                    neighboring_pixels,
+                    neighboring_radius,
+                    neighboring_radius.max().item()+1,
+                    )
                 RangePop()
 
                 RangePush("sum_pixels_signals")
@@ -987,7 +1042,6 @@ def run_simulation(input_filename,
                                              rng_states,
                                              current_fractions,
                                              pixel_thresholds)
-
                 # get list of adc values
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
@@ -1004,8 +1058,11 @@ def run_simulation(input_filename,
                 results_acc['adc_tot_ticks'].append(adc_ticks_list)
                 results_acc['unique_pix'].append(unique_pix)
                 results_acc['current_fractions'].append(current_fractions)
-                #track_pixel_map[track_pixel_map != -1] += first_trk_id + itrk
+                traj_pixel_map = cp.full(track_pixel_map.shape,-1)
+                traj_pixel_map[:] = track_pixel_map
+                traj_pixel_map[traj_pixel_map != -1] = trajectory_ids_arr[batch_mask][traj_pixel_map[traj_pixel_map != -1] + itrk]
                 track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
                 # ~~~ Light detector response simulation ~~~
@@ -1127,7 +1184,7 @@ def run_simulation(input_filename,
 
     logger.take_snapshot([len(logger.log)])
 
-    # revert the mc truth information modified for larnd-sim consumption
+    # revert the mc truth information modified for larnd-sim consumption 
     # if the event time is generated by larndsim (non-beam cases), then the t0 is relative to the event time (0 ish, assume the edep particle window is O(us))
     # so there is no need to remove the event time
     if sim.IS_SPILL_SIM:
