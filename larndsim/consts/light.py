@@ -142,7 +142,6 @@ def set_light_properties(detprop_file):
         LIGHT_OSCILLATION_PERIOD = float(detprop.get('light_oscillation_period', LIGHT_OSCILLATION_PERIOD))
         impulse_model_filename = str(detprop.get('impulse_model', ''))
         if impulse_model_filename and SIPM_RESPONSE_MODEL == 1:
-            print('Light impulse model:', impulse_model_filename)
             try:
                 # first try to load from current directory
                 IMPULSE_MODEL = np.load(impulse_model_filename)
@@ -151,7 +150,8 @@ def set_light_properties(detprop_file):
                 try:
                     IMPULSE_MODEL = np.load(os.path.join(os.path.dirname(__file__), '../../') + impulse_model_filename)
                 except FileNotFoundError:
-                    print("Impulse model file not found:", impulse_model_filename)
+                    SIPM_RESPONSE_MODEL = 0
+                    print("Impulse model file not found:", impulse_model_filename, ", and setting SIPM_RESPONSE_MODEL to 0 (RLC model).")
         IMPULSE_TICK_SIZE = float(detprop.get('impulse_tick_size', IMPULSE_TICK_SIZE))
 
         OP_CHANNEL_PER_TRIG = int(detprop.get('op_channel_per_det', OP_CHANNEL_PER_TRIG))

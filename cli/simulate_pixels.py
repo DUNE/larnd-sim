@@ -135,7 +135,7 @@ def run_simulation(input_filename,
             store memory snapshot information
     """
     # Define a nested function to save the results
-    def save_results(event_times, is_first_batch, results, i_trig, i_mod=-1, light_only=False):
+    def save_results(event_times, results, i_trig, i_mod=-1, light_only=False):
         '''
         results is a dictionary with the following keys
 
@@ -155,8 +155,6 @@ def run_simulation(input_filename,
          - light_waveforms: waveforms of each light trigger
          - light_waveforms_true_track_id: true track ids for each tick in each waveform
          - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
-        
-        returns is_first_batch = False
         
         Note: can't handle empty inputs
         '''
@@ -190,7 +188,6 @@ def run_simulation(input_filename,
                                results['traj_pixel_map'],
                                output_filename, # defined earlier in script
                                uniq_event_times,
-                               is_first_batch=is_first_batch,
                                light_trigger_times=light_trigger_times,
                                light_trigger_event_id=light_trigger_event_ids,
                                light_trigger_modules=light_trigger_modules,
@@ -218,9 +215,6 @@ def run_simulation(input_filename,
                                                     results['light_waveforms_true_photons'],
                                                     i_trig,
                                                     i_mod)
-        if is_first_batch:
-            is_first_batch = False
-        return is_first_batch
     ###########################################################################################
 
     print(LOGO)
@@ -718,8 +712,15 @@ def run_simulation(input_filename,
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
             n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
+#            if light.LIGHT_TRIG_MODE == 0:
+#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+#            else: # light.LIGHT_TRIG_MODE == 1
+#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4')])
+#
             light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                     dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
             light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
             track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
@@ -743,6 +744,9 @@ def run_simulation(input_filename,
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
             lut['vis'][~mask] = lut['vis'][mask].min()
+
+            # get length of the t0 time profile
+            t0_profile_length = lut['time_dist'].shape[-1]
 
             lut = to_device(lut)
 
@@ -811,7 +815,8 @@ def run_simulation(input_filename,
         trajectory_ids_arr = cp.asarray(trajectory_ids)
 
         # We divide the sample in portions that can be processed by the GPU
-        is_first_batch = True
+        is_new_event = True
+        event_id_buffer = -1
         logger.start()
         logger.take_snapshot([0])
         i_batch = 0
@@ -829,25 +834,31 @@ def run_simulation(input_filename,
             evt_tracks = track_subset
             #first_trk_id = np.argmax(batch_mask) # first track in batch
 
+            # this relies on that batching is done in the order of events
+            if ievd > event_id_buffer:
+                is_new_event = True
+            else:
+                is_new_event = False
             this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
-            # forward sync packets
-            if this_event_time[0] - sync_start >= 0:
-                sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
-                #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
-                sync_times_export = cp.full( sync_times.shape, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) 
-                if len(sync_times) > 0:
-                    fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
-                    sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
-            # beam trigger is only forwarded to one specific pacman (defined in fee)
-            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+            if is_new_event:
+                # forward sync packets
+                if this_event_time[0] - sync_start >= 0: # this is duplicate to "is_new_event"
+                    sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                    #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
+                    sync_times_export = cp.full( sync_times.shape, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) 
+                    if len(sync_times) > 0:
+                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
+                        sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
+                # beam trigger is only forwarded to one specific pacman (defined in fee)
+                if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
+                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
             if len(track_subset) == 0:
                 if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
@@ -888,7 +899,7 @@ def run_simulation(input_filename,
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                         null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                        save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                         i_trig += 1 # add to the trigger counter n_max_pixels
                         del null_light_results_acc['light_event_id']
                     continue
@@ -943,7 +954,7 @@ def run_simulation(input_filename,
                 if not unique_pix.shape[0]:
                     if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                         null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, is_first_batch, null_light_results_acc, i_trig, i_mod, light_only=True)
+                        save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                         i_trig += 1 # add to the trigger counter
                         del null_light_results_acc['light_event_id']
                     continue
@@ -1099,7 +1110,7 @@ def run_simulation(input_filename,
                     light_sim.sum_light_signals[BPG, TPB](
                         selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
                         light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                        light_sample_inc_true_photons, sorted_indices)
+                        light_sample_inc_true_photons, sorted_indices, t0_profile_length)
                     RangePop()
                     if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                         warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
@@ -1155,10 +1166,10 @@ def run_simulation(input_filename,
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=False)
+                    save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
                     i_trig += 1 # add to the trigger counter
                 elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
-                    is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
+                    save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
                 results_acc = defaultdict(list) # reinitialize after each save_results
 
@@ -1168,10 +1179,10 @@ def run_simulation(input_filename,
         RangePush('save_results')
         # Always save results after last iteration
         if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=False)
+            save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
             i_trig += 1 # add to the trigger counter
         elif len(results_acc['light_event_id']) > 0 and len(np.concatenate(results_acc['light_event_id'], axis=0)) > 0:
-            is_first_batch = save_results(event_times, is_first_batch, results_acc, i_trig, i_mod, light_only=True)
+            save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
         results_acc = defaultdict(list) # reinitialize after each save_results
         RangePop()
