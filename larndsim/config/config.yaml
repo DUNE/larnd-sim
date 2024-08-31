@@ -7,7 +7,7 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
     LIGHT_SIMULATED: True
 
@@ -20,7 +20,7 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: True
     MOD2MOD_VARIATION: False
