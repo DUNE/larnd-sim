@@ -142,7 +142,6 @@ def set_light_properties(detprop_file):
         LIGHT_OSCILLATION_PERIOD = float(detprop.get('light_oscillation_period', LIGHT_OSCILLATION_PERIOD))
         impulse_model_filename = str(detprop.get('impulse_model', ''))
         if impulse_model_filename and SIPM_RESPONSE_MODEL == 1:
-            print('Light impulse model:', impulse_model_filename)
             try:
                 # first try to load from current directory
                 IMPULSE_MODEL = np.load(impulse_model_filename)

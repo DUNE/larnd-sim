@@ -59,7 +59,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices):
+def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length):
     """
     Sums the number of photons observed by each light detector at each time tick
 
@@ -89,25 +89,21 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             for itrk in sorted_indices[idet]:
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
-                    time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
                     track_time = segments[itrk]['t0']
-                    track_end_time = track_time + time_profile.shape[0] * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                    track_end_time = track_time + t0_profile_length * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
 
                     if track_end_time < start_tick_time or track_time > end_tick_time:
                         continue
 
                     # use LUT time smearing
                     if light.ENABLE_LUT_SMEARING:
-                        # normalize propogation delay time profile
-                        norm = 0
-                        for iprof in range(time_profile.shape[0]):
-                            norm += time_profile[iprof]
+                        time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
 
                         # add photons to time tick
                         for iprof in range(time_profile.shape[0]):
                             profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
                             if profile_time < end_tick_time and profile_time > start_tick_time:
-                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / norm / light.LIGHT_TICK_SIZE
+                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
                                 light_sample_inc[idet,itick] += photons
 
                                 if photons > light.MC_TRUTH_THRESHOLD:
@@ -120,15 +116,10 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                     # use average time only
                     else:
                         # calculate average delay time
-                        avg = 0
-                        norm = 0
-                        for iprof in range(time_profile.shape[0]):
-                            avg += iprof * units.ns / units.mus * time_profile[iprof]
-                            norm += time_profile[iprof]
-                        avg = avg / norm
+                        t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus # normalised averagein us
 
                         # add photons to time tick
-                        profile_time = track_time + avg
+                        profile_time = track_time + t0_avg
                         if profile_time < end_tick_time and profile_time > start_tick_time:
                             photons = light_inc['n_photons_det'][itrk,op_channel[idet]] / light.LIGHT_TICK_SIZE
                             light_sample_inc[idet,itick] += photons

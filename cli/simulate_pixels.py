@@ -710,12 +710,15 @@ def run_simulation(input_filename,
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
             n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
-            if light.LIGHT_TRIG_MODE == 0:
-                light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f2'),('t0_det','f2')])
-            else: # light.LIGHT_TRIG_MODE == 1
-                light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f2')])
+#            if light.LIGHT_TRIG_MODE == 0:
+#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+#            else: # light.LIGHT_TRIG_MODE == 1
+#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
+#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4')])
+#
+            light_sim_dat = np.zeros([len(tracks), n_light_channel],
+                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
             light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
             track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
@@ -739,6 +742,9 @@ def run_simulation(input_filename,
             # clip LUT so that no voxel contains 0 visibility
             mask = lut['vis'] > 0
             lut['vis'][~mask] = lut['vis'][mask].min()
+
+            # get length of the t0 time profile
+            t0_profile_length = lut['time_dist'].shape[-1]
 
             lut = to_device(lut)
 
@@ -1102,7 +1108,7 @@ def run_simulation(input_filename,
                     light_sim.sum_light_signals[BPG, TPB](
                         selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
                         light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                        light_sample_inc_true_photons, sorted_indices)
+                        light_sample_inc_true_photons, sorted_indices, t0_profile_length)
                     RangePop()
                     if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                         warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
