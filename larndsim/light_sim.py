@@ -274,7 +274,7 @@ def interp(idx, arr, low, high):
     return v0 + (v1 - v0) * (idx - i0)
                 
 
-@nb.njit
+@nb.njit(fastmath=True)
 def sipm_response_model(idet, time_tick):
     """
     Calculates the SiPM response from a PE at `time_tick` relative to the PE time
@@ -289,7 +289,7 @@ def sipm_response_model(idet, time_tick):
     # use RLC response model
     if light.SIPM_RESPONSE_MODEL == 0:
         t = time_tick * light.LIGHT_TICK_SIZE
-        impulse = (t>=0) * exp(-t/light.LIGHT_RESPONSE_TIME) * sin(t/light.LIGHT_OSCILLATION_PERIOD)
+        impulse = (t>=0) * exp(np.float32(-t/light.LIGHT_RESPONSE_TIME)) * sin(np.float32(t/light.LIGHT_OSCILLATION_PERIOD))
         # normalize to 1
         impulse /= light.LIGHT_OSCILLATION_PERIOD * light.LIGHT_RESPONSE_TIME**2
         impulse *= light.LIGHT_OSCILLATION_PERIOD**2 + light.LIGHT_RESPONSE_TIME**2
@@ -303,7 +303,7 @@ def sipm_response_model(idet, time_tick):
         return impulse
             
 
-@cuda.jit
+@cuda.jit(fastmath=True)
 def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
     """
     Simulates the SiPM reponse and digit

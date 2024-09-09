@@ -559,143 +559,109 @@ def digitize(integral_list, gain=GAIN):
                                 * ADC_COUNTS / (V_REF - V_CM)), ADC_COUNTS-1)
 
     return adcs
-
-@cuda.jit
-def get_adc_values(pixels_signals,
-                   pixels_signals_tracks,
-                   time_ticks,
-                   adc_list,
-                   adc_ticks_list,
-                   time_padding,
-                   rng_states,
-                   current_fractions,
-                   pixel_thresholds):
+@cuda.jit(max_registers=64)
+def get_adc_values(
+    pixels_signals,
+    pixels_signals_tracks,
+    time_ticks,
+    adc_list,
+    adc_ticks_list,
+    time_padding,
+    rng_states,
+    current_fractions,
+    pixel_thresholds
+):
     """
-    Implementation of self-trigger logic
-
+    Implementation of self-trigger logic.
     Args:
-        pixels_signals (:obj:`numpy.ndarray`): list of induced currents for
-            each pixel
-        pixels_signals_tracks (:obj:`numpy.ndarray`): list of induced currents
-            for each track that induces current on each pixel
+        pixels_signals (:obj:`numpy.ndarray`): list of induced currents for each pixel
+        pixels_signals_tracks (:obj:`numpy.ndarray`): list of induced currents for each track that induces current on each pixel
         time_ticks (:obj:`numpy.ndarray`): list of time ticks for each pixel
-        adc_list (:obj:`numpy.ndarray`): list of integrated charges for each
-            pixel
-        adc_ticks_list (:obj:`numpy.ndarray`): list of the time ticks that
-            correspond to each integrated charge
+        adc_list (:obj:`numpy.ndarray`): list of integrated charges for each pixel
+        adc_ticks_list (:obj:`numpy.ndarray`): list of the time ticks that correspond to each integrated charge
         time_padding (float): time interval to add to each time tick.
-        rng_states (:obj:`numpy.ndarray`): array of random states for noise
-            generation
-        current_fractions (:obj:`numpy.ndarray`): 2D array that will contain
-            the fraction of current induced on the pixel by each track
-        pixel_thresholds(: obj: `numpy.ndarray`): list of discriminator
-            thresholds for each pixel
+        rng_states (:obj:`numpy.ndarray`): array of random states for noise generation
+        current_fractions (:obj:`numpy.ndarray`): 2D array that will contain the fraction of current induced on the pixel by each track
+        pixel_thresholds (:obj:`numpy.ndarray`): list of discriminator thresholds for each pixel
     """
     ip = cuda.grid(1)
-
-    if ip < pixels_signals.shape[0]:
-        curre = pixels_signals[ip]
-        ic = 0
-        iadc = 0
-        adc_busy = 0
-        last_reset = 0
-        true_q = 0
-        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
-
-        while ic < curre.shape[0] or adc_busy > 0:
-
-            if iadc >= MAX_ADC_VALUES:
-                print("More ADC values than possible,", MAX_ADC_VALUES)
-                break
-
-            q = 0
-            if BUFFER_RISETIME > 0:
-                conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
-                for jc in range(conv_start, min(ic+1, curre.shape[0])):
-                    w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
-                    q += curre[jc] * detector.TIME_SAMPLING * w
-
-                    for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
-
-            elif ic < curre.shape[0]:
-                q += curre[ic] * detector.TIME_SAMPLING
+    if ip >= pixels_signals.shape[0]:
+        return
+    curre = pixels_signals[ip]
+    ic = 0
+    iadc = 0
+    adc_busy = 0
+    last_reset = 0
+    true_q = 0
+    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
+    while ic < curre.shape[0] or adc_busy > 0:
+        if iadc >= MAX_ADC_VALUES:
+            # Ideally, you'd handle this error outside the kernel as CUDA does not support printing well
+            return
+        q = 0
+        if BUFFER_RISETIME > 0:
+            conv_start = max(last_reset, int(ic - 10 * BUFFER_RISETIME / detector.TIME_SAMPLING))
+            for jc in range(conv_start, min(ic + 1, curre.shape[0])):
+                dt = (jc - ic) * detector.TIME_SAMPLING
+                #w = math.exp(dt / BUFFER_RISETIME) * (1 - math.exp(-detector.TIME_SAMPLING / BUFFER_RISETIME))
+                w = exp(dt / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING / BUFFER_RISETIME))
+                q += curre[jc] * detector.TIME_SAMPLING * w
                 for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
-
-            q_sum += q
-            true_q += q
-
-            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
-            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
-
-            if adc_busy > 0:
-                adc_busy -= 1
-
-            if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
-                interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / detector.TIME_SAMPLING)
-                integrate_end = ic+interval
-
-                ic+=1
-
-                while ic <= integrate_end:
-                    q = 0
-
-                    if BUFFER_RISETIME > 0:
-                        conv_start = max(last_reset, floor(ic - 10*BUFFER_RISETIME/detector.TIME_SAMPLING))
-                        for jc in range(conv_start, min(ic+1, curre.shape[0])):
-                            w = exp((jc - ic) * detector.TIME_SAMPLING / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/BUFFER_RISETIME))
-                            q += curre[jc] * detector.TIME_SAMPLING * w
-
-                            for itrk in range(current_fractions.shape[2]):
-                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
-
-                    elif ic < curre.shape[0]:
-                        q += curre[ic] * detector.TIME_SAMPLING
+                    current_fractions[ip, iadc, itrk] += pixels_signals_tracks[ip, jc, itrk] * detector.TIME_SAMPLING * w
+        elif ic < curre.shape[0]:
+            q += curre[ic] * detector.TIME_SAMPLING
+            for itrk in range(current_fractions.shape[2]):
+                current_fractions[ip, iadc, itrk] += pixels_signals_tracks[ip, ic, itrk] * detector.TIME_SAMPLING
+        q_sum += q
+        true_q += q
+        q_noise = xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
+        disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
+        if adc_busy > 0:
+            adc_busy -= 1
+        if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
+            interval = round((3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / detector.TIME_SAMPLING)
+            integrate_end = ic + interval
+            ic += 1
+            while ic <= integrate_end:
+                q = 0
+                if BUFFER_RISETIME > 0:
+                    conv_start = max(last_reset, int(ic - 10 * BUFFER_RISETIME / detector.TIME_SAMPLING))
+                    for jc in range(conv_start, min(ic + 1, curre.shape[0])):
+                        dt = (jc - ic) * detector.TIME_SAMPLING
+                        #w = math.exp(dt / BUFFER_RISETIME) * (1 - math.exp(-detector.TIME_SAMPLING / BUFFER_RISETIME))
+                        w = exp(dt / BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING / BUFFER_RISETIME))
+                        q += curre[jc] * detector.TIME_SAMPLING * w
                         for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
-
-                    q_sum += q
-                    true_q += q
-                    ic+=1
-
-                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
-                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
-
-                if adc < pixel_thresholds[ip] + disc_noise:
-                    ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
-                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
-                    true_q = 0
-
+                            current_fractions[ip, iadc, itrk] += pixels_signals_tracks[ip, jc, itrk] * detector.TIME_SAMPLING * w
+                elif ic < curre.shape[0]:
+                    q += curre[ic] * detector.TIME_SAMPLING
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] = 0
-                    last_reset = ic
-                    continue
-
-                #tot_backtracked = 0
-                #for itrk in range(current_fractions.shape[2]):
-                #    tot_backtracked += current_fractions[ip][iadc][itrk]
-
-                if true_q > 0:
-                    for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] /= true_q
-
-                adc_list[ip][iadc] = adc
-
-                crossing_time_tick = min((ic, len(time_ticks)-1))
-                # handle case when tick extends past end of current array
-                post_adc_ticks = max((ic - crossing_time_tick, 0))
-                #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
-                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding-2+post_adc_ticks
-
+                        current_fractions[ip, iadc, itrk] += pixels_signals_tracks[ip, ic, itrk] * detector.TIME_SAMPLING
+                q_sum += q
+                true_q += q
+                ic += 1
+            adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * UNCORRELATED_NOISE_CHARGE
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * DISCRIMINATOR_NOISE
+            if adc < pixel_thresholds[ip] + disc_noise:
                 ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
-                last_reset = ic
-                adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
-
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
                 true_q = 0
-
-                iadc += 1
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip, iadc, itrk] = 0
+                last_reset = ic
                 continue
-
-            ic += 1
+            if true_q > 0:
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip, iadc, itrk] /= true_q
+            adc_list[ip, iadc] = adc
+            crossing_time_tick = min(ic, len(time_ticks) - 1)
+            post_adc_ticks = max(ic - crossing_time_tick, 0)
+            adc_ticks_list[ip, iadc] = time_ticks[crossing_time_tick] + time_padding - 2 + post_adc_ticks
+            ic += round(RESET_CYCLES * CLOCK_CYCLE / detector.TIME_SAMPLING)
+            last_reset = ic
+            adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / detector.TIME_SAMPLING)
+            q_sum = xoroshiro128p_normal_float32(rng_states, ip) * RESET_NOISE_CHARGE
+            true_q = 0
+            iadc += 1
+            continue
+        ic += 1
