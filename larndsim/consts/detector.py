@@ -8,7 +8,7 @@ import yaml
 
 from collections import defaultdict
 
-from .units import mm, cm, V, kV, e
+from .units import mm, cm, mV, V, kV, e
 
 ###################
 # LArTPC drift
@@ -95,7 +95,7 @@ ASSOCIATION_COUNT_TO_STORE = 20
 #: Maximum number of ADC values stored per pixel
 MAX_ADC_VALUES = 30
 #: Discrimination threshold in e-
-DISCRIMINATION_THRESHOLD = 7e3 * e
+DISCRIMINATION_THRESHOLD = 7e3 # e-
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
@@ -116,23 +116,23 @@ if USE_PPS_ROLLOVER:
 else:
     CLOCK_RESET_PERIOD = int(ROLLOVER_CYCLES)
 #: Front-end gain in :math:`mV/e-`
-GAIN = 4 * mV / (1e3 * e)
+GAIN = 4 / 1e3 # mV/e
 #: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
 BUFFER_RISETIME = 0.100
 #: Common-mode voltage in :math:`mV`
-V_CM = 288 * mV
+V_CM = 288 # mV
 #: Reference voltage in :math:`mV`
-V_REF = 1300 * mV
+V_REF = 1300 # mV
 #: Pedestal voltage in :math:`mV`
-V_PEDESTAL = 580 * mV
+V_PEDESTAL = 580 # mV
 #: Number of ADC counts
 ADC_COUNTS = 2**8
 #: Reset noise in e-
-RESET_NOISE_CHARGE = 900 * e
+RESET_NOISE_CHARGE = 900 # e
 #: Uncorrelated noise in e-
-UNCORRELATED_NOISE_CHARGE = 500 * e
+UNCORRELATED_NOISE_CHARGE = 500 # e
 #: Discriminator noise in e-
-DISCRIMINATOR_NOISE = 650 * e
+DISCRIMINATOR_NOISE = 650 # e
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
 #: Offset of the non-beam event time in microseconds
@@ -240,8 +240,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     global RESPONSE_BIN_SIZE
     global TPC_OFFSETS
     global MOD_IDS
-    global ASSOCIATION_COUNT_TO_STORE
-    global MAX_ADC_VALUES
     global DISCRIMINATION_THRESHOLD
     global ADC_HOLD_DELAY
     global ADC_BUSY_DELAY
@@ -266,6 +264,10 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
+    MOD_IDS = get_n_modules(detprop_file)
+
+    n_mod = len(MOD_IDS)
+
     DRIFT_LENGTH = detprop['drift_length']
 
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
@@ -282,68 +284,20 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     TEMPERATURE = detprop.get('temperature', TEMPERATURE)
 
     e_field_bucket = detprop.get('e_field', E_FIELD)
-    if hasattr(e_field_bucket, "__len__") and (len(e_field_bucket) != len(get_n_modules(detprop_file)) and len(e_field_bucket) != 1):
-        raise KeyError("The length of provided E_field in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(e_field_bucket, "__len__"):
-        E_FIELD = e_field_bucket
-    elif i_module < 0:
-        E_FIELD = e_field_bucket[0]
-        if len(e_field_bucket) > 1:
-            warnings.warn('Module variation seems to be not activated, but electric field is provided as a list. Taking the first given value.')
-    elif i_module > len(e_field_bucket):
-        E_FIELD = e_field_bucket[0]
-        warnings.warn('Module variation seems to be activated, but the electric field is not specified per module.Taking the first given value.')
-    else:
-        E_FIELD = e_field_bucket[i_module-1]
+    E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
     V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
     lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
-    if hasattr(lifetime_bucket, "__len__") and (len(lifetime_bucket) != len(get_n_modules(detprop_file)) and len(lifetime_bucket) != 1):
-        raise KeyError("The length of provided lifetime in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(lifetime_bucket, "__len__"):
-        ELECTRON_LIFETIME = lifetime_bucket
-    elif i_module < 0:
-        ELECTRON_LIFETIME = lifetime_bucket[0]
-        if len(lifetime_bucket) > 1:
-            warnings.warn('Module variation seems to be not activated, but electron lifetime is provided as a list. Taking the first given value.')
-    elif i_module > len(lifetime_bucket):
-        ELECTRON_LIFETIME = lifetime_bucket[0]
-        warnings.warn('Module variation seems to be activated, but the electron lifetime is not specified per module. Taking the first given value.')
-    else:
-        ELECTRON_LIFETIME = lifetime_bucket[i_module-1]
+    ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
 
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
 
     response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
-    if hasattr(response_sampling_bucket, "__len__") and (len(response_sampling_bucket) != len(get_n_modules(detprop_file)) and len(response_sampling_bucket) != 1):
-        raise KeyError("The length of provided induction response time sampling (bin size) in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(response_sampling_bucket, "__len__"):
-        RESPONSE_SAMPLING = response_sampling_bucket
-    elif i_module < 0:
-        RESPONSE_SAMPLING = response_sampling_bucket[0]
-        if len(response_sampling_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but the induction response time sampling (bin size) is provided as a list. Taking the first given value.')
-    elif i_module > len(response_sampling_bucket):
-        RESPONSE_SAMPLING = response_sampling_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the induction response time sampling (bin size) is not specified per module. Taking the first given value.')
-    else:
-        RESPONSE_SAMPLING = response_sampling_bucket[i_module-1]
+    RESPONSE_SAMPLING = set_multi_properties(response_sampling_bucket, n_mod, i_module, message="induction response time sampling (bin size)")
 
     response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
-    if hasattr(response_bin_size_bucket, "__len__") and (len(response_bin_size_bucket) != len(get_n_modules(detprop_file)) and len(response_bin_size_bucket) != 1):
-        raise KeyError("The length of provided induction response bin size in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(response_bin_size_bucket, "__len__"):
-        RESPONSE_BIN_SIZE = response_bin_size_bucket
-    elif i_module < 0:
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
-        if len(response_bin_size_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but the induction response bin size is provided as a list. Taking the first given value.')
-    elif i_module > len(response_bin_size_bucket):
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the induction response bin size is not specified per module. Taking the first given value.')
-    else:
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[i_module-1]
+    RESPONSE_BIN_SIZE = set_multi_properties(response_bin_size_bucket, n_mod, i_module, message="induction response bin size")
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -403,25 +357,9 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
-    MOD_IDS = get_n_modules(detprop_file)
-
-    ASSOCIATION_COUNT_TO_STORE = detprop.get('association_count_to_store', ASSOCIATION_COUNT_TO_STORE)
-    MAX_ADC_VALUES = detprop.get('max_adc_values', MAX_ADC_VALUES)
-
     dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
-    if hasattr(dis_threshold_bucket, "__len__") and (len(dis_threshold_bucket) != len(get_n_modules(detprop_file)) and len(dis_threshold_bucket) != 1):
-        raise KeyError("The length of provided discrimination threshold in the configuration file is unexpected. Please check again.")
-    if not hasattr(dis_threshold_bucket, "__len__"):
-        DISCRIMINATION_THRESHOLD = dis_threshold_bucket
-    elif i_module < 0:
-        DISCRIMINATION_THRESHOLD = dis_threshold_bucket[0]
-        if len(dis_threshold_bucket) > 1:
-            warnings.warn('Module variation seems to be not activated, but discrimination threshold is provided as a list. Taking the first given value.')
-    elif i_module > len(discrimination threshold):
-        DISCRIMINATION_THRESHOLD = discrimination threshold[0]
-        warnings.warn('Module variation seems to be activated, but the discrimination threshold is not specified per module. Taking the first given value.')
-    else:
-        DISCRIMINATION_THRESHOLD = discrimination threshold[i_module-1]
+    DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
+    DISCRIMINATION_THRESHOLD = DISCRIMINATION_THRESHOLD * e
 
     ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
     ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
@@ -432,13 +370,20 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     USE_PPS_ROLLOVER = detprop.get('use_pps_rollover', USE_PPS_ROLLOVER)
     CLOCK_RESET_PERIOD = detprop.get('clock_reset_period', CLOCK_RESET_PERIOD)
     GAIN = detprop.get('larpix_gain', GAIN)
+    GAIN = GAIN * mV / e
     BUFFER_RISETIME = detprop.get('buffer_risetime', BUFFER_RISETIME)
     V_CM = detprop.get('v_cm', V_CM)
+    V_CM = V_CM * mV
     V_REF = detprop.get('v_ref', V_REF)
+    V_REF = V_REF * mV
     V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
+    V_PEDESTAL = V_PEDESTAL * mV
     ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
     RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
+    RESET_NOISE_CHARGE = RESET_NOISE_CHARGE * e
     UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
+    UNCORRELATED_NOISE_CHARGE = UNCORRELATED_NOISE_CHARGE * e
     DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+    DISCRIMINATOR_NOISE = DISCRIMINATOR_NOISE * e
     EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
     NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)

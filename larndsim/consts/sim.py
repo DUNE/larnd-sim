@@ -27,6 +27,11 @@ MAX_TRACKS_PER_PIXEL = 50
 MIN_STEP_SIZE = 0.001 # cm
 MC_SAMPLE_MULTIPLIER = 1
 
+#: Number of back-tracked segments to be recorded
+ASSOCIATION_COUNT_TO_STORE = 20
+#: Maximum number of ADC values stored per pixel
+MAX_ADC_VALUES = 30
+
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
 MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
 #: Threshold for propogating truth information on a given SiPM
@@ -57,6 +62,9 @@ def set_simulation_properties(simprop_file):
     global MIN_STEP_SIZE
     global MC_SAMPLE_MULTIPLIER
 
+    global ASSOCIATION_COUNT_TO_STORE
+    global MAX_ADC_VALUES
+
     global MAX_MC_TRUTH_IDS
     global MC_TRUTH_THRESHOLD
 
@@ -76,6 +84,9 @@ def set_simulation_properties(simprop_file):
         MAX_TRACKS_PER_PIXEL = simprop.get('max_tracks_per_pixel', MAX_TRACKS_PER_PIXEL)
         MIN_STEP_SIZE = simprop.get('min_step_size', MIN_STEP_SIZE)
         MC_SAMPLE_MULTIPLIER = simprop.get('mc_sample_multiplier', MC_SAMPLE_MULTIPLIER)
+
+        ASSOCIATION_COUNT_TO_STORE = simprop.get('association_count_to_store', ASSOCIATION_COUNT_TO_STORE)
+        MAX_ADC_VALUES = simprop.get('max_adc_values', MAX_ADC_VALUES)
 
         MAX_MC_TRUTH_IDS = simprop.get('max_light_truth_ids', MAX_MC_TRUTH_IDS)
         MC_TRUTH_THRESHOLD = simprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
