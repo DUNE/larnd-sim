@@ -12,11 +12,8 @@ from numba.cuda.random import xoroshiro128p_normal_float32
 
 #from .consts.detector import TPC_BORDERS, TIME_INTERVAL
 from .consts import detector
+from .consts import sim
 from .pixels_from_track import id2pixel
-
-MAX_TRACKS_PER_PIXEL = 50
-MIN_STEP_SIZE = 0.001 # cm
-MC_SAMPLE_MULTIPLIER = 1
 
 @cuda.jit
 def time_intervals(track_starts, time_max, tracks):
@@ -319,14 +316,14 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             if subsegment_length == 0:
                 return
 
-            nstep = max(round(subsegment_length / MIN_STEP_SIZE), 1)
+            nstep = max(round(subsegment_length / sim.MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
 
-            charge = t["n_electrons"] * (subsegment_length/length) / (nstep*MC_SAMPLE_MULTIPLIER)
+            charge = t["n_electrons"] * (subsegment_length/length) / (nstep*sim.MC_SAMPLE_MULTIPLIER)
             total_current = 0
             rng_state = (rng_states[itrk + ntrk * ipix],)
             for istep in range(nstep):
-                for _ in range(MC_SAMPLE_MULTIPLIER):
+                for _ in range(sim.MC_SAMPLE_MULTIPLIER):
                     x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
                     y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
                     z = subsegment_start[2] + step * (istep + 0.5) * direction[2]

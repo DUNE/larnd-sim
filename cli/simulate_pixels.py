@@ -432,7 +432,7 @@ def run_simulation(input_filename,
         print("Pixel thresholds file:", pixel_thresholds_file)
         pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
     else:
-        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
+        pixel_thresholds_lut = CudaDict(cp.array([detector.DISCRIMINATION_THRESHOLD]), 1, 1)
     RangePop()
 
     RangePush("load_pixel_gains")
@@ -933,7 +933,7 @@ def run_simulation(input_filename,
 
                 RangePush("track_pixel_map")
                 # Mapping between unique pixel array and track array index
-                track_pixel_map = cp.full((unique_pix.shape[0], detsim.MAX_TRACKS_PER_PIXEL), -1)
+                track_pixel_map = cp.full((unique_pix.shape[0], sim.MAX_TRACKS_PER_PIXEL), -1)
                 TPB = 32
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
                 detsim.get_track_pixel_map[BPG, TPB](track_pixel_map, unique_pix, neighboring_pixels)
@@ -960,7 +960,7 @@ def run_simulation(input_filename,
                                                   overflow_flag)
                 if cp.any(overflow_flag):
                     warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
-                                  + f"{detsim.MAX_TRACKS_PER_PIXEL}")
+                                  + f"{sim.MAX_TRACKS_PER_PIXEL}")
 
                 RangePop()
 
