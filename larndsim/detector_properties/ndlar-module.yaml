@@ -247,6 +247,7 @@ v_ref: 1568 # mV
 ## Light simulation parameters.
 # Set to 1 to switch on the light simulation.
 light_simulated: 0
+light_trig_mode: 1
 #singlet_fraction: 0.3
 #tau_s: 0.001 # us
 #tau_t: 1.530 # us

@@ -7,11 +7,12 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
+    LIGHT_SIMULATED: True
 
 # 2x2 (same module configuration), beam
-2x2: &2x2main
+2x2_no_modvar: &2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim.yaml
     DET_PROPERTIES:  2x2.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
@@ -19,23 +20,24 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123.npz
+    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
+    LIGHT_SIMULATED: True
     MOD2MOD_VARIATION: False
 
 # 2x2 (same module configuration), mpvmpr
-2x2_mpvmpr:
+2x2_mpvmpr_no_modvar:
     <<: *2x2main
     SIM_PROPERTIES:  singles_sim.yaml
 
 # 2x2 (same module configuration), non-beam
-2x2_non_beam:
+2x2_non_beam_no_modvar:
     <<: *2x2main
     SIM_PROPERTIES:  singles_sim.yaml
     DET_PROPERTIES:  2x2_non_beam.yaml
 
 # 2x2 (differnt module configuration), beam
-2x2_mod2mod_variation: &2x2modvar
+2x2: &2x2modvar
     <<: *2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim_mod2mod_variation.yaml
     DET_PROPERTIES:  2x2_mod2mod_variation.yaml
@@ -46,19 +48,25 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024.npz] 
+    # LIGHT_LUT:       [/sdf/data/neutrino/2x2/light_lut/lightLUT_Mod0_06052024_time_norm.npz, /sdf/data/neutrino/2x2/light_lut/lightLUT_Mod123_06052024_time_norm.npz]
+    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz]
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
 
 # 2x2 (differnt module configuration), beam, old response
-2x2_mod2mod_variation_old_response:
+2x2_old_response: &2x2modvar_old_response
     <<: *2x2modvar
     DET_PROPERTIES:  2x2_mod2mod_variation_old_response.yaml
     RESPONSE:        [response_44.npy, response_38.npy]
 
 # 2x2 (differnt module configuration), mpvmpr
-2x2_mod2mod_variation_mpvmpr:
+2x2_mpvmpr:
     <<: *2x2modvar
+    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
+
+# 2x2 (differnt module configuration), mpvmpr, old response
+2x2_mpvmpr_old_response:
+    <<: *2x2modvar_old_response
     SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
 
 # nd-lar (same module configuration)
@@ -68,6 +76,6 @@ ndlar:
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40.yaml
     DET_PROPERTIES:  ndlar-module.yaml
     RESPONSE:        response_38.npy
-    LIGHT_SIMULATED: 0
+    LIGHT_SIMULATED: True
     LIGHT_LUT:       ''
     LIGHT_DET_NOISE: ''
