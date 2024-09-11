@@ -85,21 +85,44 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
+def load_mod2mod_variation_properties(files, id_name, n_modules, message=""):
+    if files is None:
+        return None
+
+    try:
+        ids = cfg[id_name]
+        if not isinstance(files, list) or len(ids) != n_modules or max(ids) >= len(files):
+            raise KeyError(f"Simulation with module variation activated, but the number of pointer for {message} is incorrect!")
+        else:
+            module_files = [files[idx] for idx in ids]
+            files = module_files
+    except:
+        if isinstance(files, list) and len(files) != n_modules:
+            raise KeyError(f"Simulation with module variation activated, but the number of {message} is incorrect!")
+        elif isinstance(files, list) and len(files) == n_modules:
+            warnings.warn("Simulation with module variation activated, using default orders for the {message}.")
+    return files
+
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2_mod2mod_variation',
                    mod2mod_variation=None,
                    pixel_layout=None,
+                   pixel_layout_id=None
                    detector_properties=None,
                    simulation_properties=None,
                    response_file=None,
+                   response_id=None,
                    light_simulated=None,
                    light_lut_filename=None,
+                   light_lut_id=None,
                    light_det_noise_filename=None,
                    bad_channels=None,
                    n_events=None,
                    pixel_thresholds_file=None,
+                   pixel_thresholds_id=None,
                    pixel_gains_file=None,
+                   pixel_gains_id=None,
                    rand_seed=None,
                    save_memory=None):
     """
@@ -234,18 +257,24 @@ def run_simulation(input_filename,
     cfg = get_config(config)
     if pixel_layout is None:
         pixel_layout = cfg['PIXEL_LAYOUT']
+    if pixel_layout_id is None:
+        pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
     if detector_properties is None:
         detector_properties = cfg['DET_PROPERTIES']
     if response_file is None:
         response_file = cfg['RESPONSE']
+    if response_id is None:
+        response_id = cfg['RESPONSE_ID']
     if pixel_thresholds_file is None:
         try:
             pixel_thresholds_file = cfg['PIXEL_THRESHOLDS_FILE']
+            pixel_thresholds_id = cfg['PIXEL_THRESHOLDS_ID']
         except:
             print("Pixel threshold files are not provided. Using the default thresholds.")
     if pixel_gains_file is None:
         try:
             pixel_gains_file = cfg['PIXEL_GAINS_FILE']
+            pixel_gains_id = cfg['PIXEL_GAINS_ID']
         except:
             print("Pixel gain files are not provided. Using the default gains.")
     if simulation_properties is None:
@@ -258,6 +287,8 @@ def run_simulation(input_filename,
     if light_lut_filename is None:
         try:
             light_lut_filename = cfg['LIGHT_LUT']
+            if light_lut_id is None:
+                light_lut_id = cfg['LIGHT_LUT_ID']
             if isinstance(light_lut_filename, list):
                 for i_light_lut, f_light_lut in enumerate(light_lut_filename):
                     if not os.path.isfile(f_light_lut):
@@ -327,58 +358,12 @@ def run_simulation(input_filename,
 
     if mod2mod_variation is True:
         # Load the index for pixel layout, response and LUT
-        try:
-            pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
-            if not isinstance(pixel_layout, list) or len(pixel_layout_id) != n_modules or max(pixel_layout_id) >= len(pixel_layout):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel layout is incorrect!")
-            else:
-                module_pixel_layout = [pixel_layout[idx] for idx in pixel_layout_id]
-                pixel_layout = module_pixel_layout
-        except:
-            if isinstance(pixel_layout, list) and len(pixel_layout) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of pixel layout files is incorrect!")
-            elif isinstance(pixel_layout, list) and len(pixel_layout) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the pixel layout files.")
+        pixel_layout = load_mod2mod_variation_properties(pixel_layout, "PIXEL_LAYOUT_ID", n_modules, message="pixel layout")
+        response_file = load_mod2mod_variation_properties(response_file, "RESPONSE_ID", n_modules, message="response files")
+        pixel_thresholds_file = load_mod2mod_variation_properties(pixel_thresholds_file, "PIXEL_THRESHOLD_ID", n_modules, message="pixel threshold files")
+        pixel_gains_file = load_mod2mod_variation_properties(pixel_gains_file, "PIXEL_GAIN_ID", n_modules, message="pixel gain files")
+        light_lut_filename = load_mod2mod_variation_properties(light_lut_filename, "LIGHT_LUT_ID", n_modules, message="light LUT")
 
-        try:
-            response_id = cfg['RESPONSE_ID']
-            if not isinstance(response_file, list) or len(response_id) != n_modules or max(response_id) >= len(response_file):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for response files is incorrect!")
-            else:
-                module_response_file = [response_file[idx] for idx in response_id]
-                response_file = module_response_file
-        except:
-            if isinstance(response_file, list) and len(response_file) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
-            elif isinstance(response_file, list) and len(response_file) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the response files.")
-
-        try:
-            pixel_threshold_id = cfg['PIXEL_THRESHOLD_ID']
-            if not isinstance(pixel_thresholds_file, list) or len(pixel_threshold_id) != n_modules or max(pixel_threshold_id) >= len(pixel_thresholds_file):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel threshold files is incorrect!")
-            else:
-                module_pixel_thresholds_file = [pixel_thresholds_file[idx] for idx in pixel_threshold_id]
-                pixel_thresholds_file = module_pixel_thresholds_file
-        except:
-            if isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of pixel threshold files is incorrect!")
-            elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the pixel threshold files.")
-
-        try:
-            light_lut_id = cfg['LIGHT_LUT_ID']
-            if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
-            else:
-                module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
-                light_lut_filename = module_light_lut_filename
-        except:
-            if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
-            elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
-        
         if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
             if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:
                 warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
@@ -465,20 +450,6 @@ def run_simulation(input_filename,
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
-
-    RangePush("load_pixel_thresholds")
-    if pixel_thresholds_file is not None:
-        print("Pixel thresholds file:", pixel_thresholds_file)
-        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
-    else:
-        pixel_thresholds_lut = CudaDict(cp.array([detector.DISCRIMINATION_THRESHOLD]), 1, 1)
-    RangePop()
-
-    RangePush("load_pixel_gains")
-    if pixel_gains_file is not None:
-        print("Pixel gains file:", pixel_gains_file)
-        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
-    RangePop()
 
     RangePush("set_if_simulate_light")
     if light_simulated is not None:
@@ -620,7 +591,7 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = fee.gen_event_times(num_evids, 0)
+        event_times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
 
     # broadcast the event times to vertices
     if input_has_vertices and not sim.IS_SPILL_SIM:
@@ -706,6 +677,8 @@ def run_simulation(input_filename,
             RangePush("load_pixel_thresholds")
             if pixel_thresholds_file is not None:
                 pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
+            else:
+                pixel_thresholds_lut = CudaDict(cp.array([detector.DISCRIMINATION_THRESHOLD]), 1, 1)
             RangePop()
 
             RangePush("load_pixel_gains")
