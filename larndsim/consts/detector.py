@@ -8,8 +8,11 @@ import yaml
 
 from collections import defaultdict
 
-from .units import mm, cm, V, kV
+from .units import mm, cm, mV, V, kV, e
 
+###################
+# LArTPC drift
+###################
 #: Detector temperature in K
 TEMPERATURE = 87.17
 #: Liquid argon density in :math:`g/cm^3`
@@ -18,8 +21,30 @@ LAR_DENSITY = 1.38 # g/cm^3
 E_FIELD = 0.50 # kV/cm
 #: Drift velocity in :math:`cm/\mu s`
 V_DRIFT = 0.1648 # cm / us,
+#: Electron mobility constants
+ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
 #: Electron lifetime in :math:`\mu s`
 ELECTRON_LIFETIME = 2.2e3 # us,
+#: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
+LONG_DIFF = 4.0e-6 # cm * cm / us
+#: Transverse diffusion coefficient in :math:`cm^2/\mu s`
+TRAN_DIFF = 8.8e-6 # cm * cm / us
+
+###################
+# TPC geometry
+###################
+#: TPC drift length in :math:`cm`
+DRIFT_LENGTH = 0
+#: Borders of each TPC volume in :math:`cm`
+TPC_BORDERS = np.zeros((0, 3, 2))
+#: TPC offsets wrt the origin in :math:`cm`
+TPC_OFFSETS = np.zeros((0, 3, 2))
+#: Pixel tile borders in :math:`cm`
+TILE_BORDERS = np.zeros((2,2))
+
+###################
+# LArPix
+###################
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
 #: Drift time window in :math:`\mu s`
@@ -28,28 +53,16 @@ TIME_INTERVAL = (0, 200.) # us
 TIME_PADDING = 10
 #: Number of sampled points for each segment slice
 SAMPLED_POINTS = 40
-#: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-LONG_DIFF = 4.0e-6 # cm * cm / us
-#: Transverse diffusion coefficient in :math:`cm^2/\mu s`
-TRAN_DIFF = 8.8e-6 # cm * cm / us
 #: Numpy array containing all the time ticks in the drift time window
 TIME_TICKS = np.linspace(TIME_INTERVAL[0],
                          TIME_INTERVAL[1],
                          int(round(TIME_INTERVAL[1]-TIME_INTERVAL[0])/TIME_SAMPLING)+1)
 #: Time window of current response in :math:`\mu s`
 TIME_WINDOW = 8.9 # us
-#: TPC drift length in :math:`cm`
-DRIFT_LENGTH = 0
 #: Time sampling in the pixel response file in :math:`\mu s`
 RESPONSE_SAMPLING = 0.1
 #: Spatial sampling in the pixel reponse file in :math:`cm`
 RESPONSE_BIN_SIZE = 0.04434
-#: Borders of each TPC volume in :math:`cm`
-TPC_BORDERS = np.zeros((0, 3, 2))
-#: TPC offsets wrt the origin in :math:`cm`
-TPC_OFFSETS = np.zeros((0, 3, 2))
-#: Pixel tile borders in :math:`cm`
-TILE_BORDERS = np.zeros((2,2))
 #: Default value for pixel_plane, to indicate out-of-bounds edep
 DEFAULT_PLANE_INDEX = 0x0000BEEF
 #: Total number of pixels
@@ -74,8 +87,56 @@ MODULE_TO_IO_GROUPS = {}
 MODULE_TO_TPCS = {}
 TPC_TO_MODULE = {}
 
-ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
-
+###################
+# LArPix FEE
+###################
+#: Number of back-tracked segments to be recorded
+ASSOCIATION_COUNT_TO_STORE = 20
+#: Maximum number of ADC values stored per pixel
+MAX_ADC_VALUES = 30
+#: Discrimination threshold in e-
+DISCRIMINATION_THRESHOLD = 7e3 # e-
+#: ADC hold delay in clock cycles
+ADC_HOLD_DELAY = 15
+#: ADC busy delay in clock cycles
+ADC_BUSY_DELAY = 9
+#: Reset time in clock cycles
+RESET_CYCLES = 1
+#: Clock cycle time in :math:`\mu s`
+CLOCK_CYCLE = 0.1
+#: Clock rollover / reset time in larpix clock ticks (32-digit clock)
+ROLLOVER_CYCLES =  2**31
+#: PPS reset time
+PPS_CYCLES = 10**6 / CLOCK_CYCLE
+#: True if using PPS reset / false for clock rollover
+USE_PPS_ROLLOVER = True # leaving True as default
+#: Clock reset, either ROLLOVER_CYCLES or PPS_CYCLES
+if USE_PPS_ROLLOVER:
+    CLOCK_RESET_PERIOD = int(PPS_CYCLES)
+else:
+    CLOCK_RESET_PERIOD = int(ROLLOVER_CYCLES)
+#: Front-end gain in :math:`mV/e-`
+GAIN = 4 / 1e3 # mV/e
+#: Buffer risetime in :math:`\mu s` (set >0 to include buffer response simulation)
+BUFFER_RISETIME = 0.100
+#: Common-mode voltage in :math:`mV`
+V_CM = 288 # mV
+#: Reference voltage in :math:`mV`
+V_REF = 1300 # mV
+#: Pedestal voltage in :math:`mV`
+V_PEDESTAL = 580 # mV
+#: Number of ADC counts
+ADC_COUNTS = 2**8
+#: Reset noise in e-
+RESET_NOISE_CHARGE = 900 # e
+#: Uncorrelated noise in e-
+UNCORRELATED_NOISE_CHARGE = 500 # e
+#: Discriminator noise in e-
+DISCRIMINATOR_NOISE = 650 # e
+#: Average time between events in microseconds
+EVENT_RATE = 100000 # 10Hz
+#: Offset of the non-beam event time in microseconds
+NON_BEAM_EVENT_GAP = 0 # us
 
 def electron_mobility(efield, temperature):
     """
@@ -122,6 +183,22 @@ def get_n_modules(detprop_file):
                 
     return list(detprop['module_to_tpcs'].keys())
 
+def set_multi_properties(bucket, n_mod, i_module, message=""):
+    if hasattr(bucket, "__len__") and (len(bucket) != n_mod) and len(bucket) != 1):
+        raise KeyError(f'The length of provided {message} configuration file is unexpected. Please check again.')
+    if not hasattr(bucket, "__len__"):
+        prop = bucket
+    elif i_module < 0:
+        prop = bucket[0]
+        if len(bucket) > 1:
+            warnings.warn(f'Module variation seems to be not activated, but the {message} is provided as a list. Taking the first given value.')
+    elif i_module > len(bucket):
+        prop = bucket[0]
+        warnings.warn(f'Module variation seems to be activated, but the {message} is not specified per module. Taking the first given value.')
+    else:
+        prop = bucket[i_module-1]
+    return prop
+
 def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     """
     The function loads the detector properties and
@@ -163,9 +240,33 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     global RESPONSE_BIN_SIZE
     global TPC_OFFSETS
     global MOD_IDS
+    global DISCRIMINATION_THRESHOLD
+    global ADC_HOLD_DELAY
+    global ADC_BUSY_DELAY
+    global RESET_CYCLES
+    global CLOCK_CYCLE
+    global ROLLOVER_CYCLES
+    global PPS_CYCLES
+    global USE_PPS_ROLLOVER
+    global CLOCK_RESET_PERIOD
+    global GAIN
+    global BUFFER_RISETIME
+    global V_CM
+    global V_REF
+    global V_PEDESTAL
+    global ADC_COUNTS
+    global RESET_NOISE_CHARGE
+    global UNCORRELATED_NOISE_CHARGE
+    global DISCRIMINATOR_NOISE
+    global EVENT_RATE
+    global NON_BEAM_EVENT_GAP
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
+
+    MOD_IDS = get_n_modules(detprop_file)
+
+    n_mod = len(MOD_IDS)
 
     DRIFT_LENGTH = detprop['drift_length']
 
@@ -183,68 +284,20 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     TEMPERATURE = detprop.get('temperature', TEMPERATURE)
 
     e_field_bucket = detprop.get('e_field', E_FIELD)
-    if hasattr(e_field_bucket, "__len__") and (len(e_field_bucket) != len(get_n_modules(detprop_file)) and len(e_field_bucket) != 1):
-        raise KeyError("The length of provided E_field in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(e_field_bucket, "__len__"):
-        E_FIELD = e_field_bucket
-    elif i_module < 0:
-        E_FIELD = e_field_bucket[0]
-        if len(e_field_bucket) > 1:
-            warnings.warn('Module variation seems to be not activated, but electric field is provided as a list. Taking the first given value.')
-    elif i_module > len(e_field_bucket):
-        E_FIELD = e_field_bucket[0]
-        warnings.warn('Module variation seems to be activated, but the electric field is not specified per module.Taking the first given value.')
-    else:
-        E_FIELD = e_field_bucket[i_module-1]
+    E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
     V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
     lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
-    if hasattr(lifetime_bucket, "__len__") and (len(lifetime_bucket) != len(get_n_modules(detprop_file)) and len(lifetime_bucket) != 1):
-        raise KeyError("The length of provided lifetime in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(lifetime_bucket, "__len__"):
-        ELECTRON_LIFETIME = lifetime_bucket
-    elif i_module < 0:
-        ELECTRON_LIFETIME = lifetime_bucket[0]
-        if len(lifetime_bucket) > 1:
-            warnings.warn('Module variation seems to be not activated, but electron lifetime is provided as a list. Taking the first given value.')
-    elif i_module > len(lifetime_bucket):
-        ELECTRON_LIFETIME = lifetime_bucket[0]
-        warnings.warn('Module variation seems to be activated, but the electron lifetime is not specified per module. Taking the first given value.')
-    else:
-        ELECTRON_LIFETIME = lifetime_bucket[i_module-1]
+    ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
 
     LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
     TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
 
     response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
-    if hasattr(response_sampling_bucket, "__len__") and (len(response_sampling_bucket) != len(get_n_modules(detprop_file)) and len(response_sampling_bucket) != 1):
-        raise KeyError("The length of provided induction response time sampling (bin size) in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(response_sampling_bucket, "__len__"):
-        RESPONSE_SAMPLING = response_sampling_bucket
-    elif i_module < 0:
-        RESPONSE_SAMPLING = response_sampling_bucket[0]
-        if len(response_sampling_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but the induction response time sampling (bin size) is provided as a list. Taking the first given value.')
-    elif i_module > len(response_sampling_bucket):
-        RESPONSE_SAMPLING = response_sampling_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the induction response time sampling (bin size) is not specified per module. Taking the first given value.')
-    else:
-        RESPONSE_SAMPLING = response_sampling_bucket[i_module-1]
+    RESPONSE_SAMPLING = set_multi_properties(response_sampling_bucket, n_mod, i_module, message="induction response time sampling (bin size)")
 
     response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
-    if hasattr(response_bin_size_bucket, "__len__") and (len(response_bin_size_bucket) != len(get_n_modules(detprop_file)) and len(response_bin_size_bucket) != 1):
-        raise KeyError("The length of provided induction response bin size in the detector configuration file is unexpected. Please check again.")
-    if not hasattr(response_bin_size_bucket, "__len__"):
-        RESPONSE_BIN_SIZE = response_bin_size_bucket
-    elif i_module < 0:
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
-        if len(response_bin_size_bucket) > 1:
-            warnings.warn('It seems module variation is not activated, but the induction response bin size is provided as a list. Taking the first given value.')
-    elif i_module > len(response_bin_size_bucket):
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[0]
-        warnings.warn('Simulation with module variation seems to be activated, but the induction response bin size is not specified per module. Taking the first given value.')
-    else:
-        RESPONSE_BIN_SIZE = response_bin_size_bucket[i_module-1]
+    RESPONSE_BIN_SIZE = set_multi_properties(response_bin_size_bucket, n_mod, i_module, message="induction response bin size")
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -304,4 +357,33 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
-    MOD_IDS = get_n_modules(detprop_file)
+    dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
+    DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
+    DISCRIMINATION_THRESHOLD = DISCRIMINATION_THRESHOLD * e
+
+    ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
+    ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
+    RESET_CYCLES = detprop.get('reset_cycles', RESET_CYCLES)
+    CLOCK_CYCLE = detprop.get('clock_cycle', CLOCK_CYCLE)
+    ROLLOVER_CYCLES = detprop.get('rollover_cycles', ROLLOVER_CYCLES)
+    PPS_CYCLES = detprop.get('pps_cycles', PPS_CYCLES)
+    USE_PPS_ROLLOVER = detprop.get('use_pps_rollover', USE_PPS_ROLLOVER)
+    CLOCK_RESET_PERIOD = detprop.get('clock_reset_period', CLOCK_RESET_PERIOD)
+    GAIN = detprop.get('larpix_gain', GAIN)
+    GAIN = GAIN * mV / e
+    BUFFER_RISETIME = detprop.get('buffer_risetime', BUFFER_RISETIME)
+    V_CM = detprop.get('v_cm', V_CM)
+    V_CM = V_CM * mV
+    V_REF = detprop.get('v_ref', V_REF)
+    V_REF = V_REF * mV
+    V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
+    V_PEDESTAL = V_PEDESTAL * mV
+    ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
+    RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
+    RESET_NOISE_CHARGE = RESET_NOISE_CHARGE * e
+    UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
+    UNCORRELATED_NOISE_CHARGE = UNCORRELATED_NOISE_CHARGE * e
+    DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+    DISCRIMINATOR_NOISE = DISCRIMINATOR_NOISE * e
+    EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
+    NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)

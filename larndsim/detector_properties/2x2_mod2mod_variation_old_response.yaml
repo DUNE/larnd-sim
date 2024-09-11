@@ -30,6 +30,9 @@ module_to_io_groups:
   2: [3, 4]
   3: [5, 6]
   4: [7, 8]
+discrimination_threshold: 5.0e3 # e-
+v_cm: 478 # mV
+v_ref: 1568 # mV
 
 # Light geometry parameters
 module_to_tpcs:
@@ -64,5 +67,4 @@ light_digit_sample_spacing: 0.016 # us
 light_nbit: 14
 sipm_response_model: 1 # 0: RLC model; 1: measured
 impulse_model: 'larndsim/bin/sipm_impulse.npy'
-max_light_truth_ids: 50 # set to zero to disable light truth backtracking
-mc_truth_threshold: 0.1 # pe/us
+
