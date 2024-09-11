@@ -238,6 +238,16 @@ def run_simulation(input_filename,
         detector_properties = cfg['DET_PROPERTIES']
     if response_file is None:
         response_file = cfg['RESPONSE']
+    if pixel_thresholds_file is None:
+        try:
+            pixel_thresholds_file = cfg['PIXEL_THRESHOLDS_FILE']
+        except:
+            print("Pixel threshold files are not provided. Using the default thresholds.")
+    if pixel_gains_file is None:
+        try:
+            pixel_gains_file = cfg['PIXEL_GAINS_FILE']
+        except:
+            print("Pixel gain files are not provided. Using the default gains.")
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
     if light_simulated is None:
@@ -282,12 +292,16 @@ def run_simulation(input_filename,
     print("Detector properties file:", detector_properties)
     print("Pixel layout file:", pixel_layout)
     print("Response file:", response_file)
+    if bad_channels:
+        print("Disabled channel list: ", bad_channels)
+    if pixel_thresholds_file:
+        print("Pixel threshold file: ", pixel_thresholds_file)
+    if pixel_gains_file:
+        print("Pixel gain file: ", pixel_gains_file)
     if light_lut_filename:
         print("Light LUT:", light_lut_filename)
     if light_det_noise_filename:
         print("Light detector noise: ", light_det_noise_filename)
-    if bad_channels:
-        print("Disabled channel list: ", bad_channels)
     if save_memory:
         print('Recording the process resource log:', save_memory)
     else:
@@ -311,7 +325,7 @@ def run_simulation(input_filename,
             warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response and light lookup table! \nDeactivating module variation...")
             mod2mod_variation = False
 
-    if mod2mod_variation == True:
+    if mod2mod_variation is True:
         # Load the index for pixel layout, response and LUT
         try:
             pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
@@ -338,6 +352,19 @@ def run_simulation(input_filename,
                 raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
             elif isinstance(response_file, list) and len(response_file) == n_modules:
                 warnings.warn("Simulation with module variation activated, using default orders for the response files.")
+
+        try:
+            pixel_threshold_id = cfg['PIXEL_THRESHOLD_ID']
+            if not isinstance(pixel_thresholds_file, list) or len(pixel_threshold_id) != n_modules or max(pixel_threshold_id) >= len(pixel_thresholds_file):
+                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel threshold files is incorrect!")
+            else:
+                module_pixel_thresholds_file = [pixel_thresholds_file[idx] for idx in pixel_threshold_id]
+                pixel_thresholds_file = module_pixel_thresholds_file
+        except:
+            if isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) != n_modules:
+                raise KeyError("Simulation with module variation activated, but the number of pixel threshold files is incorrect!")
+            elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == n_modules:
+                warnings.warn("Simulation with module variation activated, using default orders for the pixel threshold files.")
 
         try:
             light_lut_id = cfg['LIGHT_LUT_ID']
@@ -407,6 +434,18 @@ def run_simulation(input_filename,
 
         RangePush("load_induction_response")
         response = cp.load(response_file)
+        RangePop()
+
+        RangePush("load_pixel_thresholds")
+        if pixel_thresholds_file is not None:
+            print("Pixel thresholds file:", pixel_thresholds_file)
+            pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
+        RangePop()
+
+        RangePush("load_pixel_gains")
+        if pixel_gains_file is not None:
+            print("Pixel gains file:", pixel_gains_file)
+            pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
         RangePop()
     else:
         consts.light.set_light_properties(detector_properties)
@@ -662,6 +701,16 @@ def run_simulation(input_filename,
 
             RangePush("load_module_induction_response")
             response = cp.load(response_file[i_mod-1])
+            RangePop()
+
+            RangePush("load_pixel_thresholds")
+            if pixel_thresholds_file is not None:
+                pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
+            RangePop()
+
+            RangePush("load_pixel_gains")
+            if pixel_gains_file is not None:
+                pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_segments_in_module")
