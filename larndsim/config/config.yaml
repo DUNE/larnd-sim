@@ -13,8 +13,8 @@ module0:
 
 # 2x2 (same module configuration), beam
 2x2_no_modvar: &2x2main
-    SIM_PROPERTIES:  2x2_NuMI_sim.yaml
-    DET_PROPERTIES:  2x2.yaml
+    SIM_PROPERTIES:  2x2_NuMI_sim_no_modvar.yaml
+    DET_PROPERTIES:  2x2_no_modvar.yaml
     PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
     RESPONSE:        response_44.npy
     # Path to light LUT at NERSC
@@ -28,19 +28,19 @@ module0:
 # 2x2 (same module configuration), mpvmpr
 2x2_mpvmpr_no_modvar:
     <<: *2x2main
-    SIM_PROPERTIES:  singles_sim.yaml
+    SIM_PROPERTIES:  singles_sim_no_modvar.yaml
 
 # 2x2 (same module configuration), non-beam
 2x2_non_beam_no_modvar:
     <<: *2x2main
-    SIM_PROPERTIES:  singles_sim.yaml
-    DET_PROPERTIES:  2x2_non_beam.yaml
+    SIM_PROPERTIES:  singles_sim_no_modvar.yaml
+    DET_PROPERTIES:  2x2_non_beam_no_modvar.yaml
 
 # 2x2 (differnt module configuration), beam
 2x2: &2x2modvar
     <<: *2x2main
-    SIM_PROPERTIES:  2x2_NuMI_sim_mod2mod_variation.yaml
-    DET_PROPERTIES:  2x2_mod2mod_variation.yaml
+    SIM_PROPERTIES:  2x2_NuMI_sim.yaml
+    DET_PROPERTIES:  2x2.yaml
     PIXEL_LAYOUT:    [multi_tile_layout-2.4.16.yaml, multi_tile_layout-2.5.16.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
     RESPONSE:        [response_44_v2a_50ns.npy, response_38_v2b_50ns.npy]
@@ -56,18 +56,18 @@ module0:
 # 2x2 (differnt module configuration), beam, old response
 2x2_old_response: &2x2modvar_old_response
     <<: *2x2modvar
-    DET_PROPERTIES:  2x2_mod2mod_variation_old_response.yaml
+    DET_PROPERTIES:  2x2_old_response.yaml
     RESPONSE:        [response_44.npy, response_38.npy]
 
 # 2x2 (differnt module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
-    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
+    SIM_PROPERTIES:  singles_sim.yaml
 
 # 2x2 (differnt module configuration), mpvmpr, old response
 2x2_mpvmpr_old_response:
     <<: *2x2modvar_old_response
-    SIM_PROPERTIES:  singles_sim_mod2mod_variation.yaml
+    SIM_PROPERTIES:  singles_sim.yaml
 
 # nd-lar (same module configuration)
 # lack of light configuration files

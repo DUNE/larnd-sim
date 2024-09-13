@@ -21,9 +21,6 @@ from .consts import units
 from .consts import sim
 from .consts import detector
 
-from .fee import CLOCK_CYCLE, ROLLOVER_CYCLES, PPS_CYCLES, CLOCK_RESET_PERIOD, USE_PPS_ROLLOVER
-
-
 def get_nticks(light_incidence):
     """
     Calculates the number of time ticks needed to simulate light signals of the
@@ -733,13 +730,13 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
     
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
-    event_sync_times = (event_times[unique_events_inv] / CLOCK_CYCLE).astype(int) % CLOCK_RESET_PERIOD
+    event_sync_times = (event_times[unique_events_inv] / detector.CLOCK_CYCLE).astype(int) % detector.CLOCK_RESET_PERIOD
 
     with h5py.File(output_filename, 'a') as f:
         trig_data = np.empty(trigger_idx.shape[0], dtype=np.dtype([('op_channel','i4',(op_channel_idx.shape[-1])), ('ts_s','f8'), ('ts_sync','u8')]))
         trig_data['op_channel'] = op_channel_idx
         trig_data['ts_s'] = ((start_times + trigger_idx * light.LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
-        trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/CLOCK_CYCLE + event_sync_times).astype(int) % CLOCK_RESET_PERIOD)
+        trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/detector.CLOCK_CYCLE + event_sync_times).astype(int) % detector.CLOCK_RESET_PERIOD)
 
         if 'light_trig' not in f:
             f.create_dataset('light_trig', data=trig_data, maxshape=(None,))

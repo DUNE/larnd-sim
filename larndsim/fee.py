@@ -19,7 +19,7 @@ from larpix.format import hdf5format
 from .pixels_from_track import id2pixel
 
 from .consts.units import mV, e
-from .consts import units, detector, light
+from .consts import units, detector, light, sim
 
 import logging
 logging.basicConfig()
@@ -285,10 +285,10 @@ def export_to_hdf5(event_id_list,
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
         dtype = np.dtype([('event_ids',f'(1,)i8'),
-                          ('segment_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),
-                          ('file_traj_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction_traj',f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),])
+                          ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),])
 
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
@@ -304,11 +304,11 @@ def export_to_hdf5(event_id_list,
         ass_fractions = np.take_along_axis(packets_frac, frac_order, axis=1)
 
         # Second, only store the relevant portion.
-        if ass_segment_ids.shape[1] >= detector.ASSOCIATION_COUNT_TO_STORE:
-            packets_mc_ds['segment_ids'] = ass_segment_ids[:,:detector.ASSOCIATION_COUNT_TO_STORE]
-            packets_mc_ds['fraction' ] = ass_fractions[:,:detector.ASSOCIATION_COUNT_TO_STORE]
+        if ass_segment_ids.shape[1] >= sim.ASSOCIATION_COUNT_TO_STORE:
+            packets_mc_ds['segment_ids'] = ass_segment_ids[:,:sim.ASSOCIATION_COUNT_TO_STORE]
+            packets_mc_ds['fraction' ] = ass_fractions[:,:sim.ASSOCIATION_COUNT_TO_STORE]
         else:
-            num_to_pad = detector.ASSOCIATION_COUNT_TO_STORE - ass_segment_ids.shape[1]
+            num_to_pad = sim.ASSOCIATION_COUNT_TO_STORE - ass_segment_ids.shape[1]
             packets_mc_ds['segment_ids'] = np.pad(ass_segment_ids,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
@@ -327,11 +327,11 @@ def export_to_hdf5(event_id_list,
                 ass_track_ids[pidx][tidx] = unique_tid
                 ass_fractions_track[pidx][tidx] = np.sum(ass_fractions[pidx][mask][tids[mask]==unique_tid])
 
-        if ass_segment_ids.shape[1] >= ASSOCIATION_COUNT_TO_STORE:
-            packets_mc_ds['file_traj_ids'] = ass_track_ids[:,:ASSOCIATION_COUNT_TO_STORE]
-            packets_mc_ds['fraction_traj'] = ass_fractions_track[:,:ASSOCIATION_COUNT_TO_STORE]
+        if ass_segment_ids.shape[1] >= sim.ASSOCIATION_COUNT_TO_STORE:
+            packets_mc_ds['file_traj_ids'] = ass_track_ids[:,:sim.ASSOCIATION_COUNT_TO_STORE]
+            packets_mc_ds['fraction_traj'] = ass_fractions_track[:,:sim.ASSOCIATION_COUNT_TO_STORE]
         else:
-            num_to_pad = ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
+            num_to_pad = sim.ASSOCIATION_COUNT_TO_STORE - ass_track_ids.shape[1]
             packets_mc_ds['file_traj_ids'] = np.pad(ass_track_ids,
                 pad_width=((0,0),(0,num_to_pad)),
                 mode='constant',
@@ -385,20 +385,20 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
             packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))
             packets_mc_evt.append(np.array([-1]))
 
-            packets_mc_trk.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-            packets_frac.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
-            packets_mc_trj.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-            packets_frac_trj.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
+            packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+            packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
+            packets_mc_trj.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+            packets_frac_trj.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
-                          ('segment_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),
-                          ('file_traj_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction_traj',f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),])
+                          ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),])
 
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
@@ -451,28 +451,28 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
         packets.append(TimestampPacket(timestamp=evt_time*units.mus/units.s)) # s
         packets[-1].chip_key = Key(io_group,0,0)
         packets_mc_evt.append(np.array([-1]))
-        packets_mc_trk.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_frac.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_mc_trj.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_frac_trj.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trj.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_frac_trj.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
 
         # trigger packets
         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig)) # tick
         packets_mc_evt.append(np.array([-1]))
-        packets_mc_trk.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_frac.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_mc_trj.append(np.array([-1] * detector.ASSOCIATION_COUNT_TO_STORE))
-        packets_frac_trj.append(np.array([0] * detector.ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_mc_trj.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
+        packets_frac_trj.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
         hdf5format.to_file(filename, packet_list, workers=1)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
-                          ('segment_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction', f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),
-                          ('file_traj_ids',f'({detector.ASSOCIATION_COUNT_TO_STORE},)i8'),
-                          ('fraction_traj',f'({detector.ASSOCIATION_COUNT_TO_STORE},)f8'),])
+                          ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction', f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),
+                          ('file_traj_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
+                          ('fraction_traj',f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),])
         packets_mc_ds = np.empty(len(packets), dtype=dtype)
 
         packets_frac = np.array(packets_frac)
@@ -558,8 +558,8 @@ def get_adc_values(pixels_signals,
 
         while ic < curre.shape[0] or adc_busy > 0:
 
-            if iadc >= detector.MAX_ADC_VALUES:
-                print("More ADC values than possible,", detector.MAX_ADC_VALUES)
+            if iadc >= sim.MAX_ADC_VALUES:
+                print("More ADC values than possible,", sim.MAX_ADC_VALUES)
                 break
 
             q = 0

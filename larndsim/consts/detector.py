@@ -90,10 +90,6 @@ TPC_TO_MODULE = {}
 ###################
 # LArPix FEE
 ###################
-#: Number of back-tracked segments to be recorded
-ASSOCIATION_COUNT_TO_STORE = 20
-#: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 30
 #: Discrimination threshold in e-
 DISCRIMINATION_THRESHOLD = 7e3 # e-
 #: ADC hold delay in clock cycles
@@ -184,22 +180,22 @@ def get_n_modules(detprop_file):
     return list(detprop['module_to_tpcs'].keys())
 
 def set_multi_properties(bucket, n_mod, i_module, message=""):
-    if hasattr(bucket, "__len__") and (len(bucket) != n_mod) and len(bucket) != 1):
+    if isinstance(bucket, list) and (len(bucket) != n_mod and len(bucket) != 1):
         raise KeyError(f'The length of provided {message} configuration file is unexpected. Please check again.')
-    if not hasattr(bucket, "__len__"):
-        prop = bucket
+    if not isinstance(bucket, list):
+        prop = float(bucket)
     elif i_module < 0:
-        prop = bucket[0]
+        prop = float(bucket[0])
         if len(bucket) > 1:
             warnings.warn(f'Module variation seems to be not activated, but the {message} is provided as a list. Taking the first given value.')
     elif i_module > len(bucket):
-        prop = bucket[0]
+        prop = float(bucket[0])
         warnings.warn(f'Module variation seems to be activated, but the {message} is not specified per module. Taking the first given value.')
     else:
-        prop = bucket[i_module-1]
+        prop = float(bucket[i_module-1])
     return prop
 
-def set_detector_properties(detprop_file, pixel_file, i_module=-1):
+def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=False):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -274,30 +270,31 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
 
-    TIME_INTERVAL = np.array(detprop['time_interval'])
-    TIME_TICKS = np.linspace(TIME_INTERVAL[0],
-                             TIME_INTERVAL[1],
-                             int(round(TIME_INTERVAL[1]-TIME_INTERVAL[0])/TIME_SAMPLING)+1)
+    if not geo_only:
+        TIME_INTERVAL = np.array(detprop['time_interval'])
+        TIME_TICKS = np.linspace(TIME_INTERVAL[0],
+                                 TIME_INTERVAL[1],
+                                 int(round(TIME_INTERVAL[1]-TIME_INTERVAL[0])/TIME_SAMPLING)+1)
 
-    TIME_PADDING = detprop.get('time_padding', TIME_PADDING)
-    TIME_WINDOW = detprop.get('time_window', TIME_WINDOW)
-    TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+        TIME_PADDING = detprop.get('time_padding', TIME_PADDING)
+        TIME_WINDOW = detprop.get('time_window', TIME_WINDOW)
+        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
 
-    e_field_bucket = detprop.get('e_field', E_FIELD)
-    E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
-    V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
+        e_field_bucket = detprop.get('e_field', E_FIELD)
+        E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
+        V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
-    lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
-    ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
+        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
+        ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
 
-    LONG_DIFF = detprop.get('long_diff', LONG_DIFF)
-    TRAN_DIFF = detprop.get('tran_diff', TRAN_DIFF)
+        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
+        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-    response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
-    RESPONSE_SAMPLING = set_multi_properties(response_sampling_bucket, n_mod, i_module, message="induction response time sampling (bin size)")
+        response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
+        RESPONSE_SAMPLING = set_multi_properties(response_sampling_bucket, n_mod, i_module, message="induction response time sampling (bin size)")
 
-    response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
-    RESPONSE_BIN_SIZE = set_multi_properties(response_bin_size_bucket, n_mod, i_module, message="induction response bin size")
+        response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
+        RESPONSE_BIN_SIZE = set_multi_properties(response_bin_size_bucket, n_mod, i_module, message="induction response bin size")
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -357,33 +354,34 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1):
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
-    dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
-    DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
-    DISCRIMINATION_THRESHOLD = DISCRIMINATION_THRESHOLD * e
+    if not geo_only:
+        dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
+        DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
+        DISCRIMINATION_THRESHOLD = DISCRIMINATION_THRESHOLD * e
 
-    ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
-    ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
-    RESET_CYCLES = detprop.get('reset_cycles', RESET_CYCLES)
-    CLOCK_CYCLE = detprop.get('clock_cycle', CLOCK_CYCLE)
-    ROLLOVER_CYCLES = detprop.get('rollover_cycles', ROLLOVER_CYCLES)
-    PPS_CYCLES = detprop.get('pps_cycles', PPS_CYCLES)
-    USE_PPS_ROLLOVER = detprop.get('use_pps_rollover', USE_PPS_ROLLOVER)
-    CLOCK_RESET_PERIOD = detprop.get('clock_reset_period', CLOCK_RESET_PERIOD)
-    GAIN = detprop.get('larpix_gain', GAIN)
-    GAIN = GAIN * mV / e
-    BUFFER_RISETIME = detprop.get('buffer_risetime', BUFFER_RISETIME)
-    V_CM = detprop.get('v_cm', V_CM)
-    V_CM = V_CM * mV
-    V_REF = detprop.get('v_ref', V_REF)
-    V_REF = V_REF * mV
-    V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
-    V_PEDESTAL = V_PEDESTAL * mV
-    ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
-    RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
-    RESET_NOISE_CHARGE = RESET_NOISE_CHARGE * e
-    UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
-    UNCORRELATED_NOISE_CHARGE = UNCORRELATED_NOISE_CHARGE * e
-    DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
-    DISCRIMINATOR_NOISE = DISCRIMINATOR_NOISE * e
-    EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
-    NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
+        ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
+        ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
+        RESET_CYCLES = detprop.get('reset_cycles', RESET_CYCLES)
+        CLOCK_CYCLE = detprop.get('clock_cycle', CLOCK_CYCLE)
+        ROLLOVER_CYCLES = detprop.get('rollover_cycles', ROLLOVER_CYCLES)
+        PPS_CYCLES = detprop.get('pps_cycles', PPS_CYCLES)
+        USE_PPS_ROLLOVER = detprop.get('use_pps_rollover', USE_PPS_ROLLOVER)
+        CLOCK_RESET_PERIOD = detprop.get('clock_reset_period', CLOCK_RESET_PERIOD)
+        GAIN = detprop.get('larpix_gain', GAIN)
+        GAIN = GAIN * mV / e
+        BUFFER_RISETIME = detprop.get('buffer_risetime', BUFFER_RISETIME)
+        V_CM = detprop.get('v_cm', V_CM)
+        V_CM = V_CM * mV
+        V_REF = detprop.get('v_ref', V_REF)
+        V_REF = V_REF * mV
+        V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
+        V_PEDESTAL = V_PEDESTAL * mV
+        ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
+        RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
+        RESET_NOISE_CHARGE = RESET_NOISE_CHARGE * e
+        UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
+        UNCORRELATED_NOISE_CHARGE = UNCORRELATED_NOISE_CHARGE * e
+        DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+        DISCRIMINATOR_NOISE = DISCRIMINATOR_NOISE * e
+        EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
+        NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
