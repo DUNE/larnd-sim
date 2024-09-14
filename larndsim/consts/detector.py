@@ -209,6 +209,7 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         i_module (int): module id, default value i_module = -1.
                         i_module < 0 means all module share the same detector configuration.
     """
+
     global PIXEL_PITCH
     global TPC_BORDERS
     global PIXEL_CONNECTION_DICT
@@ -357,8 +358,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     if not geo_only:
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
         DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
-        DISCRIMINATION_THRESHOLD = DISCRIMINATION_THRESHOLD * e
-
         ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
         ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
         RESET_CYCLES = detprop.get('reset_cycles', RESET_CYCLES)
@@ -368,20 +367,13 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         USE_PPS_ROLLOVER = detprop.get('use_pps_rollover', USE_PPS_ROLLOVER)
         CLOCK_RESET_PERIOD = detprop.get('clock_reset_period', CLOCK_RESET_PERIOD)
         GAIN = detprop.get('larpix_gain', GAIN)
-        GAIN = GAIN * mV / e
         BUFFER_RISETIME = detprop.get('buffer_risetime', BUFFER_RISETIME)
         V_CM = detprop.get('v_cm', V_CM)
-        V_CM = V_CM * mV
         V_REF = detprop.get('v_ref', V_REF)
-        V_REF = V_REF * mV
         V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
-        V_PEDESTAL = V_PEDESTAL * mV
         ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
-        RESET_NOISE_CHARGE = RESET_NOISE_CHARGE * e
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
-        UNCORRELATED_NOISE_CHARGE = UNCORRELATED_NOISE_CHARGE * e
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
-        DISCRIMINATOR_NOISE = DISCRIMINATOR_NOISE * e
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)

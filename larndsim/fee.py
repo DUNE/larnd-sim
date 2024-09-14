@@ -496,7 +496,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
 
     return packets, packets_mc_ds
 
-def digitize(integral_list, gain=detector.GAIN):
+def digitize(integral_list, gain=detector.GAIN * mV / e):
     """
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
@@ -509,8 +509,8 @@ def digitize(integral_list, gain=detector.GAIN):
         :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
-    adcs = xp.minimum(xp.around(xp.maximum((integral_list * gain + detector.V_PEDESTAL - detector.V_CM), 0)
-                                * detector.ADC_COUNTS / (detector.V_REF - detector.V_CM)), detector.ADC_COUNTS-1)
+    adcs = xp.minimum(xp.around(xp.maximum((integral_list * gain + detector.V_PEDESTAL * mV - detector.V_CM * mV), 0)
+                                * detector.ADC_COUNTS / (detector.V_REF * mV - detector.V_CM * mV)), detector.ADC_COUNTS-1)
 
     return adcs
 
@@ -554,7 +554,7 @@ def get_adc_values(pixels_signals,
         adc_busy = 0
         last_reset = 0
         true_q = 0
-        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE
+        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
 
         while ic < curre.shape[0] or adc_busy > 0:
 
@@ -580,8 +580,8 @@ def get_adc_values(pixels_signals,
             q_sum += q
             true_q += q
 
-            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE
-            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE
+            q_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
+            disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE * e
 
             if adc_busy > 0:
                 adc_busy -= 1
@@ -613,12 +613,12 @@ def get_adc_values(pixels_signals,
                     true_q += q
                     ic+=1
 
-                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE
-                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE
+                adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
+                disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE * e
 
                 if adc < pixel_thresholds[ip] + disc_noise:
                     ic += round(detector.RESET_CYCLES * detector.CLOCK_CYCLE / detector.TIME_SAMPLING)
-                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE
+                    q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                     true_q = 0
 
                     for itrk in range(current_fractions.shape[2]):
@@ -646,7 +646,7 @@ def get_adc_values(pixels_signals,
                 last_reset = ic
                 adc_busy = round(detector.ADC_BUSY_DELAY * detector.CLOCK_CYCLE / detector.TIME_SAMPLING)
 
-                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                 true_q = 0
 
                 iadc += 1

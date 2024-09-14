@@ -681,8 +681,6 @@ def run_simulation(input_filename,
             RangePush("load_pixel_thresholds")
             if pixel_thresholds_file is not None:
                 pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
-            else:
-                pixel_thresholds_lut = CudaDict(cp.array([detector.DISCRIMINATION_THRESHOLD]), 1, 1)
             RangePop()
 
             RangePush("load_pixel_gains")
@@ -1061,9 +1059,12 @@ def run_simulation(input_filename,
                 TPB = 128
                 BPG = ceil(pixels_signals.shape[0] / TPB)
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                pixel_thresholds_lut.tpb = TPB
-                pixel_thresholds_lut.bpg = BPG
-                pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+                if pixel_thresholds_file is not None:
+                    pixel_thresholds_lut.tpb = TPB
+                    pixel_thresholds_lut.bpg = BPG
+                    pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+                else:
+                    pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
 
                 fee.get_adc_values[BPG, TPB](pixels_signals,
                                              pixels_tracks_signals,
