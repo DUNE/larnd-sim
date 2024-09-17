@@ -257,5 +257,4 @@ light_trig_mode: 1
 #light_trig_window: [0.9, 1.66] # us
 ## TODO: light_digit_sample_spacing: ?
 #light_nbit: 10
-#light_trig_mode: 0
 #lut_vox_div: [14, 26, 8]
