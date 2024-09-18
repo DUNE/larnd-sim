@@ -15,8 +15,8 @@ tran_diff: 8.8e-6 # cm * cm / us
 drift_length: 30.27225 # cm
 response_sampling: 0.05 # us
 response_bin_size: [0.04434, 0.04434, 0.0387975, 0.04434] # cm 
-time_padding: 190 # us
-time_window: 189.1 # us
+time_padding: 191 # us
+time_window: 191 # us
 tpc_offsets: # cm
   - [33.5, 0., 33.5]
   - [33.5, 0., -33.5]
