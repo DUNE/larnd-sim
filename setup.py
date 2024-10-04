@@ -2,7 +2,7 @@
 
 VER = "0.3.1"
 
-reqs = ["numpy", "pytest", "numba>=0.52", "larpix-control", "larpix-geometry", "tqdm", "fire", "nvidia-ml-py"]
+reqs = ["awkward", s"numpy", "pytest", "numba>=0.52", "larpix-control", "larpix-geometry", "tqdm", "fire", "nvidia-ml-py"]
 
 try:
     import cupy
