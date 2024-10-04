@@ -14,6 +14,7 @@ import numpy as np
 
 from larndsim import consts, light_sim
 from larndsim.config import get_config
+from larndsim.consts import light
 
 
 # flush on every print
@@ -46,9 +47,16 @@ def main():
     light_sample_inc_scint_true_photons = cp.array(d['light_sample_inc_scint_true_photons'])
     print('done')
 
-    TPB = (1,64)
+    # TPB = (1,64)
+    # BPG = (max(ceil(light_sample_inc_disc.shape[0] / TPB[0]),1),
+    #        max(ceil(light_sample_inc_disc.shape[1] / TPB[1]),1))
+    conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0]) / light.LIGHT_TICK_SIZE)
+    print(f'conv_ticks = {conv_ticks}')
+    TPB = (1,32,16)
     BPG = (max(ceil(light_sample_inc_disc.shape[0] / TPB[0]),1),
-           max(ceil(light_sample_inc_disc.shape[1] / TPB[1]),1))
+           max(ceil(light_sample_inc_disc.shape[1] / TPB[1]),1),
+           max(ceil(conv_ticks / TPB[2]),1))
+    print(TPB, BPG)
 
     for i in range(NITER):
         print(f'===== Iteration {i}')

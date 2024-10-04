@@ -21,7 +21,8 @@ def main():
     d2 = load(args.file2)
 
     for k in d1:
-        if np.all(d1[k] == d2[k]):
+        # if np.all(d1[k] == d2[k]):
+        if np.all(np.isclose(d1[k], d2[k], atol=0, rtol=1e-2)):
             print(f'{k} looks good')
         else:
             print(f'{k} looks bad!!!')

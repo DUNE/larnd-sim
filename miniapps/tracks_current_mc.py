@@ -49,6 +49,7 @@ def main():
     print('done')
 
     TPB = (1,1,64)
+    # TPB = (1,1,128)
     BPG_X = max(ceil(selected_tracks.shape[0] / TPB[0]),1)
     BPG_Y = max(ceil(neighboring_pixels.shape[1] / TPB[1]),1)
     BPG_Z = max(ceil(max_length / TPB[2]),1)
@@ -68,6 +69,8 @@ def main():
         print('done')
 
         print('Running kernel... ', end='')
+        print(BPG)
+        print(TPB)
         detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
         print('done')
 
