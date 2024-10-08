@@ -19,8 +19,8 @@ if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
     try:
         cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
         cuda_ver = float(cuda_dir)
-        if cuda_ver >= 12.4:
-            import pynvjitlink
+        if cuda_ver >= 12.3:
+            import pynvjitlink.patch
             pynvjitlink.patch.patch_numba_linker()
     except:
         pass
