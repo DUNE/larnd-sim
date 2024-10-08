@@ -6,12 +6,24 @@ from math import ceil
 from time import time
 import warnings
 from collections import defaultdict
+import os
 
 import numpy as np
 import numpy.lib.recfunctions as rfn
 
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
+
+# Perlmutter GPU driver corresponds to CUDA 12.2
+if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
+    try:
+        cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
+        cuda_ver = float(cuda_dir)
+        if cuda_ver >= 12.4:
+            import pynvjitlink
+            pynvjitlink.patch.patch_numba_linker()
+    except:
+        pass
 
 import fire
 import h5py
@@ -28,8 +40,6 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
-
-import os
 
 SEED = int(time())
 
