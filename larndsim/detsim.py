@@ -3,6 +3,8 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
+import awkward as ak
+ak.numba.register_and_check()
 from math import pi, ceil, sqrt, erf, exp, log
 import cupy as cp
 import numba as nb
@@ -468,7 +470,7 @@ def sign(x):
     """
     return 1 if x >= 0 else -1
 
-@cuda.jit
+@cuda.jit(extensions=[ak.numba.cuda])
 def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals,
                       overflow_flag):
     """
@@ -502,6 +504,7 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
     # counter = segment index in pixels_tracks_signals collection, same as track_index ordering
 
     itrk, ipix, itick = cuda.grid(3)
+    nticks = signals.shape[2]
 
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
@@ -521,9 +524,12 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                             cuda.atomic.add(pixels_signals,
                                             (pixel_index, itime),
                                             signals[itrk][ipix][itick])
-                            cuda.atomic.add(pixels_tracks_signals,
-                                            (pixel_index, itime, counter),
-                                            signals[itrk][ipix][itick])
+                            # cuda.atomic.add(pixels_tracks_signals,
+                            #                 (pixel_index*nticks + itime, track_idx),
+                            #                 signals[itrk][ipix][itick])
+                            # cuda.atomic.add(pixels_tracks_signals,
+                            #                 (pixel_index, itime, counter),
+                            #                 signals[itrk][ipix][itick])
                     break
 
             if counter < 0:

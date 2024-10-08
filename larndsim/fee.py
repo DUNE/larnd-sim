@@ -2,6 +2,8 @@
 Module that simulates the front-end electronics (triggering, ADC)
 """
 
+import awkward as ak
+ak.numba.register_and_check()
 import numpy as np
 import cupy as cp
 import h5py
@@ -560,7 +562,7 @@ def digitize(integral_list, gain=GAIN):
 
     return adcs
 
-@cuda.jit
+@cuda.jit(extensions=[ak.numba.cuda])
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
                    time_ticks,
@@ -592,6 +594,7 @@ def get_adc_values(pixels_signals,
             thresholds for each pixel
     """
     ip = cuda.grid(1)
+    nticks = pixels_signals.shape[1]
 
     if ip < pixels_signals.shape[0]:
         curre = pixels_signals[ip]
@@ -616,12 +619,14 @@ def get_adc_values(pixels_signals,
                     q += curre[jc] * detector.TIME_SAMPLING * w
 
                     for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                        # current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip*nticks + jc][itrk] * detector.TIME_SAMPLING * w
 
             elif ic < curre.shape[0]:
                 q += curre[ic] * detector.TIME_SAMPLING
                 for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                    # current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip*nticks + ic][itrk] * detector.TIME_SAMPLING
 
             q_sum += q
             true_q += q
@@ -648,12 +653,14 @@ def get_adc_values(pixels_signals,
                             q += curre[jc] * detector.TIME_SAMPLING * w
 
                             for itrk in range(current_fractions.shape[2]):
-                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                                # current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip*nticks + jc][itrk] * detector.TIME_SAMPLING * w
 
                     elif ic < curre.shape[0]:
                         q += curre[ic] * detector.TIME_SAMPLING
                         for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                            # current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip*nticks + ic][itrk] * detector.TIME_SAMPLING
 
                     q_sum += q
                     true_q += q

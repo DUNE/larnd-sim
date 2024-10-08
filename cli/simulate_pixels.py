@@ -25,6 +25,7 @@ if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
     except:
         pass
 
+import awkward as ak
 import fire
 import h5py
 
@@ -1022,10 +1023,24 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
+                # BPG = (BPG_X, BPG_Y)
                 pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-                pixels_tracks_signals = cp.zeros((len(unique_pix),
-                                                  len(detector.TIME_TICKS),
-                                                  track_pixel_map.shape[1]))
+                # is track_pixel_map populated; can extract num backtracks per track*tick?
+                # 3rd dim of pixels_tracks_signals was MAX_TRACKS_PER_PIXEL
+                # now use ak.unflatten to construct pixels_tracks_signals
+                # pixels_tracks_signals = ak.unflatten(np.zeros(num_backtrack.sum()),
+                #                                      num_backtrack.flatten())
+                # NO!
+                # need to extend track_pixel_map to add time tick dim
+                # note track_pixel_map has shape (#unique pix, max tracks per pixel)
+                # num_backtrack has shape of (#unique pix,)
+                num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
+                filler = cp.zeros(len(detector.TIME_TICKS) * int(num_backtrack.sum()))
+                counts = cp.tile(num_backtrack, (1, len(detector.TIME_TICKS)))
+                pixels_tracks_signals = ak.unflatten(filler, counts.flatten())
+                # pixels_tracks_signals = cp.zeros((len(unique_pix),
+                #                                   len(detector.TIME_TICKS),
+                #                                   track_pixel_map.shape[1]))
                 overflow_flag = cp.zeros(len(unique_pix))
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
