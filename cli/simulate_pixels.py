@@ -14,6 +14,14 @@ import numpy.lib.recfunctions as rfn
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
 
+# Disabling the memory pool is useful when profiling
+# (we can then match memory spikes to the responsible allocations)
+if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
+    # Disable memory pool for device memory (GPU):
+    cp.cuda.set_allocator(None)
+    # Disable memory pool for pinned memory (CPU):
+    cp.cuda.set_pinned_memory_allocator(None)
+
 # Perlmutter GPU driver corresponds to CUDA 12.2
 if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
     try:
