@@ -524,9 +524,9 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
                             cuda.atomic.add(pixels_signals,
                                             (pixel_index, itime),
                                             signals[itrk][ipix][itick])
-                            # cuda.atomic.add(pixels_tracks_signals,
-                            #                 (pixel_index*nticks + itime, track_idx),
-                            #                 signals[itrk][ipix][itick])
+                            cuda.atomic.add(pixels_tracks_signals,
+                                            (pixel_index*nticks + itime, track_idx),
+                                            signals[itrk][ipix][itick])
                             # cuda.atomic.add(pixels_tracks_signals,
                             #                 (pixel_index, itime, counter),
                             #                 signals[itrk][ipix][itick])
