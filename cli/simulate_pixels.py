@@ -103,21 +103,44 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
 
     return rng_states
 
+def load_mod2mod_variation_properties(cfg, files, id_name, n_modules, message=""):
+    if files is None:
+        return None
+
+    try:
+        ids = cfg[id_name]
+        if not isinstance(files, list) or len(ids) != n_modules or max(ids) >= len(files):
+            raise KeyError(f"Simulation with module variation activated, but the number of pointer for {message} is incorrect!")
+        else:
+            module_files = [files[idx] for idx in ids]
+            files = module_files
+    except:
+        if isinstance(files, list) and len(files) != n_modules:
+            raise KeyError(f"Simulation with module variation activated, but the number of {message} is incorrect!")
+        elif isinstance(files, list) and len(files) == n_modules:
+            warnings.warn("Simulation with module variation activated, using default orders for the {message}.")
+    return files
+
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2_mod2mod_variation',
                    mod2mod_variation=None,
                    pixel_layout=None,
+                   pixel_layout_id=None,
                    detector_properties=None,
                    simulation_properties=None,
                    response_file=None,
+                   response_id=None,
                    light_simulated=None,
                    light_lut_filename=None,
+                   light_lut_id=None,
                    light_det_noise_filename=None,
                    bad_channels=None,
                    n_events=None,
                    pixel_thresholds_file=None,
+                   pixel_thresholds_id=None,
                    pixel_gains_file=None,
+                   pixel_gains_id=None,
                    rand_seed=None,
                    save_memory=None):
     """
@@ -247,10 +270,26 @@ def run_simulation(input_filename,
     cfg = get_config(config)
     if pixel_layout is None:
         pixel_layout = cfg['PIXEL_LAYOUT']
+    if pixel_layout_id is None:
+        pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
     if detector_properties is None:
         detector_properties = cfg['DET_PROPERTIES']
     if response_file is None:
         response_file = cfg['RESPONSE']
+    if response_id is None:
+        response_id = cfg['RESPONSE_ID']
+    if pixel_thresholds_file is None:
+        try:
+            pixel_thresholds_file = cfg['PIXEL_THRESHOLDS_FILE']
+            pixel_thresholds_id = cfg['PIXEL_THRESHOLDS_ID']
+        except:
+            print("Pixel threshold files are not provided. Using the default thresholds.")
+    if pixel_gains_file is None:
+        try:
+            pixel_gains_file = cfg['PIXEL_GAINS_FILE']
+            pixel_gains_id = cfg['PIXEL_GAINS_ID']
+        except:
+            print("Pixel gain files are not provided. Using the default gains.")
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
     if light_simulated is None:
@@ -267,11 +306,11 @@ def run_simulation(input_filename,
                 if isinstance(light_lut_filename, list):
                     for i_light_lut, f_light_lut in enumerate(light_lut_filename):
                         if not os.path.isfile(f_light_lut):
-                            light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+                            light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT_time_norm.npz" # the default 2x2 module light lookup table
                             warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
                 else:
                     if not os.path.isfile(light_lut_filename):
-                        light_lut_filename = "larndsim/bin/lightLUT.npz" # the default 2x2 module light lookup table
+                        light_lut_filename = "larndsim/bin/lightLUT_time_norm.npz" # the default 2x2 module light lookup table
                         warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
             except:
                 print("light_lut_filename is not provided (required if light_simulated is True)")
@@ -298,12 +337,16 @@ def run_simulation(input_filename,
     print("Detector properties file:", detector_properties)
     print("Pixel layout file:", pixel_layout)
     print("Response file:", response_file)
+    if bad_channels:
+        print("Disabled channel list: ", bad_channels)
+    if pixel_thresholds_file:
+        print("Pixel threshold file: ", pixel_thresholds_file)
+    if pixel_gains_file:
+        print("Pixel gain file: ", pixel_gains_file)
     if light_lut_filename:
         print("Light LUT:", light_lut_filename)
     if light_det_noise_filename:
         print("Light detector noise: ", light_det_noise_filename)
-    if bad_channels:
-        print("Disabled channel list: ", bad_channels)
     if save_memory:
         print('Recording the process resource log:', save_memory)
     else:
@@ -327,48 +370,15 @@ def run_simulation(input_filename,
             warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response and light lookup table! \nDeactivating module variation...")
             mod2mod_variation = False
 
-    if mod2mod_variation == True:
+    if mod2mod_variation is True:
         # Load the index for pixel layout, response and LUT
-        try:
-            pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
-            if not isinstance(pixel_layout, list) or len(pixel_layout_id) != n_modules or max(pixel_layout_id) >= len(pixel_layout):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for pixel layout is incorrect!")
-            else:
-                module_pixel_layout = [pixel_layout[idx] for idx in pixel_layout_id]
-                pixel_layout = module_pixel_layout
-        except:
-            if isinstance(pixel_layout, list) and len(pixel_layout) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of pixel layout files is incorrect!")
-            elif isinstance(pixel_layout, list) and len(pixel_layout) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the pixel layout files.")
-
-        try:
-            response_id = cfg['RESPONSE_ID']
-            if not isinstance(response_file, list) or len(response_id) != n_modules or max(response_id) >= len(response_file):
-                raise KeyError("Simulation with module variation activated, but the number of pointer for response files is incorrect!")
-            else:
-                module_response_file = [response_file[idx] for idx in response_id]
-                response_file = module_response_file
-        except:
-            if isinstance(response_file, list) and len(response_file) != n_modules:
-                raise KeyError("Simulation with module variation activated, but the number of response files is incorrect!")
-            elif isinstance(response_file, list) and len(response_file) == n_modules:
-                warnings.warn("Simulation with module variation activated, using default orders for the response files.")
-
+        pixel_layout = load_mod2mod_variation_properties(cfg, pixel_layout, "PIXEL_LAYOUT_ID", n_modules, message="pixel layout")
+        response_file = load_mod2mod_variation_properties(cfg, response_file, "RESPONSE_ID", n_modules, message="response files")
+        pixel_thresholds_file = load_mod2mod_variation_properties(cfg, pixel_thresholds_file, "PIXEL_THRESHOLD_ID", n_modules, message="pixel threshold files")
+        pixel_gains_file = load_mod2mod_variation_properties(cfg, pixel_gains_file, "PIXEL_GAIN_ID", n_modules, message="pixel gain files")
         if light_simulated:
-            try:
-                light_lut_id = cfg['LIGHT_LUT_ID']
-                if not isinstance(light_lut_filename, list) or len(light_lut_id) != n_modules or max(light_lut_id) >= len(light_lut_filename):
-                    raise KeyError("Simulation with module variation activated, but the number of pointer for light LUT is incorrect!")
-                else:
-                    module_light_lut_filename = [light_lut_filename[idx] for idx in light_lut_id]
-                    light_lut_filename = module_light_lut_filename
-            except:
-                if isinstance(light_lut_filename, list) and len(light_lut_filename) != n_modules:
-                    raise KeyError("Simulation with module variation activated, but the number of light LUT is incorrect!")
-                elif isinstance(light_lut_filename, list) and len(light_lut_filename) == n_modules:
-                    warnings.warn("Simulation with module variation activated, using default orders for the light LUT.")
-        
+            light_lut_filename = load_mod2mod_variation_properties(cfg, light_lut_filename, "LIGHT_LUT_ID", n_modules, message="light LUT")
+
         if cfg['PIXEL_LAYOUT_ID'] and cfg['RESPONSE_ID']:
             if cfg['PIXEL_LAYOUT_ID'] != cfg['RESPONSE_ID']:
                 warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
@@ -425,6 +435,18 @@ def run_simulation(input_filename,
         RangePush("load_induction_response")
         response = cp.load(response_file)
         RangePop()
+
+        RangePush("load_pixel_thresholds")
+        if pixel_thresholds_file is not None:
+            print("Pixel thresholds file:", pixel_thresholds_file)
+            pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
+        RangePop()
+
+        RangePush("load_pixel_gains")
+        if pixel_gains_file is not None:
+            print("Pixel gains file:", pixel_gains_file)
+            pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+        RangePop()
     else:
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
@@ -443,20 +465,6 @@ def run_simulation(input_filename,
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
-
-    RangePush("load_pixel_thresholds")
-    if pixel_thresholds_file is not None:
-        print("Pixel thresholds file:", pixel_thresholds_file)
-        pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
-    else:
-        pixel_thresholds_lut = CudaDict(cp.array([fee.DISCRIMINATION_THRESHOLD]), 1, 1)
-    RangePop()
-
-    RangePush("load_pixel_gains")
-    if pixel_gains_file is not None:
-        print("Pixel gains file:", pixel_gains_file)
-        pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
-    RangePop()
 
     RangePush("set_if_simulate_light")
     if light_simulated is not None:
@@ -602,7 +610,7 @@ def run_simulation(input_filename,
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        event_times = fee.gen_event_times(num_evids, 0)
+        event_times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
 
     # broadcast the event times to vertices
     if input_has_vertices and not sim.IS_SPILL_SIM:
@@ -650,7 +658,7 @@ def run_simulation(input_filename,
     # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
     if mod2mod_variation:
-        consts.detector.set_detector_properties(detector_properties, pixel_layout[0])
+        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
         from larndsim.consts import detector
 
     # Sub-select only segments in active volumes
@@ -686,6 +694,16 @@ def run_simulation(input_filename,
 
             RangePush("load_module_induction_response")
             response = cp.load(response_file[i_mod-1])
+            RangePop()
+
+            RangePush("load_pixel_thresholds")
+            if pixel_thresholds_file is not None:
+                pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
+            RangePop()
+
+            RangePush("load_pixel_gains")
+            if pixel_gains_file is not None:
+                pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_segments_in_module")
@@ -798,8 +816,8 @@ def run_simulation(input_filename,
 
                 light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-                light_response_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
+                light_response_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
 
                 RangePush('light_sim_triggers')
                 TPB = (1,1,64)
@@ -839,7 +857,7 @@ def run_simulation(input_filename,
         logger.take_snapshot([0])
         i_batch = 0
         i_trig = 0
-        sync_start = event_times[0] // (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) * (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) +  (fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE)
+        sync_start = event_times[0] // (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) * (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) +  (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE)
         det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
         # Batching is carried out by simulating detector response with selected segments from X number of tpcs per event
         # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
@@ -861,12 +879,12 @@ def run_simulation(input_filename,
             if is_new_event:
                 # forward sync packets
                 if this_event_time[0] - sync_start >= 0: # this is duplicate to "is_new_event"
-                    sync_times = cp.arange(sync_start, this_event_time[0]+1, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) #us
+                    sync_times = cp.arange(sync_start, this_event_time[0]+1, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) #us
                     #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
-                    sync_times_export = cp.full( sync_times.shape, fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE) 
+                    sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                     if len(sync_times) > 0:
                         fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
-                        sync_start = sync_times[-1] + fee.CLOCK_RESET_PERIOD * fee.CLOCK_CYCLE
+                        sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
                 if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
                     fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
@@ -1010,8 +1028,9 @@ def run_simulation(input_filename,
                 RangePush("track_pixel_map")
                 # Mapping between unique pixel array and track array index
                 #max_segments_to_trace = max(assmap_pix2seg.shape[1],detsim.MAX_TRACKS_PER_PIXEL) # currently it doesn't work; see the comment for invert_array_map()
-                max_segments_to_trace = detsim.MAX_TRACKS_PER_PIXEL
+                max_segments_to_trace = sim.MAX_TRACKS_PER_PIXEL
                 track_pixel_map = cp.full((unique_pix.shape[0], max_segments_to_trace), -1)
+
                 TPB = 32
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
                 detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
@@ -1044,23 +1063,26 @@ def run_simulation(input_filename,
                                                   overflow_flag)
                 if cp.any(overflow_flag):
                     warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
-                                  + f"{detsim.MAX_TRACKS_PER_PIXEL}")
+                                  + f"{sim.MAX_TRACKS_PER_PIXEL}")
 
                 RangePop()
 
                 RangePush("get_adc_values")
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
-                integral_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-                adc_ticks_list = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES))
-                current_fractions = cp.zeros((pixels_signals.shape[0], fee.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+                integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+                adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+                current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES, track_pixel_map.shape[1]))
 
                 TPB = 128
                 BPG = ceil(pixels_signals.shape[0] / TPB)
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                pixel_thresholds_lut.tpb = TPB
-                pixel_thresholds_lut.bpg = BPG
-                pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+                if pixel_thresholds_file is not None:
+                    pixel_thresholds_lut.tpb = TPB
+                    pixel_thresholds_lut.bpg = BPG
+                    pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+                else:
+                    pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
 
                 fee.get_adc_values[BPG, TPB](pixels_signals,
                                              pixels_tracks_signals,
@@ -1074,7 +1096,7 @@ def run_simulation(input_filename,
                 # get list of adc values
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                    gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, fee.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                    gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
                     adc_list = fee.digitize(integral_list, gain_list)
                 else:
                     adc_list = fee.digitize(integral_list)
@@ -1111,8 +1133,8 @@ def run_simulation(input_filename,
                     #op_channel = light_sim.get_active_op_channel(light_inc)
                     n_light_det = op_channel.shape[0]
                     light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                    light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                    light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, light.MAX_MC_TRUTH_IDS), dtype='f8')
+                    light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                    light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
 
                     ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
                     ### FIXME: this is a temporary fix to avoid memory issues ###
@@ -1131,7 +1153,7 @@ def run_simulation(input_filename,
                         light_sample_inc_true_photons, sorted_indices, t0_profile_length)
                     RangePop()
                     if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
-                        warnings.warn(f"Maximum number of true segments ({light.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
+                        warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
                     RangePush("sim_scintillation")
                     light_sample_inc_scint = cp.zeros_like(light_sample_inc)

@@ -5,15 +5,12 @@ import yaml
 import numpy as np
 import os
 
-#: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
-MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
-#: Threshold for propogating truth information on a given SiPM
-MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
+LIGHT_SIMULATED = True
+
 ENABLE_LUT_SMEARING = False
 
 N_OP_CHANNEL = 0
-LIGHT_SIMULATED = True
-OP_CHANNEL_EFFICIENCY = np.zeros(0)
+OP_CHANNEL_EFFICIENCY = np.ones(0)
 OP_CHANNEL_TO_TPC = np.zeros(0)
 TPC_TO_OP_CHANNEL = np.zeros((0,0))
 
@@ -72,10 +69,9 @@ def set_light_properties(detprop_file):
         detprop_file (str): detector properties YAML filename
 
     """
-    global MAX_MC_TRUTH_IDS
-    global MC_TRUTH_THRESHOLD
-    global N_OP_CHANNEL
     global LIGHT_SIMULATED
+
+    global N_OP_CHANNEL
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
     global TPC_TO_OP_CHANNEL
@@ -108,11 +104,11 @@ def set_light_properties(detprop_file):
 
     try:
         LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
-        MAX_MC_TRUTH_IDS = detprop.get('max_light_truth_ids', MAX_MC_TRUTH_IDS)
-        MC_TRUTH_THRESHOLD = detprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
 
         N_OP_CHANNEL = detprop['n_op_channel']
-        OP_CHANNEL_EFFICIENCY = np.array(detprop['op_channel_efficiency'])
+        OP_CHANNEL_EFFICIENCY = np.array(detprop.get('op_channel_efficiency', OP_CHANNEL_EFFICIENCY))
+        if OP_CHANNEL_EFFICIENCY.size == 1:
+            OP_CHANNEL_EFFICIENCY = np.full(N_OP_CHANNEL, OP_CHANNEL_EFFICIENCY)
 
         tpc_to_op_channel = detprop['tpc_to_op_channel']
         OP_CHANNEL_TO_TPC = np.zeros((N_OP_CHANNEL,), int)
@@ -133,7 +129,7 @@ def set_light_properties(detprop_file):
 
         LIGHT_GAIN = np.array(detprop.get('light_gain', [DEFAULT_LIGHT_GAIN]))
         if LIGHT_GAIN.size == 1:
-            LIGHT_GAIN = np.full(OP_CHANNEL_EFFICIENCY.shape, LIGHT_GAIN)
+            LIGHT_GAIN = np.full(N_OP_CHANNEL, LIGHT_GAIN)
         assert LIGHT_GAIN.shape == OP_CHANNEL_EFFICIENCY.shape
         SIPM_RESPONSE_MODEL = int(detprop.get('sipm_response_model', SIPM_RESPONSE_MODEL))
         assert SIPM_RESPONSE_MODEL in (0,1)
