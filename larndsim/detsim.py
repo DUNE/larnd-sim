@@ -467,7 +467,7 @@ def sign(x):
 
 @cuda.jit
 def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals,
-                      overflow_flag):
+                      num_backtrack, offset_backtrack, overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
     Converting "signals" from per segment to per pixel ("pixel_signals" and "pixels_tracks_signals")
@@ -500,26 +500,31 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
 
     itrk, ipix, itick = cuda.grid(3)
 
+    vals_per_tick = offset_backtrack[-1] # #pix * backtracks
+
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
         pixel_index = pixel_index_map[itrk][ipix]
         start_tick = round(track_starts[itrk] / detector.TIME_SAMPLING)
+        # index into the jagged pixels_tracks_signals array for this pixel and tick
+        itime = start_tick + itick
+        base_idx = vals_per_tick * itime + offset_backtrack[pixel_index]
 
         if pixel_index >= 0:
             counter = -99
+            # NOTE: Could instead use num_backtrack here
             for track_idx in range(track_pixel_map[pixel_index].shape[0]):
                 if itrk == -1: # would itrk ever be -1?
                     continue
                 if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
                     if counter >= 0 and itick < signals.shape[2]:
-                        itime = start_tick + itick
                         if itime < pixels_signals.shape[1] and itime > -1:
                             cuda.atomic.add(pixels_signals,
                                             (pixel_index, itime),
                                             signals[itrk][ipix][itick])
                             cuda.atomic.add(pixels_tracks_signals,
-                                            (pixel_index, itime, counter),
+                                            base_idx + counter,
                                             signals[itrk][ipix][itick])
                     break
 

@@ -1050,9 +1050,13 @@ def run_simulation(input_filename,
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
                 pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
-                pixels_tracks_signals = cp.zeros((len(unique_pix),
-                                                  len(detector.TIME_TICKS),
-                                                  track_pixel_map.shape[1]))
+                # note track_pixel_map has shape (#unique pix, max tracks per pixel)
+                # num_backtrack has shape of (#unique pix,)
+                num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
+                offset_backtrack = cp.cumsum(num_backtrack)
+                # pixels_tracks_signals is a jagged array of dimension (#unique_pix, #ticks, backtracked_segments)
+                # where the segments are jagged
+                pixels_tracks_signals = cp.zeros(len(detector.TIME_TICKS) * int(num_backtrack.sum()))
                 overflow_flag = cp.zeros(len(unique_pix))
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
@@ -1060,6 +1064,8 @@ def run_simulation(input_filename,
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,
+                                                  num_backtrack,
+                                                  offset_backtrack,
                                                   overflow_flag)
                 if cp.any(overflow_flag):
                     warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
@@ -1086,6 +1092,8 @@ def run_simulation(input_filename,
 
                 fee.get_adc_values[BPG, TPB](pixels_signals,
                                              pixels_tracks_signals,
+                                             num_backtrack,
+                                             offset_backtrack,
                                              time_ticks,
                                              integral_list,
                                              adc_ticks_list,

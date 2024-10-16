@@ -517,6 +517,8 @@ def digitize(integral_list, gain=detector.GAIN * mV / e):
 @cuda.jit
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
+                   num_backtrack,
+                   offset_backtrack,
                    time_ticks,
                    adc_list,
                    adc_ticks_list,
@@ -547,6 +549,8 @@ def get_adc_values(pixels_signals,
     """
     ip = cuda.grid(1)
 
+    vals_per_tick = offset_backtrack[-1] # #pix * backtracks
+
     if ip < pixels_signals.shape[0]:
         curre = pixels_signals[ip]
         ic = 0
@@ -569,13 +573,15 @@ def get_adc_values(pixels_signals,
                     w = exp((jc - ic) * detector.TIME_SAMPLING / detector.BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/detector.BUFFER_RISETIME))
                     q += curre[jc] * detector.TIME_SAMPLING * w
 
-                    for itrk in range(current_fractions.shape[2]):
-                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                    for itrk in range(num_backtrack[ip]):
+                        idx = vals_per_tick * jc + offset_backtrack[ip] + itrk
+                        current_fractions[ip][iadc][itrk] += pixels_signals_tracks[idx] * detector.TIME_SAMPLING * w
 
             elif ic < curre.shape[0]:
                 q += curre[ic] * detector.TIME_SAMPLING
-                for itrk in range(current_fractions.shape[2]):
-                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                for itrk in range(num_backtrack[ip]):
+                    idx = vals_per_tick * ic + offset_backtrack[ip] + itrk
+                    current_fractions[ip][iadc][itrk] += pixels_signals_tracks[idx] * detector.TIME_SAMPLING
 
             q_sum += q
             true_q += q
@@ -601,13 +607,15 @@ def get_adc_values(pixels_signals,
                             w = exp((jc - ic) * detector.TIME_SAMPLING / detector.BUFFER_RISETIME) * (1 - exp(-detector.TIME_SAMPLING/detector.BUFFER_RISETIME))
                             q += curre[jc] * detector.TIME_SAMPLING * w
 
-                            for itrk in range(current_fractions.shape[2]):
-                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][jc][itrk] * detector.TIME_SAMPLING * w
+                            for itrk in range(num_backtrack[ip]):
+                                idx = vals_per_tick * jc + offset_backtrack[ip] + itrk
+                                current_fractions[ip][iadc][itrk] += pixels_signals_tracks[idx] * detector.TIME_SAMPLING * w
 
                     elif ic < curre.shape[0]:
                         q += curre[ic] * detector.TIME_SAMPLING
-                        for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[ip][ic][itrk] * detector.TIME_SAMPLING
+                        for itrk in range(num_backtrack[ip]):
+                            idx = vals_per_tick * ic + offset_backtrack[ip] + itrk
+                            current_fractions[ip][iadc][itrk] += pixels_signals_tracks[idx] * detector.TIME_SAMPLING
 
                     q_sum += q
                     true_q += q
