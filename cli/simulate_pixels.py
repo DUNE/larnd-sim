@@ -494,6 +494,14 @@ def run_simulation(input_filename,
             print("Input file does not have MC particle stack info")
             input_has_mc_stack = False
 
+        try:
+            snowstorm = np.array(f['snowstorm'])
+            input_has_snowstorm = True
+        except KeyError:
+            print("Input file does not have snowstorm values")
+            input_has_snowstorm = False
+
+
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
@@ -1255,6 +1263,8 @@ def run_simulation(input_filename,
             output_file.create_dataset("mc_hdr", data=mc_hdr)
         if input_has_mc_stack:
             output_file.create_dataset("mc_stack", data=mc_stack)
+        if input_has_snowstorm:
+            output_file.create_dataset("snowstorm", data=snowstorm)
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():

@@ -332,7 +332,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
 
                     z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
-                    t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                    # t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                    t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / t['v_drift'] - detector.TIME_WINDOW
                     if not t0 < time_tick < t0 + detector.TIME_WINDOW:
                         continue
 
@@ -425,7 +426,8 @@ def tracks_current(signals, pixels, tracks, response):
                 for iz in range(z_steps):
 
                     z = z_start_int + iz*z_step
-                    t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                    # t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                    t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / t['v_drift'] - detector.TIME_WINDOW
 
                     if not t0 < time_tick < t0 + detector.TIME_WINDOW:
                         continue

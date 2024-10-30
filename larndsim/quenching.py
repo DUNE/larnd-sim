@@ -25,6 +25,10 @@ def quench(tracks, mode):
     if itrk < tracks.shape[0]:
         dEdx = tracks[itrk]["dEdx"]
         dE = tracks[itrk]["dE"]
+        e_field = tracks[itrk]['e_field']
+        birks_a = tracks[itrk]['birks_a']
+        birks_k = tracks[itrk]['birks_k']
+        w_ion = tracks[itrk]['w_ion']
 
         recomb = 0
         if mode == physics.BOX:
@@ -33,12 +37,14 @@ def quench(tracks, mode):
             recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
         elif mode == physics.BIRKS:
             # Amoruso, et al NIM A 523 (2004) 275
-            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            # recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            recomb = birks_a / (1 + birks_k * dEdx / (e_field * detector.LAR_DENSITY))
         else:
             raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
 
         if isnan(recomb):
             raise RuntimeError("Invalid recombination value")
 
-        tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
+        # tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
+        tracks[itrk]["n_electrons"] = recomb * dE / w_ion
         tracks[itrk]["n_photons"] = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

@@ -45,14 +45,21 @@ def drift(tracks):
             drift_distance = abs(track["z"] - z_anode)
             drift_start = abs(min(track["z_start"],track["z_end"]) - z_anode)
             drift_end = abs(max(track["z_start"],track["z_end"]) - z_anode)
-            drift_time = drift_distance / detector.V_DRIFT
-            lifetime_red = exp(-drift_time / detector.ELECTRON_LIFETIME)
+            # drift_time = drift_distance / detector.V_DRIFT
+            # lifetime_red = exp(-drift_time / detector.ELECTRON_LIFETIME)
+
+            drift_time = drift_distance / track['v_drift']
+            lifetime_red = exp(-drift_time / track['e_lifet'])
 
             track["n_electrons"] *= lifetime_red
 
-            track["long_diff"] = sqrt(drift_time * 2 * detector.LONG_DIFF)
-            track["tran_diff"] = sqrt(drift_time * 2 * detector.TRAN_DIFF)
+            # track["long_diff"] = sqrt(drift_time * 2 * detector.LONG_DIFF)
+            # track["tran_diff"] = sqrt(drift_time * 2 * detector.TRAN_DIFF)
+            track["long_diff"] = sqrt(drift_time * 2 * track['lg_diff'])
+            track["tran_diff"] = sqrt(drift_time * 2 * track['tr_diff'])
 
             track["t"] += drift_time + track["t0"]
-            track["t_start"] += min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
-            track["t_end"] += max(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
+            # track["t_start"] += min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
+            # track["t_end"] += max(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
+            track["t_start"] += min(drift_start, drift_end) / track['v_drift'] + track["t0"]
+            track["t_end"] += max(drift_start, drift_end) / track['v_drift'] + track["t0"]
