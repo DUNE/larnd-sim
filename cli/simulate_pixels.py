@@ -1155,8 +1155,16 @@ def run_simulation(input_filename,
                     #op_channel = light_sim.get_active_op_channel(light_inc)
                     n_light_det = op_channel.shape[0]
                     light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                    light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                    light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+                    # light_num_backtrack has dimension (n_light_det,); contains
+                    # the number of true tracks that produce light on each op det
+                    light_num_backtrack = np.sum(light_inc['n_photons_det'] > 0, axis=0)
+                    light_offset_backtrack = np.cumsum(light_num_backtrack) - light_num_backtrack[0]
+                    # light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                    light_sample_inc_true_track_id = cp.full(n_light_ticks * light_num_backtrack.sum(),
+                                                             -1, dtype='i8')
+                    # light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+                    light_sample_inc_true_photons = cp.zeros(n_light_ticks * light_num_backtrack.sum(),
+                                                             dtype='f8')
 
                     ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
                     ### FIXME: this is a temporary fix to avoid memory issues ###
