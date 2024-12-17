@@ -56,7 +56,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length):
+def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length, num_backtrack, offset_backtrack):
     """
     Sums the number of photons observed by each light detector at each time tick
 
@@ -75,15 +75,24 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
     """
     idet,itick = cuda.grid(2)
 
+    # #opdet * backtracks
+    vals_per_tick = offset_backtrack[-1] + num_backtrack[0]
+
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
+            base_idx = vals_per_tick * itick + offset_backtrack[idet]
 
             start_tick_time = itick * light.LIGHT_TICK_SIZE + start_time
             end_tick_time = start_tick_time + light.LIGHT_TICK_SIZE
 
             # find tracks that contribute light to this time tick
             idet_lut = op_channel[idet] % lut.shape[3]
+            # expect num_backtrack[idet] iterations here: ?????
             for itrk in sorted_indices[idet]:
+                # No more light on this detector
+                if light_inc[itrk, idet] == 0:
+                    break
+
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
                     voxel = segment_voxel[itrk]
                     track_time = segments[itrk]['t0']
@@ -105,10 +114,14 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
 
                                 if photons > sim.MC_TRUTH_THRESHOLD:
                                     # get truth information for time tick
-                                    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                        if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                            light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                            light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                    # for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                    for itrue in range(num_backtrack[idet]):
+                                        # if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                        if light_sample_inc_true_track_id[base_idx + itrue] == -1 or light_sample_inc_true_track_id[base_idx + itrue] == segment_track_id[itrk]:
+                                            # light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                            light_sample_inc_true_track_id[base_idx + itrue] = segment_track_id[itrk]
+                                            # light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                            light_sample_inc_true_photons[base_idx + itrue] += photons
                                             break
                     # use average time only
                     else:
@@ -122,10 +135,14 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                             light_sample_inc[idet,itick] += photons
                             if photons > sim.MC_TRUTH_THRESHOLD:
                                 # get truth information for time tick
-                                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                    if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                        light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                        light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                # for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                for itrue in range(num_backtrack[idet]):
+                                    # if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                    if light_sample_inc_true_track_id[base_idx + itrue] == -1 or light_sample_inc_true_track_id[base_idx + itrue] == segment_track_id[itrk]:
+                                        # light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                        # light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                        light_sample_inc_true_track_id[base_idx + itrue] = segment_track_id[itrk]
+                                        light_sample_inc_true_photons[base_idx + itrue] += photons
                                         break
 
 @nb.njit
@@ -146,7 +163,8 @@ def scintillation_model(time_tick):
 
 
 @cuda.jit
-def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons):
+def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                              num_backtrack, offset_backtrack):
     """
     Applies a smearing effect due to the liquid argon scintillation time profile using
     a two decay component scintillation model.
@@ -156,9 +174,13 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
         light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
     """
     idet,itick = cuda.grid(2)
+    # #opdet * backtracks
+    vals_per_tick = offset_backtrack[-1] + num_backtrack[0]
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
+            base_idx = vals_per_tick * itick + offset_backtrack[idet]
+
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
@@ -169,17 +191,24 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
 
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                    if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
+                    # if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
+                    if light_sample_inc_true_track_id[base_idx + itrue] == -1:
                         break
                         
-                    if tick_weight * light_sample_inc_true_photons[idet,jtick,itrue] < sim.MC_TRUTH_THRESHOLD:
+                    # if tick_weight * light_sample_inc_true_photons[idet,jtick,itrue] < sim.MC_TRUTH_THRESHOLD:
+                    if tick_weight * light_sample_inc_true_photons[base_idx + itrue] < sim.MC_TRUTH_THRESHOLD:
                         continue
 
                     # loop over current tick truth
-                    for jtrue in range(light_sample_inc_scint_true_track_id.shape[-1]):
-                        if light_sample_inc_scint_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,jtick,itrue] or light_sample_inc_scint_true_track_id[idet,itick,jtrue] == -1:
-                            light_sample_inc_scint_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,jtick,itrue]
-                            light_sample_inc_scint_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
+                    # for jtrue in range(light_sample_inc_scint_true_track_id.shape[-1]):
+                    for jtrue in range(num_backtrack[idet]):
+                        # if light_sample_inc_scint_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,jtick,itrue] or light_sample_inc_scint_true_track_id[idet,itick,jtrue] == -1:
+                        #     light_sample_inc_scint_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,jtick,itrue]
+                        #     light_sample_inc_scint_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
+                        #     break
+                        if light_sample_inc_scint_true_track_id[base_idx + itrue] == light_sample_inc_true_track_id[base_idx + itrue] or light_sample_inc_scint_true_track_id[base_idx + itrue] == -1:
+                            light_sample_inc_scint_true_track_id[base_idx + itrue] = light_sample_inc_true_track_id[base_idx + itrue]
+                            light_sample_inc_scint_true_photons[base_idx + itrue] += tick_weight * light_sample_inc_true_photons[base_idx + itrue]
                             break
 
 
@@ -649,6 +678,8 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
         tick.append(i_sample)
         event_id.append(i_evt)
+        # The last three dimensions (i_op_channel, i_sample, i_content) correspond to the original 3 dims we jaggedized.
+        # So your lookups should be like waveforms_true_track_id[this_trig][base_idx + i_content]
         segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
         pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
     truth_data = np.empty(len(indices), dtype=truth_dtype)
