@@ -381,8 +381,7 @@ def run_simulation(input_filename,
             warnings.warn("Simulating one module with module variation activated! \nDeactivating module variation...")
             mod2mod_variation = False
         if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or len(light_lut_filename) == 1):
-            warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response and light lookup table! \nDeactivating module variation...")
-            mod2mod_variation = False
+            warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response or light lookup table! \nApplying to all modules...")
 
     if mod2mod_variation is True:
         # Load the index for pixel layout, response and LUT
@@ -685,6 +684,13 @@ def run_simulation(input_filename,
     end_mask = time()
     print(f" {end_mask-start_mask:.2f} s")
 
+    # We need to make cupy arrays of these and pass them to the kernels;
+    # otherwise numba will try to use the GPU's "global constant" memory
+    # which (at 64 kB) is not large enough for ND-LAr
+    op_channel_efficiency = cp.array(light.OP_CHANNEL_EFFICIENCY)
+    op_channel_to_tpc = cp.array(light.OP_CHANNEL_TO_TPC)
+    light_gain = cp.array(light.LIGHT_GAIN)
+
     RangePop()                  # prep_simulation
 
     # Convention module counting start from 1
@@ -800,15 +806,23 @@ def run_simulation(input_filename,
 
             lut = to_device(lut)
 
+            light_noise = cp.load(light_det_noise_filename)
+
             if mod2mod_variation:
-                light_noise = cp.load(light_det_noise_filename)[n_light_channel*(i_mod-1):n_light_channel*i_mod]
-            else:
-                light_noise = cp.load(light_det_noise_filename)
+                if light_noise.shape[0] == n_modules * n_light_channel:
+                    light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+                else:
+                    assert light_noise.shape[0] >= n_light_channel
+                    light_noise = light_noise[:n_light_channel]
+                    warnings.warn(f"Light noise file {light_det_noise_filename} does not span all modules. " +
+                                  f"Using noise from first {n_light_channel} channels for all modules.")
 
             RangePush('calculate_light_incidence')
             TPB = 256
             BPG = max(ceil(tracks.shape[0] / TPB),1)
-            lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel)
+            # breakpoint()
+            lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel,
+                                                        op_channel_efficiency, op_channel_to_tpc)
             RangePop()
 
             light_sim_dat_acc.append(light_sim_dat)
@@ -1205,7 +1219,7 @@ def run_simulation(input_filename,
                     light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                     light_sim.calc_light_detector_response[BPG, TPB](
                         light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                        light_response, light_response_true_track_id, light_response_true_photons)
+                        light_response, light_response_true_track_id, light_response_true_photons, light_gain)
                     #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                     RangePop()
 

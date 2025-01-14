@@ -301,7 +301,7 @@ def sipm_response_model(idet, time_tick):
             
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
+def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain):
     """
     Simulates the SiPM reponse and digit
     
@@ -317,7 +317,7 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response_model(idet, itick-jtick)
-                light_response[idet,itick] += light.LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
+                light_response[idet,itick] += light_gain[idet] * tick_weight * light_sample_inc[idet,jtick]
                     
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
