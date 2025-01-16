@@ -83,6 +83,15 @@ ndlar:
     #LIGHT_LUT:       ''
     #LIGHT_DET_NOISE: ''
 
+ndlar_no_light_sim: 
+    SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
+    PIXEL_LAYOUT:    multi_tile_layout-3.0.40.yaml
+    DET_PROPERTIES:  ndlar-module.yaml
+    RESPONSE:        response_38_v2b_50ns_ndlar.npy
+    LIGHT_SIMULATED: False
+    LIGHT_LUT:       ''
+    LIGHT_DET_NOISE: ''
+
 fsd:
     SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsd_v2.yaml
