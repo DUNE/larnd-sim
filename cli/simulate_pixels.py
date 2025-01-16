@@ -380,7 +380,7 @@ def run_simulation(input_filename,
         if n_modules == 1:
             warnings.warn("Simulating one module with module variation activated! \nDeactivating module variation...")
             mod2mod_variation = False
-        if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or len(light_lut_filename) == 1):
+        if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or (light_lut_filename and len(light_lut_filename) == 1)):
             warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response or light lookup table! \nApplying to all modules...")
 
     if mod2mod_variation is True:
