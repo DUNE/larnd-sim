@@ -4,7 +4,11 @@ lifetime: 2.2e+3 # us
 time_interval: [0, 320.] # us
 long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
-drift_length: 50.4 # cm
+# drift_length calculated using 2 x half width of
+# single volTPCActive in
+#
+# geometry/nd_hall_with_lar_tms_sand_TDR_Production_geometry_v_1.0.3.gdml
+drift_length: 467.91 # cm
 response_sampling: 0.05 # us
 response_bin_size: 0.038 # cm
 time_padding: 320 # us
