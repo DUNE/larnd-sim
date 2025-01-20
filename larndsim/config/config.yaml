@@ -73,15 +73,17 @@ module0:
 # lack of light configuration files
 ndlar: 
     SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
-    PIXEL_LAYOUT:    multi_tile_layout-3.0.40.yaml
+    PIXEL_LAYOUT:    [multi_tile_layout-3.0.40.yaml]
+    PIXEL_LAYOUT_ID: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     DET_PROPERTIES:  ndlar-module.yaml
-    RESPONSE:        response_38_v2b_50ns_ndlar.npy
-    #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
+    RESPONSE:        [response_38_v2b_50ns_ndlar.npy]
+    RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    #LIGHT_LUT:       [/sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz]
+    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz]
+    LIGHT_LUT_ID:    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: True
-    #LIGHT_LUT:       ''
-    #LIGHT_DET_NOISE: ''
+    MOD2MOD_VARIATION: True
 
 ndlar_no_light_sim: 
     SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml

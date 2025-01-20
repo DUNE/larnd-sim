@@ -63,7 +63,8 @@ def get_voxel(pos, itpc, lut_vox_div):
     return i, j, k
 
 @cuda.jit
-def calculate_light_incidence(tracks, lut, light_incidence, voxel):
+def calculate_light_incidence(tracks, lut, light_incidence, voxel,
+                              op_channel_efficiency, op_channel_to_tpc):
     """
     Simulates the number of photons read by each optical channel depending on
         where the edep occurs as well as the time it takes for a photon to reach the
@@ -127,8 +128,8 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel):
                 op_channel_index = output_i + channel_offset
                 lut_index = output_i % vis_dat.shape[0]
 
-                eff = light.OP_CHANNEL_EFFICIENCY[op_channel_index]
-                vis = vis_dat[lut_index] * (light.OP_CHANNEL_TO_TPC[op_channel_index] == itpc)
+                eff = op_channel_efficiency[op_channel_index]
+                vis = vis_dat[lut_index] * (op_channel_to_tpc[op_channel_index] == itpc)
                 light_incidence['n_photons_det'][itrk, output_i] = eff * vis * n_photons
 
                 if light.LIGHT_TRIG_MODE == 0:
