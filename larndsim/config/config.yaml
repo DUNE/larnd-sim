@@ -86,16 +86,17 @@ ndlar:
     MOD2MOD_VARIATION: True
 
 ndlar_no_light_sim: 
-    SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
+    DET_PROPERTIES:  ndlar-module.yaml
+    LIGHT_LUT:       ''
+    LIGHT_LUT_ID:    ''
+    LIGHT_DET_NOISE: ''
+    LIGHT_SIMULATED: False
+    MOD2MOD_VARIATION: True
     PIXEL_LAYOUT:    [multi_tile_layout-3.0.40.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    DET_PROPERTIES:  ndlar-module.yaml
     RESPONSE:        [response_38_v2b_50ns_ndlar.npy]
     RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    LIGHT_SIMULATED: False
-    LIGHT_LUT:       ''
-    LIGHT_DET_NOISE: ''
-    MOD2MOD_VARIATION: True
+    SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
 
 fsd:
     SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
