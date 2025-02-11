@@ -647,7 +647,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
-def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, i_evt, i_trig, i_mod=-1):
+def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, waveforms_num_backtrack, waveforms_offset_backtrack, i_evt, i_trig, i_mod=-1):
     """
     Filter empty light waveform backtracking which is filled with the default value '-1', and flatten the backtracking info to 1D array.
 
@@ -691,7 +691,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
     truth_data['pe_current'] = np.array(pe_current)
     return truth_data
 
-def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1):
+def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, waveforms_num_backtrack, waveforms_offset_backtrack, i_trig, i_mod=-1):
     """
     Saves waveforms to output file
     
@@ -735,7 +735,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         # skip creating the truth dataset if there is no truth information to store
         truth_data=None
         if sim.MAX_MC_TRUTH_IDS > 0:
-            truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, event_id[0], i_trig, i_mod)
+            truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, waveforms_num_backtrack, waveforms_offset_backtrack, event_id[0], i_trig, i_mod)
             if truth_data.shape[0] > 0:
                 if f'light_wvfm_mc_assn' not in f:
                     f.create_dataset(f'light_wvfm_mc_assn', data=truth_data, maxshape=(None,))
@@ -775,7 +775,7 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
-def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod):
+def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, waveforms_num_backtrack, waveforms_offset_backtrack, i_trig, i_mod):
     """
     Saves waveforms to output file
 
