@@ -76,7 +76,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
     idet,itick = cuda.grid(2)
 
     # #opdet * backtracks
-    vals_per_tick = offset_backtrack[-1] + num_backtrack[0]
+    vals_per_tick = offset_backtrack[-1] + num_backtrack
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
@@ -175,7 +175,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
     """
     idet,itick = cuda.grid(2)
     # #opdet * backtracks
-    vals_per_tick = offset_backtrack[-1] + num_backtrack[0]
+    vals_per_tick = offset_backtrack[-1] + num_backtrack
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
