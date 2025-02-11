@@ -1238,6 +1238,8 @@ def run_simulation(input_filename,
                     results_acc['light_waveforms'].append(light_digit_signal)
                     results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                     results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+                    results_acc['light_num_backtrack'].append(light_num_backtrack)
+                    results_acc['light_offset_backtrack'].append(light_offset_backtrack)
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
