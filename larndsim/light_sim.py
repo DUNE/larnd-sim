@@ -662,6 +662,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
     Returns:
         1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on arecorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
+    vals_per_tick = waveforms_offset_backtrack[-1] + waveforms_num_backtrack[-1]
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
@@ -678,10 +679,11 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
         tick.append(i_sample)
         event_id.append(i_evt)
+        base_idx = vals_per_tick * i_sample + offset_backtrack[i_op_channel]
         # The last three dimensions (i_op_channel, i_sample, i_content) correspond to the original 3 dims we jaggedized.
         # So your lookups should be like waveforms_true_track_id[this_trig][base_idx + i_content]
-        segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
-        pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
+        segment_id.append(waveforms_true_track_id[this_trig][base_idx + i_content])
+        pe_current.append(waveforms_true_photons[this_trig][base_idx + i_content])
     truth_data = np.empty(len(indices), dtype=truth_dtype)
     truth_data['trigger_id'] = np.array(trigger_id)
     truth_data['op_channel_id'] = np.array(op_channel_id)
