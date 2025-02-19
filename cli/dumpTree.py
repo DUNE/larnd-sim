@@ -15,7 +15,7 @@ from ROOT import TG4Event, TFile, TMap
 
 # Output array datatypes
 segments_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"), ("file_vertex_id", "u8"), ("segment_id", "u4"),
-                           ("z_end", "f4"),("traj_id", "u4"), ("file_traj_id", "u4"), ("tran_diff", "f4"),
+                           ("z_end", "f4"),("traj_id", "i4"), ("file_traj_id", "u4"), ("tran_diff", "f4"),
                            ("z_start", "f4"), ("x_end", "f4"),
                            ("y_end", "f4"), ("n_electrons", "u4"),
                            ("pdg_id", "i4"), ("x_start", "f4"),
@@ -28,14 +28,14 @@ segments_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"), ("file_vertex
                            ("n_photons","f4")], align=True)
 
 trajectories_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"), ("file_vertex_id", "u8"),
-                               ("traj_id", "u4"), ("file_traj_id", "u4"), ("parent_id", "i4"), ("primary", "?"),
+                               ("traj_id", "i4"), ("file_traj_id", "u4"), ("parent_id", "i4"), ("primary", "?"),
                                ("E_start", "f4"), ("pxyz_start", "f4", (3,)),
                                ("xyz_start", "f4", (3,)), ("t_start", "f8"),
                                ("E_end", "f4"), ("pxyz_end", "f4", (3,)),
                                ("xyz_end", "f4", (3,)), ("t_end", "f8"),
-                               ("pdg_id", "i4"), ("start_process", "u4"),
-                               ("start_subprocess", "u4"), ("end_process", "u4"),
-                               ("end_subprocess", "u4"), ("dist_travel", "f4")], align=True)
+                               ("pdg_id", "i4"), ("start_process", "i4"),
+                               ("start_subprocess", "i4"), ("end_process", "i4"),
+                               ("end_subprocess", "i4"), ("dist_travel", "f4")], align=True)
 
 vertices_dtype = np.dtype([("event_id","u4"), ("vertex_id","u8"), ("file_vertex_id", "u8"),
                            ("x_vert","f4"), ("y_vert","f4"), ("z_vert","f4"),
