@@ -6,7 +6,7 @@ long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
 drift_length: 50.4 # cm
 response_sampling: 0.05 # us
-response_bin_size: 0.0372 # cm
+response_bin_size: 0.038 # cm
 time_padding: 320 # us
 time_window: 320 # us
 # These TPC offsets are obtained by inspecting
@@ -59,12 +59,10 @@ tpc_offsets: # cm
   - [300.0000, -66.8713, 665.7559]
   - [300.0000, -66.8713, 765.7559]
   - [300.0000, -66.8713, 865.7559]
-# Note the tile_map convention is different than 2x2 
-# as in nd-lar (also in fsd) one vertical row of tiles are connected to one pacman (one io-group)
-# while in 2x2 modules, the tile numbering follows horizontal first and then vertical in the 2x4 anode.
+# This matches with multi_tile_layout-3.0.40.yaml
 tile_map:
-  - [[10,9,8,7,6,5,4,3,2,1],[20,19,18,17,16,15,14,13,12,11]]
-  - [[30,29,28,27,26,25,24,23,22,21],[40,39,38,37,36,35,34,33,32,31]]
+  - [[19,17,15,13,11,9,7,5,3,1],[20,18,16,14,12,10,8,6,4,2]]
+  - [[39,37,35,33,31,29,27,25,23,21],[40,38,36,34,32,30,28,26,24,22]]
 module_to_io_groups:
   1: [1, 2, 3, 4]
   2: [5, 6, 7, 8]
