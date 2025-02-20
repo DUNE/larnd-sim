@@ -182,8 +182,10 @@ def dump(input_file, output_file, keep_all_dets=False):
     # Prep output file
     initHDF5File(output_file)
 
+    # For assigning unique-in-file segment, vertex, trajectory IDs:
     segment_id = 0
     file_vertex_id = 0
+    file_traj_id = 0
 
     # Get the input tree out of the file.
     inputFile = TFile(input_file)
@@ -212,9 +214,6 @@ def dump(input_file, output_file, keep_all_dets=False):
     segments_list = list()
     trajectories_list = list()
     vertices_list = list()
-
-    # For assigning unique-in-file track IDs:
-    trackCounter = 0
 
     for jentry in tqdm(range(entries)):
         #print(jentry,"/",entries)
@@ -292,14 +291,12 @@ def dump(input_file, output_file, keep_all_dets=False):
         vertices_list.append(vertices)
 
         trackMap = {}
-        daughters = [] # In the end, "daughters" should have n primaries numbers of lists. Each list contains a single family line.
 
         # Dump the trajectories
         trajectories = np.full(len(event.Trajectories), np.iinfo(trajectories_dtype['traj_id']).max, dtype=trajectories_dtype)
-        for iTraj, trajectory in enumerate(event.Trajectories):
-            fileTrackID = trackCounter
-            trackCounter += 1
-            trackMap[trajectory.GetTrackId()] = fileTrackID
+        for trajectory in event.Trajectories:
+        #for trajectory in reversed(event.Trajectories):
+            trackMap[trajectory.GetTrackId()] = file_traj_id
 
             if trajectory.GetParentId() == -1:
                 start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
@@ -334,27 +331,7 @@ def dump(input_file, output_file, keep_all_dets=False):
 
                 n_traj += 1
 
-            this_daughters = []
-            i_primary = -1
-            while trajectory.GetParentId() >= -1:
-                if len(daughters) > 0 and trajectory.GetTrackId() in np.concatenate(daughters):
-                    for i_primary in range(len(daughters)):
-                        if trajectory.GetTrackId() in daughters[i_primary]:
-                            break
-                    this_daughters = this_daughters + daughters[i_primary]
-                    break # once it's in "daughters", its all ancestors should be covered
-                else:
-                    this_daughters.append(trajectory.GetTrackId())
-                    if trajectory.GetParentId() == -1:
-                        break
-                    else:
-                        parent_traj_id = trajectory.GetParentId()
-                        trajectory = event.Trajectories[parent_traj_id]
-                    continue
-            if i_primary >= 0:
-                daughters[i_primary] = this_daughters
-            else:
-                daughters.append(this_daughters)
+            file_traj_id += 1
 
         # Dump the segment containers
         for containerName, hitSegments in event.SegmentDetectors:
@@ -373,55 +350,58 @@ def dump(input_file, output_file, keep_all_dets=False):
                     seg_traj_id = hitSegment.Contrib[0]
                     if seg_traj_id in vertexMap.keys():
                         primary_traj_id = seg_traj_id
-                    if seg_traj_id not in trajectories["traj_id"]: # trajectories is reinitialized for each edep event
-                        for i_primary in range(len(daughters)):
-                            if seg_traj_id in daughters[i_primary]:
-                                this_line = daughters[i_primary]
-                                this_line.reverse()
-                                break
-                        # Find the primary trackID
-                        for traj_id in this_line:
-                            if traj_id in vertexMap.keys():
-                                primary_traj_id = traj_id
-                                break
-                        for traj_id in this_line:
-                            if traj_id not in trajectories["traj_id"]:
-                                # Given event.Trajectories is ordered by traj_id (trajectory.GetTrackId())
-                                trajectory = event.Trajectories[traj_id]
-
-                                start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
-                                trajectories[n_traj]["event_id"] = event.EventId
-                                trajectories[n_traj]["vertex_id"] = vertexMap[primary_traj_id]
-                                trajectories[n_traj]["file_vertex_id"] = file_vertexMap[primary_traj_id]
-
-                                trajectories[n_traj]["traj_id"] = trajectory.GetTrackId()
-                                trajectories[n_traj]["file_traj_id"] = trackMap[trajectory.GetTrackId()]
-                                trajectories[n_traj]["parent_id"] = trajectory.GetParentId()
-                                trajectories[n_traj]["primary"] = True if trajectory.GetParentId() == -1 else False # primary particle parents trajectory id are -1
-
-                                mass = trajectory.GetInitialMomentum().M()
-                                p_start = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
-                                p_end = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
-
-                                trajectories[n_traj]["pxyz_start"] = p_start #(start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
-                                trajectories[n_traj]["pxyz_end"] = p_end #(end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
-                                trajectories[n_traj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
-                                trajectories[n_traj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
-                                trajectories[n_traj]["E_start"] = np.sqrt(np.sum(np.square(p_start)) + mass**2)
-                                trajectories[n_traj]["E_end"] = np.sqrt(np.sum(np.square(p_end)) + mass**2)
-                                trajectories[n_traj]["t_start"] = start_pt.GetPosition().T() * edep2us
-                                trajectories[n_traj]["t_end"] = end_pt.GetPosition().T() * edep2us
-                                trajectories[n_traj]["start_process"] = start_pt.GetProcess()
-                                trajectories[n_traj]["start_subprocess"] = start_pt.GetSubprocess()
-                                trajectories[n_traj]["end_process"] = end_pt.GetProcess()
-                                trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
-                                trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
-                                trajectories[n_traj]["dist_travel"] = 0
-                                for i in range(len(trajectory.Points)-1):
-                                    trajectories[n_traj]["dist_travel"] += (trajectory.Points[i].GetPosition()-trajectory.Points[i+1].GetPosition()).Vect().Mag()* edep2cm
-                                n_traj += 1
                     segment[iHit]["vertex_id"] = vertexMap[primary_traj_id]
                     segment[iHit]["file_vertex_id"] = file_vertexMap[primary_traj_id]
+
+                    if seg_traj_id not in trajectories["traj_id"]: # trajectories is reinitialized for each edep event
+                        trajectory = event.Trajectories[seg_traj_id]
+                        # Trace back in the family tree
+                        while trajectory.GetParentId() >= -1:
+                            if trajectory.GetTrackId() in trajectories["traj_id"]:
+                                # already stored
+                                if trajectory.GetParentId() == -1:
+                                    break
+                                else:
+                                    parent_traj_id = trajectory.GetParentId()
+                                    trajectory = event.Trajectories[parent_traj_id]
+                                continue
+
+                            start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
+                            trajectories[n_traj]["event_id"] = event.EventId
+                            trajectories[n_traj]["vertex_id"] = vertexMap[primary_traj_id]
+                            trajectories[n_traj]["file_vertex_id"] = file_vertexMap[primary_traj_id]
+
+                            trajectories[n_traj]["traj_id"] = trajectory.GetTrackId()
+                            trajectories[n_traj]["file_traj_id"] = trackMap[trajectory.GetTrackId()]
+                            trajectories[n_traj]["parent_id"] = trajectory.GetParentId()
+                            trajectories[n_traj]["primary"] = True if trajectory.GetParentId() == -1 else False # primary particle parents trajectory id are -1
+
+                            mass = trajectory.GetInitialMomentum().M()
+                            p_start = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                            p_end = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+
+                            trajectories[n_traj]["pxyz_start"] = p_start #(start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                            trajectories[n_traj]["pxyz_end"] = p_end #(end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+                            trajectories[n_traj]["xyz_start"] = (start_pt.GetPosition().X() * edep2cm, start_pt.GetPosition().Y() * edep2cm, start_pt.GetPosition().Z() * edep2cm)
+                            trajectories[n_traj]["xyz_end"] = (end_pt.GetPosition().X() * edep2cm, end_pt.GetPosition().Y() * edep2cm, end_pt.GetPosition().Z() * edep2cm)
+                            trajectories[n_traj]["E_start"] = np.sqrt(np.sum(np.square(p_start)) + mass**2)
+                            trajectories[n_traj]["E_end"] = np.sqrt(np.sum(np.square(p_end)) + mass**2)
+                            trajectories[n_traj]["t_start"] = start_pt.GetPosition().T() * edep2us
+                            trajectories[n_traj]["t_end"] = end_pt.GetPosition().T() * edep2us
+                            trajectories[n_traj]["start_process"] = start_pt.GetProcess()
+                            trajectories[n_traj]["start_subprocess"] = start_pt.GetSubprocess()
+                            trajectories[n_traj]["end_process"] = end_pt.GetProcess()
+                            trajectories[n_traj]["end_subprocess"] = end_pt.GetSubprocess()
+                            trajectories[n_traj]["pdg_id"] = trajectory.GetPDGCode()
+                            trajectories[n_traj]["dist_travel"] = 0
+                            for i in range(len(trajectory.Points)-1):
+                                trajectories[n_traj]["dist_travel"] += (trajectory.Points[i].GetPosition()-trajectory.Points[i+1].GetPosition()).Vect().Mag()* edep2cm
+                            n_traj += 1
+                            if trajectories[n_traj-1]["parent_id"] == -1:
+                                break
+                            else:
+                                parent_traj_id = trajectory.GetParentId()
+                                trajectory = event.Trajectories[parent_traj_id]
 
                 except IndexError as e:
                     print(e)
@@ -452,7 +432,7 @@ def dump(input_file, output_file, keep_all_dets=False):
                 segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
                 segment[iHit]["t"] = 0
                 segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
-                segment[iHit]["pdg_id"] = trajectories[trajectories["traj_id"]==hitSegment.Contrib[0]]["pdg_id"]
+                segment[iHit]["pdg_id"] = trajectories[trajectories["traj_id"]==hitSegment.Contrib[0]]["pdg_id"][0]
                 segment[iHit]["n_electrons"] = 0
                 segment[iHit]["long_diff"] = 0
                 segment[iHit]["tran_diff"] = 0
