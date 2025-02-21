@@ -365,6 +365,10 @@ def dump(input_file, output_file, keep_all_dets=False):
                                 # already stored
                                 if trajectory.GetParentId() == -1:
                                     primary_traj_id = trajectory.GetTrackId()
+                                    for i_traj in idx_traj:
+                                        trajectories[i_traj]["vertex_id"] = vertexMap[primary_traj_id]
+                                        trajectories[i_traj]["file_vertex_id"] = file_vertexMap[primary_traj_id]
+                                    primary_traj_map[primary_traj_id].extend(part_traj_line)
                                     break
                                 else:
                                     parent_traj_id = trajectory.GetParentId()
@@ -418,6 +422,8 @@ def dump(input_file, output_file, keep_all_dets=False):
                             if seg_traj_id in set(primary_traj_map[primary]):
                                 primary_traj_id = primary
                     if primary_traj_id == -1:
+                        print("seg_traj_id: ", seg_traj_id)
+                        print("primary_traj_map: ", primary_traj_map)
                         raise ValueError("Didn't find the corresponding primary particle.")
 
                     segment[iHit]["vertex_id"] = vertexMap[primary_traj_id]
