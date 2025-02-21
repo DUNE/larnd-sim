@@ -194,8 +194,8 @@ def dump(input_file, output_file, keep_all_dets=False):
 
     # IF CRASH: Uncomment this section (also see IF CRASH below)
     # Attach a brach to the events.
-    # event = TG4Event()
-    # inputTree.SetBranchAddress("Event",event)
+    event = TG4Event()
+    inputTree.SetBranchAddress("Event",event)
 
     # map that gives which spill each event lives in
     event_spill_map = inputFile.Get("event_spill_map")
@@ -219,8 +219,8 @@ def dump(input_file, output_file, keep_all_dets=False):
         #print(jentry,"/",entries)
         nb = inputTree.GetEntry(jentry)
 
-        # IF CRASH: Comment this line (also see IF CRASH above)
-        event = inputTree.Event
+        ## IF CRASH: Comment this line (also see IF CRASH above)
+        #event = inputTree.Event
 
         globalVertexID = (event.RunId * 1E6) + event.EventId
 
@@ -350,11 +350,12 @@ def dump(input_file, output_file, keep_all_dets=False):
                     seg_traj_id = hitSegment.Contrib[0]
                     if seg_traj_id in vertexMap.keys():
                         primary_traj_id = seg_traj_id
-                    segment[iHit]["vertex_id"] = vertexMap[primary_traj_id]
-                    segment[iHit]["file_vertex_id"] = file_vertexMap[primary_traj_id]
+                    else:
+                        primary_traj_id = -1
 
                     if seg_traj_id not in trajectories["traj_id"]: # trajectories is reinitialized for each edep event
                         trajectory = event.Trajectories[seg_traj_id]
+                        idx_traj = []
                         # Trace back in the family tree
                         while trajectory.GetParentId() >= -1:
                             if trajectory.GetTrackId() in trajectories["traj_id"]:
@@ -365,12 +366,10 @@ def dump(input_file, output_file, keep_all_dets=False):
                                     parent_traj_id = trajectory.GetParentId()
                                     trajectory = event.Trajectories[parent_traj_id]
                                 continue
+                            idx_traj.append(n_traj)
 
                             start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
                             trajectories[n_traj]["event_id"] = event.EventId
-                            trajectories[n_traj]["vertex_id"] = vertexMap[primary_traj_id]
-                            trajectories[n_traj]["file_vertex_id"] = file_vertexMap[primary_traj_id]
-
                             trajectories[n_traj]["traj_id"] = trajectory.GetTrackId()
                             trajectories[n_traj]["file_traj_id"] = trackMap[trajectory.GetTrackId()]
                             trajectories[n_traj]["parent_id"] = trajectory.GetParentId()
@@ -398,11 +397,17 @@ def dump(input_file, output_file, keep_all_dets=False):
                                 trajectories[n_traj]["dist_travel"] += (trajectory.Points[i].GetPosition()-trajectory.Points[i+1].GetPosition()).Vect().Mag()* edep2cm
                             n_traj += 1
                             if trajectories[n_traj-1]["parent_id"] == -1:
+                                primary_traj_id = trajectories[n_traj]["traj_id"]
+                                for i_traj in idx_traj:
+                                    trajectories[n_traj]["vertex_id"] = vertexMap[primary_traj_id]
+                                    trajectories[n_traj]["file_vertex_id"] = file_vertexMap[primary_traj_id]
                                 break
                             else:
                                 parent_traj_id = trajectory.GetParentId()
                                 trajectory = event.Trajectories[parent_traj_id]
 
+                    segment[iHit]["vertex_id"] = vertexMap[primary_traj_id]
+                    segment[iHit]["file_vertex_id"] = file_vertexMap[primary_traj_id]
                 except IndexError as e:
                     print(e)
                     print("iHit:",iHit)
