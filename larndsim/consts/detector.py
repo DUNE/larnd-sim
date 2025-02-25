@@ -265,8 +265,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
 
     n_mod = len(MOD_IDS)
 
-    DRIFT_LENGTH = detprop['drift_length']
-
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
@@ -326,8 +324,12 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         for tile in tile_indeces:
             if tile_indeces[tile][0] == tpc_id:
                 anodes[tpc_id].append(TILE_POSITIONS[tile])
-
-    DRIFT_LENGTH = detprop['drift_length']
+ 
+    try:
+        DRIFT_LENGTH = tile_layout['drift_length'] * mm / cm
+    except:
+        dist_anode2anode = np.array(list(TILE_POSITIONS.values()))[:, 0]
+        DRIFT_LENGTH = 0.5 * (max(dist_anode2anode) - min(dist_anode2anode)) * mm / cm
 
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
