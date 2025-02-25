@@ -802,7 +802,8 @@ def run_simulation(input_filename,
             lut['vis'][~mask] = lut['vis'][mask].min()
 
             # get length of the t0 time profile
-            t0_profile_length = lut['time_dist'].shape[-1]
+            # t0_profile_length = lut['time_dist'].shape[-1]
+            t0_profile_length = 100
 
             lut = to_device(lut)
 
