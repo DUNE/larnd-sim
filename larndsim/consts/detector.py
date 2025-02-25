@@ -328,8 +328,8 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     try:
         DRIFT_LENGTH = tile_layout['drift_length'] * mm / cm
     except:
-        dist_anode2anode = np.array(list(TILE_POSITIONS.values()))[:, 0]
-        DRIFT_LENGTH = 0.5 * (max(dist_anode2anode) - min(dist_anode2anode)) * mm / cm
+        mod_anodes = np.array(list(TILE_POSITIONS.values()))[:, 0]
+        DRIFT_LENGTH = 0.5 * (max(mod_anodes) - min(mod_anodes)) * mm / cm
 
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
