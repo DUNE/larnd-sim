@@ -48,7 +48,7 @@ LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
 #: Arbitrary input model (normalized to sum of 1)
 IMPULSE_MODEL = np.array([1,0])
 #: Arbitrary input model tick size [microseconds]
-IMPULSE_TICK_SIZE = 0.001
+IMPULSE_TICK_SIZE = 0.01 # 10 ns a tick for the response measurement
 
 #: Number of SiPMs per detector (used by trigger)
 OP_CHANNEL_PER_TRIG = 6
