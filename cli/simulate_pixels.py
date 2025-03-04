@@ -1214,7 +1214,7 @@ def run_simulation(input_filename,
                     light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                     light_sim.calc_light_detector_response[BPG, TPB](
                         light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                        light_response, light_response_true_track_id, light_response_true_photons)
+                        light_response, light_response_true_track_id, light_response_true_photons, light_num_backtrack, light_offset_backtrack)
                     #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                     RangePop()
 
