@@ -845,7 +845,7 @@ def run_simulation(input_filename,
             #            max(ceil(digit_samples / TPB[2]),1))
             #     light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
             #         BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-            #         digit_samples, light_noise)
+            #         digit_samples, light_noise, n_light_triggers, light_num_backtrack, light_offset_backtrack)
             #     RangePop()
 
             #     light_t_start = 0
