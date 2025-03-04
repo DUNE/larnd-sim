@@ -94,7 +94,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
 
                     # use LUT time smearing
                     if light.ENABLE_LUT_SMEARING:
-                        time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
+                        pass
+                        # time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
 
                         # add photons to time tick
                         for iprof in range(time_profile.shape[0]):
