@@ -190,7 +190,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
                 light_sample_inc_scint[idet,itick] += tick_weight * light_sample_inc[idet,jtick]
 
                 # loop over convolution tick truth
-                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                for itrue in range(num_backtrack[idet]):
                     # if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
                     if light_sample_inc_true_track_id[base_idx + itrue] == -1:
                         break
@@ -330,7 +330,7 @@ def sipm_response_model(idet, time_tick):
             
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons):
+def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, num_backtrack, offset_backtrack):
     """
     Simulates the SiPM reponse and digit
     
@@ -342,6 +342,7 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
+            base_idx = vals_per_tick * itick + offset_backtrack[idet]
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
