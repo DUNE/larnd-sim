@@ -97,7 +97,7 @@ ndlar_old_layout:
 fsd:
     SIM_PROPERTIES:  singles_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_NDLArModule_v3.yaml
-    DET_PROPERTIES:  ndlar-module.yaml
+    DET_PROPERTIES:  fsd.yaml
     RESPONSE:        response_37_v2d_50ns_fsd.npy
     #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
     LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
