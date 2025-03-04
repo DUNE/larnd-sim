@@ -339,7 +339,10 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
         light_response(array): shape `(ndet, ntick)`, ADC value at each time tick
     """
     idet,itick = cuda.grid(2)
-
+    
+    # #opdet * backtracks
+    vals_per_tick = offset_backtrack[-1] + num_backtrack[-1]
+    
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
             base_idx = vals_per_tick * itick + offset_backtrack[idet]
@@ -350,19 +353,19 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
                 light_response[idet,itick] += light.LIGHT_GAIN[idet] * tick_weight * light_sample_inc[idet,jtick]
                     
                 # loop over convolution tick truth
-                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                    if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
+                for itrue in range(num_backtrack[idet]):
+                    if light_sample_inc_true_track_id[base_idx + itrue] == -1:
                         break
                         
-                    if abs(tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]) < sim.MC_TRUTH_THRESHOLD:
+                    if abs(tick_weight * light_sample_inc_true_photons[base_idx + itrue]) < sim.MC_TRUTH_THRESHOLD:
                         continue
 
                     # loop over current tick truth
-                    for jtrue in range(light_response_true_track_id.shape[-1]):
+                    for jtrue in range(num_backtrack[idet]):
                         # apply convolution if convolution tick matches or if available truth slot
-                        if light_sample_inc_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,itick,itrue] or light_sample_inc_true_track_id[idet,itick,jtrue] == -1:
-                            light_response_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,itick,itrue]
-                            light_response_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
+                        if light_sample_inc_true_track_id[base_idx + jtrue] == light_sample_inc_true_track_id[base_idx + itrue] or light_sample_inc_true_track_id[base_idx + jtrue] == -1:
+                            light_response_true_track_id[base_idx + jtrue] = light_sample_inc_true_track_id[base_idx + itrue]
+                            light_response_true_photons[base_idx + jtrue] += tick_weight * light_sample_inc_true_photons[base_idx + itrue]
                             break
                 
 
