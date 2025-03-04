@@ -575,7 +575,7 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                     if digit_signal_true_track_id[itrig,idet_module,isample,itrue-1] != -1:
                         digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
 
-def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
+def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise, n_light_ticks, num_backtrack, offset_backtrack):
     """
     Generates digitized waveforms at specified simulation tick indices
     
@@ -595,8 +595,10 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
         array: shape `(ntrigs, ndet_module, digit_samples)`, digitized waveform on each channel for each trigger
     """
     digit_signal = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples), dtype='f8')
-    digit_signal_true_track_id = cp.full((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
-    digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
+    digit_signal_true_track_id = cp.full(trigger_idx.shape[0] * n_light_ticks * num_backtrack.sum(), -1, dtype = 'i8')
+    digit_signal_true_photons = cp.zeros(trigger_idx.shape[0] * n_light_ticks * num_backtrack.sum(), dtype = 'f8')
+    #digit_signal_true_track_id = cp.full((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
+    #digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
     # exit if no triggers
     if digit_signal.shape[0] == 0:
         return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
