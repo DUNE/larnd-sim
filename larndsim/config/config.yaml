@@ -59,6 +59,13 @@ module0:
     DET_PROPERTIES:  2x2_old_response.yaml
     RESPONSE:        [response_44.npy, response_38.npy]
 
+2x2_old_response_driftfix: &2x2modvar_old_response_driftfix
+    <<: *2x2modvar
+    PIXEL_LAYOUT:    [multi_tile_layout-2.4.16_v3_driftfix.yaml, multi_tile_layout-2.5.16_v3_driftfix.yaml]
+    PIXEL_LAYOUT_ID: [0, 0, 1, 0]
+    DET_PROPERTIES:  2x2_old_response.yaml
+    RESPONSE:        [response_44.npy, response_38.npy]
+
 # 2x2 (differnt module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
