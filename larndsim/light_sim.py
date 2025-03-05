@@ -95,23 +95,23 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                     # use LUT time smearing
                     if light.ENABLE_LUT_SMEARING:
                         pass
-                        # time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
+                    #     time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
 
-                        # add photons to time tick
-                        for iprof in range(time_profile.shape[0]):
-                            profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
-                            if profile_time < end_tick_time and profile_time > start_tick_time:
-                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
-                                light_sample_inc[idet,itick] += photons
+                    #     # add photons to time tick
+                    #     for iprof in range(time_profile.shape[0]):
+                    #         profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                    #         if profile_time < end_tick_time and profile_time > start_tick_time:
+                    #             photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
+                    #             light_sample_inc[idet,itick] += photons
 
-                                if photons > sim.MC_TRUTH_THRESHOLD:
-                                    # get truth information for time tick
-                                    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                        if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                            light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                            light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                            break
-                    # use average time only
+                    #             if photons > sim.MC_TRUTH_THRESHOLD:
+                    #                 # get truth information for time tick
+                    #                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                    #                     if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                    #                         light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                    #                         light_sample_inc_true_photons[idet,itick,itrue] += photons
+                    #                         break
+                    # # use average time only
                     else:
                         # calculate average delay time
                         t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus # normalised averagein us
