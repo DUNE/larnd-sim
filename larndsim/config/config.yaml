@@ -102,7 +102,7 @@ ndlar_old_layout:
     DET_PROPERTIES:  ndlar-module_old_pixel_layout.yaml
 
 fsd:
-    SIM_PROPERTIES:  singles_sim.yaml
+    SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_NDLArModule_v3.yaml
     DET_PROPERTIES:  fsd.yaml
     RESPONSE:        response_37_v2d_50ns_fsd.npy
