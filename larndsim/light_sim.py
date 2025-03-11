@@ -90,7 +90,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
             # expect num_backtrack[idet] iterations here: ?????
             for itrk in sorted_indices[idet]:
                 # No more light on this detector
-                if light_inc[itrk, idet] == 0:
+                if light_inc[itrk, idet]["n_photons_det"] == 0:
                     break
 
                 if light_inc[itrk,op_channel[idet]]['n_photons_det'] > 0:
