@@ -693,14 +693,13 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         this_trig = indices[i][0]
         i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
         i_op_channel = indices[i][1]
-        breakpoint()
         i_sample = indices[i][2]
         i_content = indices[i][3]
         trigger_id.append(i_trig)
         op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
         tick.append(i_sample)
         event_id.append(i_evt)
-        base_idx = vals_per_tick * i_sample + waveforms_offset_backtrack[i_op_channel]
+        #base_idx = vals_per_tick * i_sample + waveforms_offset_backtrack[i_op_channel]
         # The last three dimensions (i_op_channel, i_sample, i_content) correspond to the original 3 dims we jaggedized.
         # So your lookups should be like waveforms_true_track_id[this_trig][base_idx + i_content]
         segment_id.append(waveforms_true_track_id[this_trig][base_idx + i_content])
@@ -757,7 +756,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         # Store the light truth backtracking, in the same way for module variation turned on and off
         # skip creating the truth dataset if there is no truth information to store
         truth_data=None
-        if sim.MAX_MC_TRUTH_IDS > 0:
+        if False: #sim.MAX_MC_TRUTH_IDS > 0:
             truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, waveforms_num_backtrack, waveforms_offset_backtrack, event_id[0], i_trig, i_mod)
             if truth_data.shape[0] > 0:
                 if f'light_wvfm_mc_assn' not in f:
