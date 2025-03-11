@@ -660,7 +660,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
         signal_true_photons = cp.take_along_axis(signal_true_photons, order[...,np.newaxis,np.newaxis], axis=0)
 
     digitize_signal[bpg,tpb](signal, signal_op_channel_idx, padded_trigger_idx, op_channel_idx, signal_true_track_id, signal_true_photons,
-        digit_signal, digit_signal_true_track_id, digit_signal_true_photons)
+        digit_signal, digit_signal_true_track_id, digit_signal_true_photons, num_backtrack, offset_backtrack)
 
     # truncate to correct number of bits
     digit_signal = cp.round(digit_signal / 2**(16-light.LIGHT_NBIT)) * 2**(16-light.LIGHT_NBIT)
