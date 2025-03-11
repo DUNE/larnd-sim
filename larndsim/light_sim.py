@@ -699,7 +699,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
         tick.append(i_sample)
         event_id.append(i_evt)
-        base_idx = vals_per_tick * i_sample + offset_backtrack[i_op_channel]
+        base_idx = vals_per_tick * i_sample + waveforms_offset_backtrack[i_op_channel]
         # The last three dimensions (i_op_channel, i_sample, i_content) correspond to the original 3 dims we jaggedized.
         # So your lookups should be like waveforms_true_track_id[this_trig][base_idx + i_content]
         segment_id.append(waveforms_true_track_id[this_trig][base_idx + i_content])
