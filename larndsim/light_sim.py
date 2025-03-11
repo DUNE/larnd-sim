@@ -693,6 +693,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         this_trig = indices[i][0]
         i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
         i_op_channel = indices[i][1]
+        breakpoint()
         i_sample = indices[i][2]
         i_content = indices[i][3]
         trigger_id.append(i_trig)
