@@ -617,7 +617,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
 
     # pad front of simulation with noise, if trigger close to start of simulation window
     pre_digit_ticks = int(ceil(light.LIGHT_TRIG_WINDOW[0]/light.LIGHT_TICK_SIZE))
-    if trigger_idx.min() - pre_digit_ticks < 0:
+    if False: #trigger_idx.min() - pre_digit_ticks < 0:
         pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx.min())) # do we use n_light_ticks?
         pre_trig_readout = cp.zeros(pad_shape)
         signal = cp.concatenate([pre_trig_readout, signal], axis=-1)
@@ -629,21 +629,21 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
         padded_trigger_idx += pad_shape[1]
     
     # pad end of simulation with noise, if trigger close to end of simulation window
-    post_digit_ticks = int(ceil(light.LIGHT_TRIG_WINDOW[1]/light.LIGHT_TICK_SIZE))
-    if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
-        pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))  # replace with num_backtrack[something]
-        post_trig_readout = cp.zeros(pad_shape)
-        signal = cp.concatenate([signal, post_trig_readout], axis=-1)
-        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
-        # copy paste change from previous if case
-        signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
-        signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
+    #post_digit_ticks = int(ceil(light.LIGHT_TRIG_WINDOW[1]/light.LIGHT_TICK_SIZE))
+    #if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
+    #    pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))  # replace with num_backtrack[something]
+    #    post_trig_readout = cp.zeros(pad_shape)
+    #    signal = cp.concatenate([signal, post_trig_readout], axis=-1)
+    #    #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
+    #    # copy paste change from previous if case
+    #    signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
+    #    signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
 
     # add noise to padded (in readout time) signal
-    signal += cp.array(gen_light_detector_noise(signal.shape, light_det_noise[signal_op_channel_idx]))
+    # signal += cp.array(gen_light_detector_noise(signal.shape, light_det_noise[signal_op_channel_idx]))
 
     # add noise for any channels that had no signal
-    if cp.any(~cp.isin(op_channel_idx, signal_op_channel_idx)):
+    if False: #cp.any(~cp.isin(op_channel_idx, signal_op_channel_idx)):
         missing = cp.unique(op_channel_idx[~cp.isin(op_channel_idx, signal_op_channel_idx)])
         pad_shape = (missing.shape[0], signal.shape[-1])
         signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[missing])], axis=0)
