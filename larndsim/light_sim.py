@@ -511,7 +511,7 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
 
 
 @cuda.jit
-def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_channel_idx, signal_true_track_id, signal_true_photons, digit_signal, digit_signal_true_track_id, digit_signal_true_photons):
+def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_channel_idx, signal_true_track_id, signal_true_photons, digit_signal, digit_signal_true_track_id, digit_signal_true_photons, num_backtrack, offset_backtrack):
     """
     Interpolate signal to the appropriate sampling frequency
     
@@ -524,6 +524,9 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
     """
     itrig,idet_module,isample = cuda.grid(3)
     
+    vals_per_tick = offset_backtrack[-1] + num_backtrack[-1]
+
+
     if itrig < digit_signal.shape[0]:
         if idet_module < digit_signal.shape[1]:
             if isample < digit_signal.shape[2]:
@@ -542,38 +545,43 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                 itick1 = int(ceil(sample_tick))
                 
                 itrue = 0
+
+                base_idx0 = vals_per_tick * itick0 + offset_backtrack[idet_signal]
+                base_idx1 = vals_per_tick * itick1 + offset_backtrack[idet_signal]
+                base_sample = vals_per_tick * (isample) + offset_backtrack[idet_module]
                 # loop over previous tick truth
-                for jtrue in range(signal_true_track_id.shape[-1]):
-                    if itrue >= digit_signal_true_track_id.shape[-1]:
+                # replace signal_true_track_id.shape[-1] with num_backtrack
+                for jtrue in range(num_backtrack[idet]):
+                    if itrue >= num_backtrack[idet]:
                         break
-                    if signal_true_track_id[idet_signal,itick0,jtrue] == -1:
+                    if signal_true_track_id[base_idx0 + jtrue] == -1:
                         break
                             
                     photons0, photons1 = 0, 0
 
                     # if matches the current sample track or we have empty truth slot, add truth info
-                    if signal_true_track_id[idet_signal,itick0,jtrue] == digit_signal_true_track_id[itrig,idet_module,isample,itrue] or digit_signal_true_track_id[itrig,idet_module,isample,itrue] == -1:
-                        digit_signal_true_track_id[itrig,idet_module,isample,itrue] = signal_true_track_id[idet_signal,itick0,jtrue]
+                    if signal_true_track_id[base_idx0 + jtrue] == digit_signal_true_track_id[itrig, base_sample + itrue] or digit_signal_true_track_id[itrig,base_sample + itrue] == -1:
+                        digit_signal_true_track_id[itrig, base_sample + itrue] = signal_true_track_id[base_idx0 + jtrue]
                         itrue += 1
                         # interpolate true photons
-                        photons0 = signal_true_photons[idet,itick0,jtrue]
+                        photons0 = signal_true_photons[base_idx0 + jtrue]
                         
                         if abs(photons0) < sim.MC_TRUTH_THRESHOLD:
                             continue
 
                         # loop over next tick
                         # first try same position (for speed-up)
-                        if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,jtrue]:
-                            photons1 = signal_true_photons[idet_signal,itick1,jtrue]
+                        if signal_true_track_id[base_idx0 + jtrue] == signal_true_track_id[base_idx1 + jtrue]:
+                            photons1 = signal_true_photons[base_idx1 + jtrue]
                         else:
                             for ktrue in range(signal_true_track_id.shape[-1]):
-                                if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,ktrue]:
-                                    photons1 = signal_true_photons[idet_signal,itick1,ktrue]
+                                if signal_true_track_id[base_idx0 + jtrue] == signal_true_track_id[base_idx1 + ktrue]:
+                                    photons1 = signal_true_photons[base_idx1 + ktrue]
                                     break
 
                     # if a valid truth entry was found, do interpolation
-                    if digit_signal_true_track_id[itrig,idet_module,isample,itrue-1] != -1:
-                        digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
+                    if digit_signal_true_track_id[itrig, base_sample + itrue-1] != -1:
+                        digit_signal_true_photons[itrig, base_sample + itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
 
 def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise, n_light_ticks, num_backtrack, offset_backtrack):
     """
