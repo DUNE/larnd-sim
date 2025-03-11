@@ -603,8 +603,8 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
         array: shape `(ntrigs, ndet_module, digit_samples)`, digitized waveform on each channel for each trigger
     """
     digit_signal = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples), dtype='f8')
-    digit_signal_true_track_id = cp.full(trigger_idx.shape[0] * n_light_ticks * num_backtrack.sum(), -1, dtype = 'i8')
-    digit_signal_true_photons = cp.zeros(trigger_idx.shape[0] * n_light_ticks * num_backtrack.sum(), dtype = 'f8')
+    digit_signal_true_track_id = cp.full((trigger_idx.shape[0], n_light_ticks * num_backtrack.sum()), -1, dtype = 'i8')
+    digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], n_light_ticks * num_backtrack.sum()), dtype = 'f8')
     # changes seem to be replacing op_channel, digit_samples, and true track id with nlightticks * numbacktrack and mult by shape element
     #digit_signal_true_track_id = cp.full((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
     #digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
