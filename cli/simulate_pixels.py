@@ -234,20 +234,24 @@ def run_simulation(input_filename,
                                light_trigger_modules=light_trigger_modules,
                                bad_channels=bad_channels, # defined earlier in script
                                i_mod=i_mod)
-
+        #print("len(results['light_event_id']) = ", len(results['light_event_id']))
+        #print('light.LIGHT_SIMULATED = ', light.LIGHT_SIMULATED)
+        #print('i trig = ', i_trig)
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             if light.LIGHT_TRIG_MODE == 0:
-                light_sim.export_to_hdf5(results['light_event_id'],
-                                         results['light_start_time'],
-                                         results['light_trigger_idx'],
-                                         results['light_op_channel_idx'],
-                                         results['light_waveforms'],
-                                         output_filename,
-                                         uniq_event_times,
-                                         results['light_waveforms_true_track_id'],
-                                         results['light_waveforms_true_photons'],
-                                         i_trig,
-                                         i_mod)
+                print('saving light data')
+                print('len(results)=', len(results))
+                #light_sim.export_to_hdf5(results['light_event_id'],
+                #                         results['light_start_time'],
+                #                         results['light_trigger_idx'],
+                #                         results['light_op_channel_idx'],
+                #                         results['light_waveforms'],
+                #                         output_filename,
+                #                         uniq_event_times,
+                #                         results['light_waveforms_true_track_id'],
+                #                         results['light_waveforms_true_photons'],
+                #                         i_trig,
+                #                         i_mod)
             elif light.LIGHT_TRIG_MODE == 1:
                 light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
                                                     results['light_waveforms'],
@@ -619,7 +623,8 @@ def run_simulation(input_filename,
     # we can use when indexing into event_times. Note that num_evids is actually
     # an upper bound on the number of events, since there may be gaps due to
     # events that didn't deposit any energy in the LAr. Such gaps are harmless.
-    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
+    num_evids = tracks[sim.EVENT_SEPARATOR].max() + 1
+    #num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
     if sim.IS_SPILL_SIM:
         event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
@@ -742,14 +747,21 @@ def run_simulation(input_filename,
         RangePush("run_simulation")
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
-
+   
+        NEST_ER_NR_filename='../larndsim/bin/NEST_ER_NR_up_to_5MeV.npz'
+        d_pdg_codes = np.array(list(sim.PDG_TO_RECOMBINATION_MODEL.keys()), dtype=np.int32)
+        d_model_codes = np.array(list(sim.PDG_TO_RECOMBINATION_MODEL.values()), dtype=np.int32)
+        NEST_ER_NR = np.load(NEST_ER_NR_filename)
+         
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
         logger.start()
         logger.take_snapshot()
         start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+        quenching.quench[BPG,TPB](tracks, d_pdg_codes, d_model_codes, sim.ER_ENERGY_THRESHOLD, sim.DEFAULT_RECOMBINATION_MODEL, 
+                             NEST_ER_NR['E_ER'], NEST_ER_NR['E_NR'], NEST_ER_NR['R_ER'], NEST_ER_NR['R_NR'])
+        #quenching.quench[BPG,TPB](tracks, physics.BIRKS)
         end_quenching = time()
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')
@@ -904,6 +916,9 @@ def run_simulation(input_filename,
                 event_id_buffer = ievd
             else:
                 is_new_event = False
+            #print('event times len = ', len(event_times))
+            #print('ievd = ', ievd)
+            #print('ievd % sim.MAX_EVENTS_PER_FILE = ', ievd % sim.MAX_EVENTS_PER_FILE)
             this_event_time = [event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
             if is_new_event:
                 # forward sync packets
@@ -1121,8 +1136,12 @@ def run_simulation(input_filename,
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
                 BPG = ceil(pixels_signals.shape[0] / TPB)
                 rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+<<<<<<< Updated upstream
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
+=======
+                #print('Discrimination threshold = ', detector.DISCRIMINATION_THRESHOLD)
+>>>>>>> Stashed changes
                 if pixel_thresholds_file is not None:
                     pixel_thresholds_lut.tpb = TPB
                     pixel_thresholds_lut.bpg = BPG

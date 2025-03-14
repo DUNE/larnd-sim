@@ -8,7 +8,7 @@
 # then it would likely to take the first value
 temperature: 87.17 # K
 e_field: 0.50 # kV/cm
-lifetime: 2.2e+3 # us
+lifetime: 100e+3 # us
 time_interval: [0, 200.] # us
 long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
@@ -30,7 +30,7 @@ module_to_io_groups:
   2: [3, 4]
   3: [5, 6]
   4: [7, 8]
-discrimination_threshold: 5.0e3 #M0-like: 7.0e3 #2x2: 5.0e3 # e-
+discrimination_threshold: 500 #M0-like: 7.0e3 #2x2: 5.0e3 # e-
 v_cm: 478.1 #M0-like: 288 # 2x2: 478.1 # mV
 v_ref: 1568 #M0-like: 1300 # 2x2: 1568 # mV
 larpix_gain: 4.522e-3 #measurement(?): 4.522e-3 #datasheet 4e-3 # mV/e

@@ -27,10 +27,23 @@ MAX_TRACKS_PER_PIXEL = 50
 MIN_STEP_SIZE = 0.001 # cm
 MC_SAMPLE_MULTIPLIER = 1
 
+PDG_TO_RECOMBINATION_MODEL = \
+        {11: 3,
+         13: 2,
+         15: 2,
+         2212: 2,
+         321: 2,
+         211: 2,
+         1000010020: 2,
+         1000020040: 2,
+         1000180400: 2}
+ER_ENERGY_THRESHOLD = 5.0 # MeV
+DEFAULT_RECOMBINATION_MODEL = 2
+
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 20
 #: Maximum number of ADC values stored per pixel
-MAX_ADC_VALUES = 30
+MAX_ADC_VALUES = 50
 
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
 MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
@@ -66,8 +79,10 @@ def set_simulation_properties(simprop_file):
     global MAX_ADC_VALUES
 
     global MAX_MC_TRUTH_IDS
-    global MC_TRUTH_THRESHOLD
-
+    global MC_TRUTH_THRESHOLD 
+    global PDG_TO_RECOMBINATION_MODEL
+    global ER_ENERGY_THRESHOLD
+    global DEFAULT_RECOMBINATION_MODEL
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
 
@@ -90,5 +105,8 @@ def set_simulation_properties(simprop_file):
 
         MAX_MC_TRUTH_IDS = simprop.get('max_light_truth_ids', MAX_MC_TRUTH_IDS)
         MC_TRUTH_THRESHOLD = simprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
+        PDG_TO_RECOMBINATION_MODEL = simprop['pdg_to_recombination_model']
+        ER_ENERGY_THRESHOLD = simprop['er_energy_threshold']
+        DEFAULT_RECOMBINATION_MODEL = simprop['default_recombination_model']
     except:
         print("Check if all the necessary simulation properties are set. Taking some default values")

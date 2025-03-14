@@ -737,12 +737,15 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
         trig_data['op_channel'] = op_channel_idx
         trig_data['ts_s'] = ((start_times + trigger_idx * light.LIGHT_TICK_SIZE + event_start_times) * units.mus / units.s)
         trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/detector.CLOCK_CYCLE + event_sync_times).astype(int) % detector.CLOCK_RESET_PERIOD)
-
-        if 'light_trig' not in f:
-            f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
-        else:
-            f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
-            f['light_trig'][-trigger_idx.shape[0]:] = trig_data
+        
+        #print('trig_data = ', trig_data)
+        #print("trigger_idx = ", trigger_idx)
+        #if 'light_trig' not in f:
+        #    f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
+        #else:
+            #print("f['light_trig'] = ", f['light_trig'])
+        #    f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
+        #    f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
 def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod):
     """

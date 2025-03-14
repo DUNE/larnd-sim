@@ -16,6 +16,14 @@ E_CHARGE = 1.602e-19
 #: Average energy expended per ion pair in LAr in :math:`MeV` from Phys. Rev. A 10, 1452
 W_ION = 23.6e-6
 
-## Quenching parameters
+## Quenching factors
 BOX = 1
 BIRKS = 2
+NEST_ER = 3
+NEST_ALPHA = 4
+NEST_NR = 5
+USE_DEFAULT_MODEL = False
+
+ER_ASYMPTOTE_AVG = 0.743
+NR_ASYMPTOTE_AVG = 0.018
+ALPHA_R_FACTOR = 0.01848
