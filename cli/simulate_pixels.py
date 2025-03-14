@@ -784,7 +784,13 @@ def run_simulation(input_filename,
             start_light_time = time()
             logger.start()
             logger.take_snapshot()
+            
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
+            
+            if (i_mod == 1
+                or (mod2mod_variation
+                    and light_lut != light_lut_filename[i_mod-2])):
+            
             lut = np.load(light_lut)['arr']
 
             # check if the light LUT matches with the number of optical channels
