@@ -790,28 +790,27 @@ def run_simulation(input_filename,
             if (i_mod == 1
                 or (mod2mod_variation
                     and light_lut != light_lut_filename[i_mod-2])):
-            
-            lut = np.load(light_lut)['arr']
+                        lut = np.load(light_lut)['arr']
 
-            # check if the light LUT matches with the number of optical channels
-            # lut (x, y, z, n_op_ch) for one TPC
-            # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
-            if mod2mod_variation:
-                warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
-            else:
-                warn_n_op_ch = (n_light_channel != lut.shape[3]*2*n_modules)
-            if warn_n_op_ch:
-                warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
-
-            # clip LUT so that no voxel contains 0 visibility
-            mask = lut['vis'] > 0
-            lut['vis'][~mask] = lut['vis'][mask].min()
-
-            # get length of the t0 time profile
-            # t0_profile_length = lut['time_dist'].shape[-1]
-            t0_profile_length = 100
-
-            lut = to_device(lut)
+                # check if the light LUT matches with the number of optical channels
+                # lut (x, y, z, n_op_ch) for one TPC
+                # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
+                if mod2mod_variation:
+                    warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
+                else:
+                    warn_n_op_ch = (n_light_channel != lut.shape[3]*2*n_modules)
+                if warn_n_op_ch:
+                    warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
+    
+                # clip LUT so that no voxel contains 0 visibility
+                mask = lut['vis'] > 0
+                lut['vis'][~mask] = lut['vis'][mask].min()
+    
+                # get length of the t0 time profile
+                # t0_profile_length = lut['time_dist'].shape[-1]
+                t0_profile_length = 100
+    
+                lut = to_device(lut)
 
             light_noise = cp.load(light_det_noise_filename)
 
