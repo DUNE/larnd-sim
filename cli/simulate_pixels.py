@@ -1124,8 +1124,8 @@ def run_simulation(input_filename,
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
                 if pixel_thresholds_file is not None:
-                    pixel_thresholds_lut.tpb = TPB
-                    pixel_thresholds_lut.bpg = BPG
+                    pixel_thresholds_lut.tpb = TPB_lut
+                    pixel_thresholds_lut.bpg = BPG_lut
                     pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
                 else:
                     pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
