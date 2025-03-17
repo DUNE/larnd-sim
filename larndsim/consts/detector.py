@@ -265,8 +265,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
 
     n_mod = len(MOD_IDS)
 
-    DRIFT_LENGTH = detprop['drift_length']
-
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
@@ -322,12 +320,28 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     tpc_ids = np.unique(np.array(list(tile_indeces.values()))[:,0], axis=0)
 
     anodes = defaultdict(list)
+    cathode_directions = dict() # What direction the cathode is relative to anode
+
     for tpc_id in tpc_ids:
+        tile_cathode_directions = []
         for tile in tile_indeces:
             if tile_indeces[tile][0] == tpc_id:
                 anodes[tpc_id].append(TILE_POSITIONS[tile])
+                tile_cathode_directions.append(TILE_ORIENTATIONS[tile][0])
 
-    DRIFT_LENGTH = detprop['drift_length']
+        if len(set(tile_cathode_directions)) != 1:
+            raise ValueError("Tiles in same anode plane have different drift directions.")
+
+        if tile_cathode_directions[0] not in [1, -1]:
+            raise ValueError("Cathode direction should be either 1 or -1.")
+
+        cathode_directions[tpc_id] = tile_cathode_directions[0]
+
+    try:
+        DRIFT_LENGTH = tile_layout['drift_length'] * mm / cm
+    except:
+        mod_anodes = np.array(list(TILE_POSITIONS.values()))[:, 0]
+        DRIFT_LENGTH = 0.5 * (max(mod_anodes) - min(mod_anodes)) * mm / cm
 
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
@@ -338,13 +352,13 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         for ia, anode in enumerate(anodes):
             tiles = np.vstack(anodes[anode])
             tiles *= mm / cm
-            drift_direction = 1 if anode == 1 else -1
+            cathode_direction = cathode_directions[anode]
             x_border = min(tiles[:,2]) + TILE_BORDERS[0][0] + tpc_offset[0], \
                        max(tiles[:,2]) + TILE_BORDERS[0][1] + tpc_offset[0]
             y_border = min(tiles[:,1]) + TILE_BORDERS[1][0] + tpc_offset[1], \
                        max(tiles[:,1]) + TILE_BORDERS[1][1] + tpc_offset[1]
             z_border = min(tiles[:,0]) + tpc_offset[2], \
-                       max(tiles[:,0]) + DRIFT_LENGTH * drift_direction + tpc_offset[2]
+                       max(tiles[:,0]) + DRIFT_LENGTH * cathode_direction + tpc_offset[2]
             TPC_BORDERS[it*2+ia] = (x_border, y_border, z_border)
 
     TILE_MAP = detprop['tile_map']

@@ -526,7 +526,8 @@ def digitize(integral_list, gain=detector.GAIN * mV / e):
 
     return adcs
 
-@cuda.jit
+# @cuda.jit
+@cuda.jit(max_registers=64)
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
                    num_backtrack,
