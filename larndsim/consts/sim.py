@@ -24,8 +24,10 @@ MAX_EVENTS_PER_FILE = 1000
 
 # See larndsim/detsim.py
 MAX_TRACKS_PER_PIXEL = 50
-MIN_STEP_SIZE = 0.001 # cm
-MC_SAMPLE_MULTIPLIER = 1
+#: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
+#: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
+#: and the bin size in t is 50 ns, which is roughly 0.007 cm
+MIN_STEP_SIZE = 0.0064 # cm, previously we were using 0.001 cm
 
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 20

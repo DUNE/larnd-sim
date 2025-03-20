@@ -220,9 +220,9 @@ def get_closest_waveform(x, y, t, response):
 @nb.njit
 def overlapping_segment(x, y, start, end, radius):
     """
-    Calculates the segment of the track defined by start, end that overlaps
-    with a circle centered at x,y
-
+    Computes the relevant segment part that's around the pixel center (x, y).
+    The projected positions of the new start and end on the pixel plane has distances of one "radius" away from the pixel center.
+    The new start and end of the segment is along the original segment.
     """
     dxy = x - start[0], y - start[1]
     v = end[0] - start[0], end[1] - start[1]
@@ -320,31 +320,30 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             nstep = max(round(subsegment_length / sim.MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
 
-            charge = t["n_electrons"] * (subsegment_length/length) / (nstep*sim.MC_SAMPLE_MULTIPLIER)
+            charge = t["n_electrons"] * (subsegment_length/length) / nstep
             total_current = 0
             rng_state = (rng_states[itrk + ntrk * ipix],)
             for istep in range(nstep):
-                for _ in range(sim.MC_SAMPLE_MULTIPLIER):
-                    x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
-                    y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
-                    z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
+                x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
+                y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
+                z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
 
-                    z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
-                    t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
-                    if not t0 < time_tick < t0 + detector.TIME_WINDOW:
-                        continue
+                z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
+                t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
+                if not t0 < time_tick < t0 + detector.TIME_WINDOW:
+                    continue
 
-                    x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
-                    y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
-                    x_dist = abs(x_p - x)
-                    y_dist = abs(y_p - y)
+                x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
+                y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
+                x_dist = abs(x_p - x)
+                y_dist = abs(y_p - y)
 
-                    if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
-                        continue
-                    if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
-                        continue
+                if x_dist > detector.RESPONSE_BIN_SIZE * response.shape[0]:
+                    continue
+                if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
+                    continue
 
-                    total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response)
+                total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response)
 
             signals[itrk,ipix,it] = total_current
 
