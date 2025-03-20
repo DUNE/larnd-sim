@@ -580,6 +580,7 @@ def run_simulation(input_filename,
         tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
         tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
 
+
     # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
     # Therefore, to run the detector simulation we reset the t0 to reflect that
     # When storing the mc truth, revert this change and store the "real" segment time
@@ -657,6 +658,9 @@ def run_simulation(input_filename,
     # accumulate results for periodic file saving
     results_acc = defaultdict(list)
     light_sim_dat_acc = list()
+    if sim.SAVE_PIXEL_SIGNALS:
+        print("Saving pixel signals...")
+        pixel_wvfms_acc = defaultdict(list)
 
     # Allow module to module variance in the configuration files
     # First copy all tracks and segment_ids
@@ -1110,6 +1114,24 @@ def run_simulation(input_filename,
 
                 RangePop()
 
+                # Save accumulated signals on each pixel
+                if sim.SAVE_PIXEL_SIGNALS:
+                    RangePush("save_pixel_signals")
+                    pixel_wvfms_acc['event_id'].append(cp.full(len(unique_pix), ievd))
+                    pixel_wvfms_acc['pixel_id'].append(unique_pix)
+                    # FIXME: figure out a way to save pixel coordinates (can't run get_pixel_coordinates in Python loops(?)) 
+                    # ZY used vs. XY because in detector coordinates, pixel_xy = pixel_zy (drift dimension is X)
+                    #pixel_zy = [detsim.get_pixel_coordinates(ipix_id) for ipix_id in unique_pix]
+                    #pixel_zy = np.array(pixel_zy)
+                    #pixel_wvfms_acc['pixel_z'].append(pixel_zy[:, 0])
+                    #pixel_wvfms_acc['pixel_y'].append(pixel_zy[:, 1])
+                    pixel_wvfms_acc['num_tracks'].append(num_backtrack)
+                    pixel_wvfms_acc['pixel_signals'].append(cp.asnumpy(pixels_signals))
+                    # FIXME: figure out a way to save time tick information (attributes need to be saved once it's an hdf5 dataset)
+                    #pixel_wvfms_acc.attrs['time_ticks'] = detector.TIME_TICKS # us
+
+                    RangePop()
+
                 RangePush("get_adc_values")
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
@@ -1324,6 +1346,9 @@ def run_simulation(input_filename,
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
         output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+
+        if sim.SAVE_PIXEL_SIGNALS: 
+            output_file.create_dataset('pixel_wvfms', data=pixel_wvfms_acc)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True

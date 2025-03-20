@@ -6,6 +6,7 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log
 import cupy as cp
 import numba as nb
+import numpy as np  
 
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32

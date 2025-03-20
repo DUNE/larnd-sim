@@ -18,6 +18,9 @@ IS_SPILL_SIM = True
 SPILL_PERIOD = 1.2e6  # units = microseconds
 TRACKS_DSET_NAME = 'segments'
 
+# In most instances, we do not want to save full waveforms for each pixel
+SAVE_PIXEL_SIGNALS = False
+
 # We mod event IDs by MAX_EVENTS_PER_FILE to get zero-based IDs for indexing
 # purposes; see comments in simulate_pixels.py
 MAX_EVENTS_PER_FILE = 1000
@@ -57,6 +60,7 @@ def set_simulation_properties(simprop_file):
     global MAX_EVENTS_PER_FILE
     global TRACKS_DSET_NAME
     global MOD2MOD_VARIATION
+    global SAVE_PIXEL_SIGNALS
 
     global MAX_TRACKS_PER_PIXEL
     global MIN_STEP_SIZE
@@ -80,6 +84,7 @@ def set_simulation_properties(simprop_file):
         SPILL_PERIOD = float(simprop.get('spill_period', SPILL_PERIOD))
         MAX_EVENTS_PER_FILE = simprop.get('max_events_per_file', MAX_EVENTS_PER_FILE)
         TRACKS_DSET_NAME = simprop.get('tracks_dset_name', TRACKS_DSET_NAME)
+        SAVE_PIXEL_SIGNALS = simprop.get('save_pixel_signals', SAVE_PIXEL_SIGNALS)
 
         MAX_TRACKS_PER_PIXEL = simprop.get('max_tracks_per_pixel', MAX_TRACKS_PER_PIXEL)
         MIN_STEP_SIZE = simprop.get('min_step_size', MIN_STEP_SIZE)
