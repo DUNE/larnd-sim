@@ -4,6 +4,7 @@ Set detector constants
 import warnings
 
 import numpy as np
+import cupy as cp
 import yaml
 
 from collections import defaultdict
@@ -35,6 +36,8 @@ TRAN_DIFF = 8.8e-6 # cm * cm / us
 ###################
 #: TPC drift length in :math:`cm`
 DRIFT_LENGTH = 0
+#: Time for the full drift calculated from the nominal drift velocity
+DRIFT_MAX_TIME = 0
 #: Borders of each TPC volume in :math:`cm`
 TPC_BORDERS = np.zeros((0, 3, 2))
 #: TPC offsets wrt the origin in :math:`cm`
@@ -47,22 +50,14 @@ TILE_BORDERS = np.zeros((2,2))
 ###################
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
-#: Drift time window in :math:`\mu s`
-TIME_INTERVAL = (0, 200.) # us
-#: Signal time window padding in :math:`\mu s`
-TIME_PADDING = 10
 #: Number of sampled points for each segment slice
 SAMPLED_POINTS = 40
-#: Numpy array containing all the time ticks in the drift time window
-TIME_TICKS = np.linspace(TIME_INTERVAL[0],
-                         TIME_INTERVAL[1],
-                         int(round(TIME_INTERVAL[1]-TIME_INTERVAL[0])/TIME_SAMPLING)+1)
-#: Time window of current response in :math:`\mu s`
-TIME_WINDOW = 8.9 # us
 #: Time sampling in the pixel response file in :math:`\mu s`
-RESPONSE_SAMPLING = 0.1
+RESPONSE_SAMPLING = 0.05
 #: Spatial sampling in the pixel reponse file in :math:`cm`
 RESPONSE_BIN_SIZE = 0.04434
+#: The longest cathode charge response in time :math:`\mu s`
+RESPONSE_MAX_TIME = 0.0
 #: Default value for pixel_plane, to indicate out-of-bounds edep
 DEFAULT_PLANE_INDEX = 0x0000BEEF
 #: Total number of pixels
@@ -195,7 +190,7 @@ def set_multi_properties(bucket, n_mod, i_module, message=""):
         prop = float(bucket[i_module-1])
     return prop
 
-def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=False):
+def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -219,10 +214,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     global E_FIELD
     global TEMPERATURE
     global ELECTRON_LIFETIME
-    global TIME_INTERVAL
-    global TIME_TICKS
-    global TIME_PADDING
-    global TIME_WINDOW
     global LONG_DIFF
     global TRAN_DIFF
     global TILE_POSITIONS
@@ -230,6 +221,7 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     global TILE_MAP
     global TILE_CHIP_TO_IO
     global DRIFT_LENGTH
+    global DRIFT_MAX_TIME
     global MODULE_TO_IO_GROUPS
     global MODULE_TO_TPCS
     global TPC_TO_MODULE
@@ -270,13 +262,6 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
 
     if not geo_only:
-        TIME_INTERVAL = np.array(detprop['time_interval'])
-        TIME_TICKS = np.linspace(TIME_INTERVAL[0],
-                                 TIME_INTERVAL[1],
-                                 int(round(TIME_INTERVAL[1]-TIME_INTERVAL[0])/TIME_SAMPLING)+1)
-
-        TIME_PADDING = detprop.get('time_padding', TIME_PADDING)
-        TIME_WINDOW = detprop.get('time_window', TIME_WINDOW)
         TEMPERATURE = detprop.get('temperature', TEMPERATURE)
 
         e_field_bucket = detprop.get('e_field', E_FIELD)
@@ -289,11 +274,21 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
         TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-        response_sampling_bucket = detprop.get('response_sampling', RESPONSE_SAMPLING)
-        RESPONSE_SAMPLING = set_multi_properties(response_sampling_bucket, n_mod, i_module, message="induction response time sampling (bin size)")
+        # Get response sampling and bin size
+        if response_file is not None:
+            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
+            if isinstance(response_file, list):
+                if i_module < 0:
+                    response_file = response_file[0]
+                else:
+                    response_file = response_file[i_module-1]
+            print(response_file)
+            response = cp.load(response_file)
+            RESPONSE_SAMPLING = float(response['time_tick'])
+            RESPONSE_BIN_SIZE = float(response['bin_size'])
+        else:
+            warnings.warn(f'Charge response not set!')
 
-        response_bin_size_bucket = detprop.get('response_bin_size', RESPONSE_BIN_SIZE)
-        RESPONSE_BIN_SIZE = set_multi_properties(response_bin_size_bucket, n_mod, i_module, message="induction response bin size")
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -342,6 +337,8 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
     except:
         mod_anodes = np.array(list(TILE_POSITIONS.values()))[:, 0]
         DRIFT_LENGTH = 0.5 * (max(mod_anodes) - min(mod_anodes)) * mm / cm
+
+    DRIFT_MAX_TIME = DRIFT_LENGTH / V_DRIFT
 
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
@@ -394,3 +391,25 @@ def set_detector_properties(detprop_file, pixel_file, i_module=-1, geo_only=Fals
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
+
+def load_response(response_file):
+    global RESPONSE_MAX_TIME
+
+    # load the charge response for the full drift length
+    # shape it to be consistent with detector drift length
+    # by either pad or chop the values at the beginning (the side further away from the cathode)
+    f_res = cp.load(response_file)
+    response = f_res['response']
+    res_drift_length = float(f_res['drift_length'])
+    drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
+
+    if drift_ticks_diff > 0: # response is too long, chop
+        response = response[drift_ticks_diff:]
+        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drfit_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
+    elif drift_ticks_diff < 0: # response is too short, pad
+        response = cp.pad(response, abs(drift_ticks_diff))
+        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drfit_length is too short, pad {drift_ticks_diff} 0s at the beginning (close to the readout).')
+
+    RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
+
+    return response

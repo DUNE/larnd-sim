@@ -441,12 +441,12 @@ def run_simulation(input_filename,
             light_lut_filename = light_lut_filename[0]
 
         RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, simulation_properties)
+        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties)
         from larndsim.consts import light, detector, physics, sim
         RangePop()
 
         RangePush("load_induction_response")
-        response = cp.load(response_file)
+        response = consts.detector.load_response(response_file)
         RangePop()
 
         RangePush("load_pixel_thresholds")
@@ -698,7 +698,7 @@ def run_simulation(input_filename,
     for i_mod in mod_ids:
         if mod2mod_variation:
             print(f'Simulating module {i_mod-1}')
-            consts.detector.set_detector_properties(detector_properties, pixel_layout, i_mod)
+            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
             # Currently shouln't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
             # `consts.detector` module, we'll be glad for this line:
@@ -713,7 +713,7 @@ def run_simulation(input_filename,
             importlib.reload(fee)
 
             RangePush("load_module_induction_response")
-            response = cp.load(response_file[i_mod-1])
+            response = consts.detector.load_response(response_file[i_mod-1])
             RangePop()
 
             RangePush("load_pixel_thresholds")
@@ -1024,18 +1024,19 @@ def run_simulation(input_filename,
                         del null_light_results_acc['light_event_id']
                     continue
 
-                RangePush("time_intervals")
-                # Here we find the longest signal in time and we store an array with the start in time of each track
-                max_length = cp.array([0])
-                track_starts = cp.empty(selected_tracks.shape[0])
-                detsim.time_intervals[BPG,TPB](track_starts, max_length, selected_tracks)
-                RangePop()
-
                 RangePush("tracks_current")
+                # Here we find the longest signal in time
+                # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
+                if detector.RESPONSE_MAX_TIME > detector.DRIFT_MAX_TIME:
+                    max_signal_time = selected_tracks['t_end'].max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
+                else:
+                    max_signal_time = selected_tracks['t_end'].max()
+                signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
+
                 # Here we calculate the induced current on each pixel
                 signals = cp.zeros((selected_tracks.shape[0],
                                     neighboring_pixels.shape[1],
-                                    cp.asnumpy(max_length)[0]), dtype=np.float32)
+                                    signals_ticks), dtype=np.float32)
                 TPB = (1,1,64)
                 BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
@@ -1078,7 +1079,7 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                pixels_signals = cp.zeros((len(unique_pix), len(detector.TIME_TICKS)))
+                pixels_signals = cp.zeros((len(unique_pix), signals_ticks))
                 # Note, track_pixel_map has shape (#unique pix, max tracks per pixel)
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
@@ -1088,16 +1089,16 @@ def run_simulation(input_filename,
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
                 # by the segment index (whose size depends on the pixel). See sum_pixel_signals.
-                pixels_tracks_signals = cp.zeros(len(detector.TIME_TICKS) * int(num_backtrack.sum()))
+                pixels_tracks_signals = cp.zeros(signals_ticks * int(num_backtrack.sum()))
                 # offset_backtrack[ipix] is the total number of pixel<->segment
                 # pairs summed over pixels [0, 1, ..., ipix-1]. The kernel uses
                 # it to jump to the pixel's storage in pixels_tracks_signals.
                 # E.g.: num_backtrack = [2, 4, 3] => offset_backtrack = [0, 2, 6]
                 offset_backtrack = cp.cumsum(num_backtrack) - num_backtrack
                 overflow_flag = cp.zeros(len(unique_pix))
+
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
-                                                  track_starts,
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,
@@ -1112,7 +1113,7 @@ def run_simulation(input_filename,
 
                 RangePush("get_adc_values")
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-                time_ticks = cp.linspace(0, len(unique_eventIDs) * detector.TIME_INTERVAL[1], pixels_signals.shape[1]+1)
+                time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
                 integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
                 adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
                 current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES, track_pixel_map.shape[1]))
@@ -1147,6 +1148,7 @@ def run_simulation(input_filename,
                     gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
                     adc_list = fee.digitize(integral_list, gain_list)
                 else:
+
                     adc_list = fee.digitize(integral_list)
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event

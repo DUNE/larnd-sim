@@ -33,11 +33,14 @@ def time_intervals(track_starts, time_max, tracks):
 
     if itrk < tracks.shape[0]:
         track = tracks[itrk]
-        t_end = round((track["t_end"] + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
-        t_start = round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
-        t_length = t_end - t_start
-        track_starts[itrk] = t_start
-        cuda.atomic.max(time_max, 0, ceil(t_length / detector.TIME_SAMPLING))
+        #t_end = round((track["t_end"] + 1) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
+        #t_start = round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
+        track_starts[itrk] = round((track["t_start"] - detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
+        #track_starts[itrk] = round((track["t_start"] - time_max) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
+        #t_length = t_end - t_start
+        #track_starts[itrk] = t_start
+        #print("t_length: ", t_length)
+        #cuda.atomic.max(time_max, 0, ceil(t_length / detector.TIME_SAMPLING))
 
 @nb.njit
 def z_interval(start_point, end_point, x_p, y_p, tolerance):
@@ -295,9 +298,16 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 end = (t["x_start"], t["y_start"], t["z_start"])
                 start = (t["x_end"], t["y_end"], t["z_end"])
 
-            t_start = round((t["t_start"]-t["t0_start"]-detector.TIME_PADDING) / detector.TIME_SAMPLING) * detector.TIME_SAMPLING
-            time_tick = t_start + it * detector.TIME_SAMPLING
-            if time_tick < 0:
+            # if the time tick is before the segment start time, pass
+            this_time = it * detector.TIME_SAMPLING
+
+            # detector.TPC_BORDERS[t["pixel_plane"]][2][1]) is the corresponding cathode
+            dist_cathode = min(abs(t["z_end"] - detector.TPC_BORDERS[t["pixel_plane"]][2][1]), abs(t["z_start"] - detector.TPC_BORDERS[t["pixel_plane"]][2][1])) # closest distance to the cathode
+            # The valid time for integrating the charge signal is the response with the shifted collection position
+            # In order to conservatively include more time ticks
+            # we use the longest response time, and shortest distance to the cathode from the segments
+            # the distance is converted to time using nominal drift velocity
+            if (this_time - t['t0']) > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -329,9 +339,12 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
 
                 z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
-                t0 = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][0]) / detector.V_DRIFT - detector.TIME_WINDOW
-                if not t0 < time_tick < t0 + detector.TIME_WINDOW:
-                    continue
+
+                # find how much to shift the time for anode (collection time)
+                # detector.TPC_BORDERS[t["pixel_plane"]][2][0] is anode
+                # detector.TPC_BORDERS[t["pixel_plane"]][2][1] is cathode
+                # equivalent to detector.DRIFT_LENGTH - abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1])
+                shift_t_collect = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1]) / detector.V_DRIFT
 
                 x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
                 y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
@@ -342,8 +355,12 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     continue
                 if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                     continue
+                if (this_time - t['t0'] + shift_t_collect) < 0 or (this_time - t['t0'] + shift_t_collect) > detector.RESPONSE_MAX_TIME:
+                    continue
 
-                total_current += charge * get_closest_waveform(x_dist, y_dist, time_tick-t0, response)
+                # (this_time - t['t0']) is the drift/readout time
+                # (shift_t_collect) shifts the readout to the corresponding position 
+                total_current += charge * get_closest_waveform(x_dist, y_dist, this_time - t['t0'] + shift_t_collect, response)
 
             signals[itrk,ipix,it] = total_current
 
@@ -466,7 +483,7 @@ def sign(x):
     return 1 if x >= 0 else -1
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, track_pixel_map, pixels_tracks_signals,
+def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map, pixels_tracks_signals,
                       num_backtrack, offset_backtrack, overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
@@ -492,12 +509,13 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
     """
     # itrk: segment index in signals collection, goes up to the total number of the segments in this batch
     # ipix: pixel index within signals collection, goes up to the max number of pixel for any segment
-    # itick: time ticks along the entire drift span
+    # itick: time ticks along drift
 
     # pixel_index goes up to the total number of pixels in this batch
     # track_index (counter) goes up to "MAX_TRACKS_PER_PIXEL"
     # counter = segment index in pixels_tracks_signals collection, same as track_index ordering
 
+    # size of signals
     itrk, ipix, itick = cuda.grid(3)
 
     # equivalent to num_backtrack.sum()
@@ -506,22 +524,20 @@ def sum_pixel_signals(pixels_signals, signals, track_starts, pixel_index_map, tr
     if itrk < signals.shape[0] and ipix < signals.shape[1]:
 
         pixel_index = pixel_index_map[itrk][ipix]
-        start_tick = round(track_starts[itrk] / detector.TIME_SAMPLING)
         # index into the jagged pixels_tracks_signals array for this pixel and tick
-        itime = start_tick + itick
-        base_idx = total_backtracks * itime + offset_backtrack[pixel_index]
+        base_idx = total_backtracks * itick + offset_backtrack[pixel_index]
 
         if pixel_index >= 0:
             counter = -99
             for track_idx in range(track_pixel_map[pixel_index].shape[0]):
-                if itrk == -1: # would itrk ever be -1?
-                    continue
+                if int(track_pixel_map[pixel_index][track_idx]) == -1:
+                    break
                 if itrk == int(track_pixel_map[pixel_index][track_idx]):
                     counter = track_idx
                     if counter >= 0 and itick < signals.shape[2]:
-                        if itime < pixels_signals.shape[1] and itime > -1:
+                        if itick < pixels_signals.shape[1] and itick > -1:
                             cuda.atomic.add(pixels_signals,
-                                            (pixel_index, itime),
+                                            (pixel_index, itick),
                                             signals[itrk][ipix][itick])
                             cuda.atomic.add(pixels_tracks_signals,
                                             base_idx + counter,

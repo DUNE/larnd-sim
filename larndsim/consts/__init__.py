@@ -3,7 +3,7 @@ Set global variables with detector and physics properties
 """
 from . import detector, light, sim
 
-def load_properties(detprop_file, pixel_file, sim_file):
+def load_properties(detprop_file, pixel_file, response_file, sim_file):
     """
     The function loads the detector properties,
     the pixel geometry, and the simulation YAML files
@@ -14,6 +14,6 @@ def load_properties(detprop_file, pixel_file, sim_file):
         pixel_file (str): pixel layout YAML filename
         sim_file (str): simulation properties YAML filename
     """
-    detector.set_detector_properties(detprop_file, pixel_file)
+    detector.set_detector_properties(detprop_file, pixel_file, response_file)
     light.set_light_properties(detprop_file)
     sim.set_simulation_properties(sim_file)
