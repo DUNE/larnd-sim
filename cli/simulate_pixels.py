@@ -123,7 +123,7 @@ def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
 
 def run_simulation(input_filename,
                    output_filename,
-                   config='2x2_mod2mod_variation',
+                   config='2x2',
                    mod2mod_variation=None,
                    pixel_layout=None,
                    pixel_layout_id=None,

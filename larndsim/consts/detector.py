@@ -50,8 +50,6 @@ TILE_BORDERS = np.zeros((2,2))
 ###################
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
-#: Number of sampled points for each segment slice
-SAMPLED_POINTS = 40
 #: Time sampling in the pixel response file in :math:`\mu s`
 RESPONSE_SAMPLING = 0.05
 #: Spatial sampling in the pixel reponse file in :math:`cm`
