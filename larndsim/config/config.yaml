@@ -45,8 +45,8 @@ module0:
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
     RESPONSE:        [response_44_v2a_full.npz, response_44_v2a_full.npz]
     RESPONSE_ID:     [0, 0, 1, 0] 
-      #    PIXEL_THRESHOLDS_FILE: [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/2x2_CRS_thresholds/thresholds_module0.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/2x2_CRS_thresholds/thresholds_module1.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/2x2_CRS_thresholds/thresholds_module2.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/2x2_CRS_thresholds/thresholds_module3.npz]
-      #    PIXEL_THRESHOLDS_ID: [0, 1, 2, 3]
+    PIXEL_THRESHOLDS_FILE: [thresholds_module0.npz, thresholds_module1.npz, thresholds_module2.npz, thresholds_module3.npz]
+    PIXEL_THRESHOLDS_ID: [0, 1, 2, 3]
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
@@ -55,27 +55,9 @@ module0:
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
 
-# 2x2 (differnt module configuration), beam, old response
-2x2_old_response: &2x2modvar_old_response
-    <<: *2x2modvar
-    DET_PROPERTIES:  2x2_old_response.yaml
-    RESPONSE:        [response_44.npy, response_38.npy]
-
-2x2_old_response_driftfix: &2x2modvar_old_response_driftfix
-    <<: *2x2modvar
-    PIXEL_LAYOUT:    [multi_tile_layout-2.4.16_v4.yaml, multi_tile_layout-2.5.16_v4.yaml]
-    PIXEL_LAYOUT_ID: [0, 0, 1, 0]
-    DET_PROPERTIES:  2x2_old_response.yaml
-    RESPONSE:        [response_44.npy, response_38.npy]
-
 # 2x2 (differnt module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
-    SIM_PROPERTIES:  singles_sim.yaml
-
-# 2x2 (differnt module configuration), mpvmpr, old response
-2x2_mpvmpr_old_response:
-    <<: *2x2modvar_old_response
     SIM_PROPERTIES:  singles_sim.yaml
 
 # nd-lar (same module configuration)
@@ -96,12 +78,6 @@ ndlar: &ndlarmain
 ndlar_light:
     <<: *ndlarmain
     LIGHT_SIMULATED: True
-
-ndlar_old_layout:
-    <<: *ndlarmain
-    PIXEL_LAYOUT:    [multi_tile_layout-3.0.40.yaml]
-    RESPONSE:        [response_38_v2b_50ns_ndlar.npy]
-    DET_PROPERTIES:  ndlar-module_old_pixel_layout.yaml
 
 fsd:
     SIM_PROPERTIES:  cosmic_sim.yaml

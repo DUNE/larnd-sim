@@ -1,13 +1,8 @@
 temperature: 87.17 # K
 e_field: 0.50 # kV/cm
 lifetime: 2.2e+3 # us
-time_interval: [0, 320.] # us
 long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
-response_sampling: 0.05 # us
-response_bin_size: 0.0372 # cm
-time_padding: 320 # us
-time_window: 320 # us
 tpc_offsets: # cm
   - [0, 0, 0]
 # Note the tile_map convention is different than 2x2

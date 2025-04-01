@@ -16,6 +16,7 @@ CONFIG_DIR = dict(
     RESPONSE=f'{MODULE_DIR}/bin',
     LIGHT_LUT=f'{MODULE_DIR}/bin',
     LIGHT_DET_NOISE=f'{MODULE_DIR}/bin',
+    PIXEL_THRESHOLDS_FILE=f'{MODULE_DIR}/bin',
     )
 
 def list_config_keys():
@@ -29,6 +30,9 @@ def test_configs():
     for cfg_name,cfg_map in CONFIG_MAP.items():
 
         for key in CONFIG_DIR.keys():
+            if key == 'PIXEL_THRESHOLDS_FILE':
+                # Don't throw an error for the optional key PIXEL_THRESHOLDS_FILE
+                continue
             if not key in cfg_map.keys():
                 raise RuntimeError(f'[CONFIG TEST ERROR] Key {key} missing in the config {cfg_name}')
 
