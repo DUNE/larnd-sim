@@ -43,7 +43,7 @@ module0:
     DET_PROPERTIES:  2x2.yaml
     PIXEL_LAYOUT:    [multi_tile_layout-2.4.16_v4.yaml, multi_tile_layout-2.5.16_v4.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
-    RESPONSE:        [response_44_v2a_full.npz, response_44_v2a_full.npz]
+    RESPONSE:        [response_44_v2a_full.npz, response_38_v2b_full.npz]
     RESPONSE_ID:     [0, 0, 1, 0] 
     PIXEL_THRESHOLDS_FILE: [thresholds_module0.npz, thresholds_module1.npz, thresholds_module2.npz, thresholds_module3.npz]
     PIXEL_THRESHOLDS_ID: [0, 1, 2, 3]

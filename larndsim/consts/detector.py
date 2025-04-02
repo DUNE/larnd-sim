@@ -56,6 +56,11 @@ RESPONSE_SAMPLING = 0.05
 RESPONSE_BIN_SIZE = 0.04434
 #: The longest cathode charge response in time :math:`\mu s`
 RESPONSE_MAX_TIME = 0.0
+#: The step size to chop up segments :math:`cm`
+#: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
+#: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
+#: and the bin size in t is 50 ns, which is roughly 0.007 cm
+MIN_STEP_SIZE = 0.0064 # cm, previously we were using 0.001 cm
 #: Default value for pixel_plane, to indicate out-of-bounds edep
 DEFAULT_PLANE_INDEX = 0x0000BEEF
 #: Total number of pixels
@@ -225,6 +230,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global TPC_TO_MODULE
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
+    global MIN_STEP_SIZE
     global TPC_OFFSETS
     global MOD_IDS
     global DISCRIMINATION_THRESHOLD
@@ -280,10 +286,10 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                     response_file = response_file[0]
                 else:
                     response_file = response_file[i_module-1]
-            print(response_file)
             response = cp.load(response_file)
             RESPONSE_SAMPLING = float(response['time_tick'])
             RESPONSE_BIN_SIZE = float(response['bin_size'])
+            MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
         else:
             warnings.warn(f'Charge response not set!')
 

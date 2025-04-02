@@ -161,7 +161,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             if subsegment_length == 0:
                 return
 
-            nstep = max(round(subsegment_length / sim.MIN_STEP_SIZE), 1)
+            nstep = max(round(subsegment_length / detector.MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
 
             charge = t["n_electrons"] * (subsegment_length/length) / nstep
