@@ -55,6 +55,12 @@ module0:
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
 
+# 2x2 (differnt module configuration), single pixel threshold (defined in detector property)
+2x2_single_thresholds:
+    <<: *2x2modvar
+    PIXEL_THRESHOLDS_FILE: None
+    PIXEL_THRESHOLDS_ID: None
+
 # 2x2 (differnt module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
