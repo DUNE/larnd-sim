@@ -58,7 +58,9 @@ def get_config(keyname):
             res[key] = cfg_map[key]
         else:
             if isinstance(cfg_map[key], str):
-                if '/' in cfg_map[key]:
+                if cfg_map[key] == "None":
+                    res[key] = None
+                elif '/' in cfg_map[key]:
                     res[key] = cfg_map[key]
                 else:
                     res[key] = os.path.join(CONFIG_DIR[key], cfg_map[key])

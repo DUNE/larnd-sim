@@ -43,7 +43,7 @@ module0:
     DET_PROPERTIES:  2x2.yaml
     PIXEL_LAYOUT:    [multi_tile_layout-2.4.16_v4.yaml, multi_tile_layout-2.5.16_v4.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 1, 0] 
-    RESPONSE:        [response_44_v2a_50ns.npy, response_38_v2b_50ns.npy]
+    RESPONSE:        [response_44_v2a_full.npz, response_38_v2b_full.npz]
     RESPONSE_ID:     [0, 0, 1, 0] 
     PIXEL_THRESHOLDS_FILE: [thresholds_module0.npz, thresholds_module1.npz, thresholds_module2.npz, thresholds_module3.npz]
     PIXEL_THRESHOLDS_ID: [0, 1, 2, 3]
@@ -55,20 +55,15 @@ module0:
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
 
-# 2x2 (differnt module configuration), beam, old response
-2x2_old_response: &2x2modvar_old_response
+# 2x2 (differnt module configuration), single pixel threshold (defined in detector property)
+2x2_single_threshold:
     <<: *2x2modvar
-    DET_PROPERTIES:  2x2_old_response.yaml
-    RESPONSE:        [response_44.npy, response_38.npy]
+    PIXEL_THRESHOLDS_FILE: None
+    PIXEL_THRESHOLDS_ID: None
 
 # 2x2 (differnt module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
-    SIM_PROPERTIES:  singles_sim.yaml
-
-# 2x2 (differnt module configuration), mpvmpr, old response
-2x2_mpvmpr_old_response:
-    <<: *2x2modvar_old_response
     SIM_PROPERTIES:  singles_sim.yaml
 
 # nd-lar (same module configuration)
@@ -77,7 +72,7 @@ ndlar: &ndlarmain
     PIXEL_LAYOUT:    [multi_tile_layout-3.0.40_NDLArModule_v3.yaml]
     PIXEL_LAYOUT_ID: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     DET_PROPERTIES:  ndlar-module.yaml
-    RESPONSE:        [response_37_v2d_50ns_fsd.npy]
+    RESPONSE:        [response_37_v2d_fsd_ndlar_full.npz]
     RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     #LIGHT_LUT:       [/sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz]
     LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz]
@@ -90,17 +85,11 @@ ndlar_light:
     <<: *ndlarmain
     LIGHT_SIMULATED: True
 
-ndlar_old_layout:
-    <<: *ndlarmain
-    PIXEL_LAYOUT:    [multi_tile_layout-3.0.40.yaml]
-    RESPONSE:        [response_38_v2b_50ns_ndlar.npy]
-    DET_PROPERTIES:  ndlar-module_old_pixel_layout.yaml
-
 fsd:
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_NDLArModule_v3.yaml
     DET_PROPERTIES:  fsd.yaml
-    RESPONSE:        response_37_v2d_50ns_fsd.npy
+    RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
     #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
     LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy

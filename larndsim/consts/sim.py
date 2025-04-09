@@ -24,8 +24,6 @@ MAX_EVENTS_PER_FILE = 1000
 
 # See larndsim/detsim.py
 MAX_TRACKS_PER_PIXEL = 50
-MIN_STEP_SIZE = 0.001 # cm
-MC_SAMPLE_MULTIPLIER = 1
 
 #: Number of back-tracked segments to be recorded
 ASSOCIATION_COUNT_TO_STORE = 20
@@ -59,8 +57,6 @@ def set_simulation_properties(simprop_file):
     global MOD2MOD_VARIATION
 
     global MAX_TRACKS_PER_PIXEL
-    global MIN_STEP_SIZE
-    global MC_SAMPLE_MULTIPLIER
 
     global ASSOCIATION_COUNT_TO_STORE
     global MAX_ADC_VALUES
@@ -82,8 +78,6 @@ def set_simulation_properties(simprop_file):
         TRACKS_DSET_NAME = simprop.get('tracks_dset_name', TRACKS_DSET_NAME)
 
         MAX_TRACKS_PER_PIXEL = simprop.get('max_tracks_per_pixel', MAX_TRACKS_PER_PIXEL)
-        MIN_STEP_SIZE = simprop.get('min_step_size', MIN_STEP_SIZE)
-        MC_SAMPLE_MULTIPLIER = simprop.get('mc_sample_multiplier', MC_SAMPLE_MULTIPLIER)
 
         ASSOCIATION_COUNT_TO_STORE = simprop.get('association_count_to_store', ASSOCIATION_COUNT_TO_STORE)
         MAX_ADC_VALUES = simprop.get('max_adc_values', MAX_ADC_VALUES)

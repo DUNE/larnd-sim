@@ -9,15 +9,6 @@ tau_s: 0.001 # us
 tau_t: 0.752 # us
 #tau_t: 0.620 # us
 
-# Charge simulation parameters
-drift_length: 30.27225 # cm
-time_interval: [0, 200.] # us
-response_sampling: 0.1 # us
-#response_sampling: 0.05 # us
-response_bin_size: 0.04434 # cm
-time_padding: 190 # us
-time_window: 189.1 # us
-
 # Charge geometry parameters
 tpc_offsets: # cm
   - [0, -21.8236, 0]
