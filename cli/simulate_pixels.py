@@ -142,7 +142,8 @@ def run_simulation(input_filename,
                    pixel_gains_file=None,
                    pixel_gains_id=None,
                    rand_seed=None,
-                   save_memory=None):
+                   save_memory=None,
+                   save_dead_region_segments=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -678,8 +679,8 @@ def run_simulation(input_filename,
     print("Skipping non-active volumes..." , end="")
     start_mask = time()
     active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-    tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
-    segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
+    tracks = all_mod_tracks[active_tracks_mask]
+    segment_ids = all_mod_segment_ids[active_tracks_mask]
     trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
     end_mask = time()
     print(f" {end_mask-start_mask:.2f} s")
@@ -1330,7 +1331,10 @@ def run_simulation(input_filename,
         swap_coordinates(segments_to_files)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+        if save_dead_region_segments:
+            output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
+        else:
+            output_file.create_dataset(sim.TRACKS_DSET_NAME, data=all_mod_tracks)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
