@@ -593,6 +593,7 @@ def run_simulation(input_filename,
         tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
         tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
+        tracks = tracks[tracks['t0'] < 1e3] # filter out highly delayed segments (neutron decay, etc)
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
