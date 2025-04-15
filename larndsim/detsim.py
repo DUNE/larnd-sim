@@ -281,7 +281,8 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
     # the index is with respect to the total number segments in the batch
     # so when it is translated to "segment_id", it is correct
     index = cuda.grid(1)
-
+    if index >= unique_pix.shape[0]:
+        return
     upix = unique_pix[index]
 
     for itrk in range(pixels.shape[0]):
@@ -313,7 +314,8 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
     """
     # index of unique_pix array
     index = cuda.grid(1)
-
+    if index >= unique_pix.shape[0]:
+        return
     upix = unique_pix[index]
 
     for target_dist in range(max_distance):
