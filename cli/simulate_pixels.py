@@ -3,8 +3,6 @@
 Command-line interface to larnd-sim module.
 """
 
-PIXEL_BATCH_SIZE = 6400
-
 from math import ceil
 from time import time
 import warnings
@@ -16,6 +14,9 @@ import numpy.lib.recfunctions as rfn
 
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
+
+# TODO: Make this a simulation_property
+PIXEL_BATCH_SIZE = int(os.getenv('LARNDSIM_PIXEL_BATCH_SIZE', '6400'))
 
 # Disabling the memory pool is useful when profiling
 # (we can then match memory spikes to the responsible allocations)
@@ -384,6 +385,10 @@ def run_simulation(input_filename,
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
     print("")
+
+    # TODO: Remove this printout (added for benchmarking purposes)
+    print("Pixel batch size:", PIXEL_BATCH_SIZE)
+
     print("Random seed:", rand_seed)
     print("Simulation properties file:", simulation_properties)
     print("Detector properties file:", detector_properties)
