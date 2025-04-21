@@ -1130,6 +1130,8 @@ def run_simulation(input_filename,
 
                 selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+PIXEL_BATCH_SIZE])
                 selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
+                if selected_track_idcs.size == 0:
+                    continue
                 selected_track_idcs = to_device(selected_track_idcs)
                 selected_tracks = all_selected_tracks[selected_track_idcs]
 
