@@ -16,7 +16,7 @@ import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
 
 # TODO: Make this a simulation_property
-PIXEL_BATCH_SIZE = int(os.getenv('LARNDSIM_PIXEL_BATCH_SIZE', '6400'))
+PIXEL_BATCH_SIZE = int(os.getenv('LARNDSIM_PIXEL_BATCH_SIZE', '3200'))
 
 # Disabling the memory pool is useful when profiling
 # (we can then match memory spikes to the responsible allocations)
