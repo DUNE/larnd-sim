@@ -1026,7 +1026,7 @@ def run_simulation(input_filename,
             RangePop()
 
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
-            assmap_pix2seg = invert_array_map(all_active_pixels,all_unique_pix)
+            assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
 
             if not all_unique_pix.shape[0]:
                 if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
