@@ -7,7 +7,7 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz
+    LIGHT_LUT:       /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz
     LIGHT_DET_NOISE: light_noise-module0.npy
     LIGHT_SIMULATED: True
 
@@ -20,7 +20,7 @@ module0:
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz
+    LIGHT_LUT:       /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: True
     MOD2MOD_VARIATION: False
@@ -51,7 +51,7 @@ module0:
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
     # Alternatively low granularity Mod0 based light LUT in larndsim, lightLUT.npz
     # LIGHT_LUT:       [/sdf/data/neutrino/2x2/light_lut/lightLUT_Mod0_06052024_time_norm.npz, /sdf/data/neutrino/2x2/light_lut/lightLUT_Mod123_06052024_time_norm.npz]
-    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz, /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz]
+    LIGHT_LUT:       [/dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm.npz, /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm.npz]
     LIGHT_LUT_ID:    [0, 1, 1, 1]
     MOD2MOD_VARIATION: True
 
@@ -75,7 +75,7 @@ ndlar: &ndlarmain
     RESPONSE:        [response_37_v2d_fsd_ndlar_full.npz]
     RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     #LIGHT_LUT:       [/sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz]
-    LIGHT_LUT:       [/global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz]
+    LIGHT_LUT:       [/dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz]
     LIGHT_LUT_ID:    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: False
@@ -91,6 +91,6 @@ fsd:
     DET_PROPERTIES:  fsd.yaml
     RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
     #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
-    LIGHT_LUT:       /global/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
+    LIGHT_LUT:       /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: True
