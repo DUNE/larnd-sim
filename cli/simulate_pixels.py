@@ -492,6 +492,44 @@ def run_simulation(input_filename,
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
+    
+        # Make "t0" attribute, if it doesn't exist
+        if 't0' not in tracks.dtype.names:
+            # the t0 key refers to the time of energy deposition
+            # in the input files, it is called 't'
+            # this is only true for older edep inputs (which are included in `examples/`)
+            t0 = np.array(tracks['t'].copy(), dtype=[('t0', 'f4')])
+            t0_start = np.array(tracks['t_start'].copy(), dtype=[('t0_start', 'f4')])
+            t0_end = np.array(tracks['t_end'].copy(), dtype=[('t0_end', 'f4')])
+            tracks = rfn.merge_arrays((tracks, t0, t0_start, t0_end), flatten=True)
+
+            # then, re-initialize the t key to zero
+            # in larnd-sim, this key is the time at the anode
+            tracks['t'] = np.zeros(tracks.shape[0], dtype=[('t', 'f4')])
+            tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
+            tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
+
+        # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
+        # Therefore, to run the detector simulation we reset the t0 to reflect that
+        # When storing the mc truth, revert this change and store the "real" segment time
+        # The event times are added to segments in the spill building stage. This step is not needed for non-beam simulation
+        if sim.IS_SPILL_SIM:
+            # "Reset" the spill period so t0 is wrt the corresponding spill start time.
+            # The spill starts are marking the start of
+            # The space between spills will be accounted for in the
+            # packet timestamps through the event_times array below
+            localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+            tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
+            tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
+            tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
+            tracks = tracks[tracks['t0'] < 300] # filter out highly delayed segments (neutron decay, etc)
+
+        # filter out highly-delayed segments (neutron decay, etc)
+        #if 't0' in tracks.dtype.names:
+        #  tracks = tracks[tracks['t0'] < 1e3]
+        #else: 
+        #  tracks = tracks[tracks['t'] < 1e3]
+            
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
             trajectory_ids = tracks['file_traj_id']
@@ -542,6 +580,9 @@ def run_simulation(input_filename,
 
     logger.start()
     logger.take_snapshot()
+    
+        
+
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if n_events:
         print(f'Selecting only the first {n_events} events for simulation.')
@@ -564,36 +605,6 @@ def run_simulation(input_filename,
         n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
         tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
 
-    # Make "t0" attribute, if it doesn't exist
-    if 't0' not in tracks.dtype.names:
-        # the t0 key refers to the time of energy deposition
-        # in the input files, it is called 't'
-        # this is only true for older edep inputs (which are included in `examples/`)
-        t0 = np.array(tracks['t'].copy(), dtype=[('t0', 'f4')])
-        t0_start = np.array(tracks['t_start'].copy(), dtype=[('t0_start', 'f4')])
-        t0_end = np.array(tracks['t_end'].copy(), dtype=[('t0_end', 'f4')])
-        tracks = rfn.merge_arrays((tracks, t0, t0_start, t0_end), flatten=True)
-
-        # then, re-initialize the t key to zero
-        # in larnd-sim, this key is the time at the anode
-        tracks['t'] = np.zeros(tracks.shape[0], dtype=[('t', 'f4')])
-        tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
-        tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
-
-    # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
-    # Therefore, to run the detector simulation we reset the t0 to reflect that
-    # When storing the mc truth, revert this change and store the "real" segment time
-    # The event times are added to segments in the spill building stage. This step is not needed for non-beam simulation
-    if sim.IS_SPILL_SIM:
-        # "Reset" the spill period so t0 is wrt the corresponding spill start time.
-        # The spill starts are marking the start of
-        # The space between spills will be accounted for in the
-        # packet timestamps through the event_times array below
-        localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
-        tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
-        tracks = tracks[tracks['t0'] < 1e3] # filter out highly delayed segments (neutron decay, etc)
 
     # Here we swap the x and z coordinates of the tracks
     # because of the different convention in larnd-sim wrt edep-sim
