@@ -524,12 +524,6 @@ def run_simulation(input_filename,
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
             tracks = tracks[tracks['t0'] < 300] # filter out highly delayed segments (neutron decay, etc)
 
-        # filter out highly-delayed segments (neutron decay, etc)
-        #if 't0' in tracks.dtype.names:
-        #  tracks = tracks[tracks['t0'] < 1e3]
-        #else: 
-        #  tracks = tracks[tracks['t'] < 1e3]
-            
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
             trajectory_ids = tracks['file_traj_id']
