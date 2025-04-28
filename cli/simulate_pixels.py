@@ -487,12 +487,12 @@ def run_simulation(input_filename,
     RangePop()                  # load_properties
 
     RangePush("load_hd5_file")
-    print("Loading track segments..." , end="")
+    print("Loading track segments...")
     start_load = time()
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
-    
+        
         # Make "t0" attribute, if it doesn't exist
         if 't0' not in tracks.dtype.names:
             # the t0 key refers to the time of energy deposition
@@ -522,7 +522,14 @@ def run_simulation(input_filename,
             tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
-            tracks = tracks[tracks['t0'] < 300] # filter out highly delayed segments (neutron decay, etc)
+            # filter out highly delayed segments (neutron decay, etc)
+            t0_cutoff = 300
+            tracks_reject = tracks[tracks['t0'] >= t0_cutoff]
+            tracks = tracks[tracks['t0'] < t0_cutoff]
+            if tracks_reject.size > 0:
+              print("Rejecting ",tracks_reject.size," delayed truth segments with t0 > ",t0_cutoff," microseconds:")
+              for val in tracks_reject:
+                print(' t0 = ',val['t0'])
 
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
