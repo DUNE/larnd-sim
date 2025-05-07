@@ -92,5 +92,5 @@ fsd:
     RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
     #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
     LIGHT_LUT:       /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
-    LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
+    LIGHT_DET_NOISE: FSD_v01_bin06_larndsim_noise.npy
     LIGHT_SIMULATED: True
