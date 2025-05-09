@@ -1025,9 +1025,6 @@ def run_simulation(input_filename,
             all_unique_pix = all_unique_pix[(all_unique_pix != -1)]
             RangePop()
 
-            # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
-            assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
-
             if not all_unique_pix.shape[0]:
                 if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
@@ -1035,6 +1032,9 @@ def run_simulation(input_filename,
                     i_trig += 1 # add to the trigger counter
                     del null_light_results_acc['light_event_id']
                 continue
+
+            # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
+            assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
 
             # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
