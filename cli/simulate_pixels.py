@@ -142,6 +142,7 @@ def run_simulation(input_filename,
                    pixel_gains_file=None,
                    pixel_gains_id=None,
                    rand_seed=None,
+                   compression=None,
                    save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
@@ -174,6 +175,8 @@ def run_simulation(input_filename,
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
+        compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
+            supported options are 'lzf' and 'gzip'
     """
     # Define a nested function to save the results
     def save_results(event_times, results, i_trig, i_mod=-1, light_only=False):
@@ -233,7 +236,8 @@ def run_simulation(input_filename,
                                light_trigger_event_id=light_trigger_event_ids,
                                light_trigger_modules=light_trigger_modules,
                                bad_channels=bad_channels, # defined earlier in script
-                               i_mod=i_mod)
+                               i_mod=i_mod,
+                               compression=compression)
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             if light.LIGHT_TRIG_MODE == 0:
@@ -247,7 +251,8 @@ def run_simulation(input_filename,
                                          results['light_waveforms_true_track_id'],
                                          results['light_waveforms_true_photons'],
                                          i_trig,
-                                         i_mod)
+                                         i_mod,
+                                         compression)
             elif light.LIGHT_TRIG_MODE == 1:
                 light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
                                                     results['light_waveforms'],
@@ -255,7 +260,8 @@ def run_simulation(input_filename,
                                                     results['light_waveforms_true_track_id'],
                                                     results['light_waveforms_true_photons'],
                                                     i_trig,
-                                                    i_mod)
+                                                    i_mod,
+                                                    compression)
     ###########################################################################################
 
     print(LOGO)
@@ -352,6 +358,7 @@ def run_simulation(input_filename,
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
     print("")
+    print("Compression:", compression)
     print("Random seed:", rand_seed)
     print("Simulation properties file:", simulation_properties)
     print("Detector properties file:", detector_properties)
@@ -930,11 +937,11 @@ def run_simulation(input_filename,
                     #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
                     sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                     if len(sync_times) > 0:
-                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
+                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod, compression)
                         sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
                 if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod, compression)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
@@ -1323,7 +1330,7 @@ def run_simulation(input_filename,
         light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
         light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
 
-        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression)
         #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
@@ -1342,7 +1349,7 @@ def run_simulation(input_filename,
         swap_coordinates(segments_to_files)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files, compression=compression)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
@@ -1351,17 +1358,17 @@ def run_simulation(input_filename,
             # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
             if mod2mod_variation:
                 for i_mod in mod_ids:
-                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1])
+                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1], compression=compression)
             else:
-                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0])
+                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0], compression=compression)
         if input_has_trajectories:
-            output_file.create_dataset("trajectories", data=trajectories)
+            output_file.create_dataset("trajectories", data=trajectories, compression=compression)
         if input_has_vertices:
-            output_file.create_dataset("vertices", data=vertices)
+            output_file.create_dataset("vertices", data=vertices, compression=compression)
         if input_has_mc_hdr:
-            output_file.create_dataset("mc_hdr", data=mc_hdr)
+            output_file.create_dataset("mc_hdr", data=mc_hdr, compression=compression)
         if input_has_mc_stack:
-            output_file.create_dataset("mc_stack", data=mc_stack)
+            output_file.create_dataset("mc_stack", data=mc_stack, compression=compression)
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():
