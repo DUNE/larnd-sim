@@ -94,7 +94,8 @@ def export_to_hdf5(event_id_list,
                    light_trigger_event_id=None,
                    light_trigger_modules=None,
                    bad_channels=None,
-                   i_mod=-1):
+                   i_mod=-1,
+                   compression=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
     Args:
@@ -125,6 +126,8 @@ def export_to_hdf5(event_id_list,
         bad_channels (dict): dictionary mapping a chip key to a list of bad channels
         i_mod (int): module index for saving the result in each module
             individually if needed.
+        compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
+            supported options are 'lzf' and 'gzip'
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of
             entries for the `mc_packets_assn` dataset
@@ -357,7 +360,7 @@ def export_to_hdf5(event_id_list,
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
-                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,), compression=compression)
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
                 f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds
@@ -370,7 +373,7 @@ def export_to_hdf5(event_id_list,
 
     return packets, packets_mc_ds
 
-def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
+def export_sync_to_hdf5(filename, sync_times, i_mod=-1, compression=None):
     """
     Saves sync packets in the LArPix HDF5 format.
     Args:
@@ -428,14 +431,14 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1):
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
-                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,), compression=compression)
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
                 f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds
 
     return packets, packets_mc_ds
 
-def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
+def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1, compression=None):
     """
     Saves timestamp and trigger packets in the LArPix HDF5 format.
     Args:
@@ -501,7 +504,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1):
 
         with h5py.File(filename, 'a') as f:
             if "mc_packets_assn" not in f.keys():
-                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,))
+                f.create_dataset("mc_packets_assn", data=packets_mc_ds, maxshape=(None,), compression=compression)
             else:
                 f['mc_packets_assn'].resize((f['mc_packets_assn'].shape[0] + packets_mc_ds.shape[0]), axis=0)
                 f['mc_packets_assn'][-packets_mc_ds.shape[0]:] = packets_mc_ds

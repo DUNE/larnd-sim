@@ -660,7 +660,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
     truth_data['pe_current'] = np.array(pe_current)
     return truth_data
 
-def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1):
+def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1, compression=None):
     """
     Saves waveforms to output file
     
@@ -686,7 +686,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         if sim.MOD2MOD_VARIATION and light.LIGHT_TRIG_MODE == 1:
             if i_mod > 0:
                 if f'light_wvfm/light_wvfm_mod{i_mod-1}' not in f:
-                    f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None))
+                    f.create_dataset(f'light_wvfm/light_wvfm_mod{i_mod-1}', data=waveforms, maxshape=(None,None,None), compression=compression)
                 else:
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].resize(f[f'light_wvfm/light_wvfm_mod{i_mod-1}'].shape[0] + waveforms.shape[0], axis=0)
                     f[f'light_wvfm/light_wvfm_mod{i_mod-1}'][-waveforms.shape[0]:] = waveforms
@@ -695,7 +695,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
 
         else:
             if 'light_wvfm' not in f:
-                f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None))
+                f.create_dataset('light_wvfm', data=waveforms, maxshape=(None,None,None), compression=compression)
             else:
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
@@ -707,12 +707,12 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             truth_data = zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, event_id[0], i_trig, i_mod)
             if truth_data.shape[0] > 0:
                 if f'light_wvfm_mc_assn' not in f:
-                    f.create_dataset(f'light_wvfm_mc_assn', data=truth_data, maxshape=(None,))
+                    f.create_dataset(f'light_wvfm_mc_assn', data=truth_data, maxshape=(None,), compression=compression)
                 else:
                     f[f'light_wvfm_mc_assn'].resize(f[f'light_wvfm_mc_assn'].shape[0] + truth_data.shape[0], axis=0)
                     f[f'light_wvfm_mc_assn'][-truth_data.shape[0]:] = truth_data
 
-def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times):
+def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression=None):
     """
     Saves light trigger to output file
     
@@ -739,12 +739,12 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
         trig_data['ts_sync'] = (((start_times + trigger_idx * light.LIGHT_TICK_SIZE)/detector.CLOCK_CYCLE + event_sync_times).astype(int) % detector.CLOCK_RESET_PERIOD)
 
         if 'light_trig' not in f:
-            f.create_dataset('light_trig', data=trig_data, maxshape=(None,))
+            f.create_dataset('light_trig', data=trig_data, maxshape=(None,), compression=compression)
         else:
             f['light_trig'].resize(f['light_trig'].shape[0] + trigger_idx.shape[0], axis=0)
             f['light_trig'][-trigger_idx.shape[0]:] = trig_data
 
-def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod):
+def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms, output_filename, event_times, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod, compression=None):
     """
     Saves waveforms to output file
 
@@ -760,8 +760,8 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
         waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
 
     """
-    export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times)
-    export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod)
+    export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression)
+    export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod, compression)
 
 def merge_module_light_wvfm_same_trigger(output_filename):
     """
@@ -777,4 +777,4 @@ def merge_module_light_wvfm_same_trigger(output_filename):
                     raise ValueError("The number of triggers should be the same in each module with light trigger mode 1 (light waveform).")
                 merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
         del f['light_wvfm']
-        f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None))
+        f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None), compression=compression)
