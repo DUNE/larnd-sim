@@ -132,6 +132,5 @@ def calculate_light_incidence(tracks, lut, light_incidence, voxel,
                 vis = vis_dat[lut_index] * (op_channel_to_tpc[op_channel_index] == itpc)
                 light_incidence['n_photons_det'][itrk, output_i] = eff * vis * n_photons
 
-                if light.LIGHT_TRIG_MODE == 0:
-                    t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
-                    light_incidence['t0_det'][itrk, output_i] = t1
+                t1 = (T1_dat[lut_index] * units.ns + tracks['t0'][itrk] * units.mus) / units.mus
+                light_incidence['t0_det'][itrk, output_i] = t1
