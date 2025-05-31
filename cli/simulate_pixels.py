@@ -1068,7 +1068,7 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), seed=rand_seed+ievd+itrk, rng_states=rng_states)
                 detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
                 RangePop()
 

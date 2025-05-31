@@ -111,7 +111,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             generation
     """
     itrk, ipix, it = cuda.grid(3)
-    ntrk, _, _ = cuda.gridsize(3)
+    ntrk, npix, nt = cuda.gridsize(3)
 
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
@@ -166,13 +166,12 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
 
             charge = t["n_electrons"] * (subsegment_length/length) / nstep
             total_current = 0
-            rng_state = (rng_states[itrk + ntrk * ipix],)
             for istep in range(nstep):
                 x = subsegment_start[0] + step * (istep + 0.5) * direction[0]
                 y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
                 z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
 
-                z += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[2]
+                z += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[2]
 
                 # find how much to shift the time for anode (collection time)
                 # detector.TPC_BORDERS[t["pixel_plane"]][2][0] is anode
@@ -180,8 +179,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 # equivalent to detector.DRIFT_LENGTH - abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1])
                 shift_t_collect = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1]) / detector.V_DRIFT
 
-                x += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[0]
-                y += xoroshiro128p_normal_float32(rng_state, 0) * sigmas[1]
+                x += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[0]
+                y += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[1]
                 x_dist = abs(x_p - x)
                 y_dist = abs(y_p - y)
 
