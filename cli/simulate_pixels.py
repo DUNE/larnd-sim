@@ -141,6 +141,8 @@ def run_simulation(input_filename,
                    pixel_thresholds_id=None,
                    pixel_gains_file=None,
                    pixel_gains_id=None,
+                   pixel_pedestals_file=None,
+                   pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
                    save_memory=None):
@@ -171,6 +173,7 @@ def run_simulation(input_filename,
         pixel_thresholds_file (str, optional): path to npz file containing pixel thresholds. Defaults
             to None.
         pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
+        pixel_pedestals_file (str, optional): path to npx files containing pixel pedestals. Defaults to None.
         rand_seed (int, optional): the random number generator seed that can be set through 
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
@@ -310,6 +313,13 @@ def run_simulation(input_filename,
             pixel_gains_id = cfg['PIXEL_GAINS_ID']
         except:
             print("Pixel gain files are not provided. Using the default gains.")
+    if pixel_pedestals_file is None:
+        try:
+            pixel_pedestals_file = cfg['PIXEL_PEDESTALS_FILE']
+            pixel_pedestals_id = cfg['PIXEL_PEDESTALS_ID']
+        except:
+            print("Pixel pedestals files are not provided. Using the default pedestals.")
+
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
     if light_simulated is None:
@@ -370,6 +380,8 @@ def run_simulation(input_filename,
         print("Pixel threshold file: ", pixel_thresholds_file)
     if pixel_gains_file:
         print("Pixel gain file: ", pixel_gains_file)
+    if pixel_pedestals_file:
+        print("Pixel pedestals file: ", pixel_pedestals_file)
     if light_lut_filename:
         print("Light LUT:", light_lut_filename)
     if light_det_noise_filename:
@@ -396,6 +408,7 @@ def run_simulation(input_filename,
         response_file = load_mod2mod_variation_properties(response_file, response_id, n_modules, message="response files")
         pixel_thresholds_file = load_mod2mod_variation_properties(pixel_thresholds_file, pixel_thresholds_id, n_modules, message="pixel threshold files")
         pixel_gains_file = load_mod2mod_variation_properties(pixel_gains_file, pixel_gains_id, n_modules, message="pixel gain files")
+        pixel_pedestals_file = load_mod2mod_variation_properties(pixel_pedestals_file, pixel_pedestals_id, n_modules, message="pixel pedestals files")
         if light_simulated:
             light_lut_filename = load_mod2mod_variation_properties(light_lut_filename, light_lut_id, n_modules, message="light LUT")
 
@@ -442,6 +455,11 @@ def run_simulation(input_filename,
         elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
             pixel_gains_file = pixel_gains_file[0]
 
+        if isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) > 1:
+            raise KeyError("Provided more than one pixel pedestal file for the simulation with no module variation.")
+        elif isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) == 1:
+            pixel_pedestals_file = pixel_pedestals_file[0]
+
         if isinstance(light_lut_filename, list) and len(light_lut_filename) > 1:
             raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
         elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
@@ -466,6 +484,12 @@ def run_simulation(input_filename,
         if pixel_gains_file is not None:
             print("Pixel gains file:", pixel_gains_file)
             pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+        RangePop()
+
+        RangePush("load_pixel_pedestals")
+        if pixel_pedestals_file is not None:
+            print("Pixel pedestals file:", pixel_pedestals_file)
+            pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
         RangePop()
     else:
         consts.light.set_light_properties(detector_properties)
@@ -744,6 +768,11 @@ def run_simulation(input_filename,
             RangePush("load_pixel_gains")
             if pixel_gains_file is not None:
                 pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
+            RangePop()
+
+            RangePush("load_pixel_pedestals")
+            if pixel_pedestals_file is not None:
+                pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_segments_in_module")
@@ -1172,9 +1201,16 @@ def run_simulation(input_filename,
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
                     gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                    adc_list = fee.digitize(integral_list, gain_list)
                 else:
-                    adc_list = fee.digitize(integral_list)
+                    gain_list = detector.GAIN * consts.units.mV / consts.units.e
+
+                if pixel_pedestals_file is not None:
+                    pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
+                    pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                else:
+                    pedestal_list = detector.V_PEDESTAL
+
+                adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
