@@ -35,7 +35,7 @@ Repository = "https://github.com/DUNE/larnd-sim"
 [tool.setuptools]
 include-package-data = true
 script-files = ["cli/diff_files.py", "cli/lar_runner.py", "cli/simulate_pixels.py",
-                "cli/dumpTree.py", "cli/list_config_keys.py"]
+                "cli/dumpTree.py", "cli/list_config_keys.py", "cli/sort_packets.py"]
 
 [tool.setuptools.packages]
 find = {} # Auto discovers/finds all the packages within larnd-sim
