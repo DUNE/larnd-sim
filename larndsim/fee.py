@@ -187,7 +187,7 @@ def export_to_hdf5(event_id_list,
                         #for io_group in io_groups:
                         #    packets.append(SyncPacket(sync_type=b'S',
                         #                              timestamp=detector.CLOCK_RESET_PERIOD-1, io_group=io_group))
-                        #    packets_mc_evt.append([-1])
+                        #    packets_mc_evt.append([event])
                         #    packets_mc_trk.append([-1] * track_ids.shape[1])
                         #    packets_frac.append([0] * current_fractions.shape[2])
                         event_start_time_list[itick:] -= detector.CLOCK_RESET_PERIOD
@@ -206,13 +206,13 @@ def export_to_hdf5(event_id_list,
                             packets.append(TimestampPacket(timestamp=event_start_times[unique_events_inv[itick]] * units.mus / units.s))
                             packets[-1].chip_key = Key(io_group,0,0)
 
-                            packets_mc_evt.append([-1])
+                            packets_mc_evt.append([event])
                             packets_mc_trk.append([-1] * track_ids.shape[1])
                             packets_mc_trj.append([-1] * traj_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
 
                             packets.append(SyncPacket(sync_type=b'S', timestamp=time_tick , io_group=io_group))
-                            packets_mc_evt.append([-1])
+                            packets_mc_evt.append([event])
                             packets_mc_trk.append([-1] * track_ids.shape[1])
                             packets_mc_trj.append([-1] * traj_ids.shape[1])
                             packets_frac.append([0] * current_fractions.shape[2])
@@ -224,7 +224,7 @@ def export_to_hdf5(event_id_list,
                                 if light.LIGHT_TRIG_MODE == 0:
                                     for io_group in detector.MODULE_TO_IO_GROUPS[int(module_trig)]:
                                         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                        packets_mc_evt.append([-1])
+                                        packets_mc_evt.append([event])
                                         packets_mc_trk.append([-1] * track_ids.shape[1])
                                         packets_mc_trj.append([-1] * traj_ids.shape[1])
                                         packets_frac.append([0] * current_fractions.shape[2])
@@ -233,7 +233,7 @@ def export_to_hdf5(event_id_list,
                                     if module_trig == 1 or module_trig == 0: #1, beam trigger; 2, threshold trigger
                                         io_group = get_trig_io()
                                     packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig))
-                                    packets_mc_evt.append([-1])
+                                    packets_mc_evt.append([event])
                                     packets_mc_trk.append([-1] * track_ids.shape[1])
                                     packets_mc_trj.append([-1] * traj_ids.shape[1])
                                     packets_frac.append([0] * current_fractions.shape[2])
@@ -282,7 +282,7 @@ def export_to_hdf5(event_id_list,
                     packets.append(TimestampPacket(timestamp=np.floor(event_start_time_list[0] * detector.CLOCK_CYCLE * units.mus/units.s)) ) # s
                     packets[-1].chip_key = Key(io_group,0,0)
 
-                    packets_mc_evt.append([-1])
+                    packets_mc_evt.append([event])
                     packets_mc_trk.append([-1] * sim.MAX_TRACKS_PER_PIXEL)
                     packets_mc_trj.append([-1] * sim.MAX_TRACKS_PER_PIXEL)
                     packets_frac.append([0] * sim.MAX_TRACKS_PER_PIXEL)
@@ -373,10 +373,11 @@ def export_to_hdf5(event_id_list,
 
     return packets, packets_mc_ds
 
-def export_sync_to_hdf5(filename, sync_times, i_mod, compression=None):
+def export_sync_to_hdf5(filename, event, sync_times, i_mod, compression=None):
     """
     Saves sync packets in the LArPix HDF5 format.
     Args:
+        event (int): ID of the event
         sync_times (:obj:`numpy.ndarray`): list of sync timestamps [us]
     Returns:
         tuple: a tuple containing the list of LArPix sync packets and the list of entries for the `mc_packets_assn` dataset
@@ -398,7 +399,7 @@ def export_sync_to_hdf5(filename, sync_times, i_mod, compression=None):
             sync_tick = sync_tick // detector.CLOCK_RESET_PERIOD * detector.CLOCK_RESET_PERIOD
         for io_group in io_groups:
             packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))
-            packets_mc_evt.append(np.array([-1]))
+            packets_mc_evt.append(np.array([event]))
 
             packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
             packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
@@ -438,10 +439,11 @@ def export_sync_to_hdf5(filename, sync_times, i_mod, compression=None):
 
     return packets, packets_mc_ds
 
-def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod, compression=None):
+def export_timestamp_trigger_to_hdf5(filename, event_ids, event_start_times, i_mod, compression=None):
     """
     Saves timestamp and trigger packets in the LArPix HDF5 format.
     Args:
+        event_ids (:obj:`numpy.ndarray`): list of IDs for each unique event
         event_start_times (:obj:`numpy.ndarray`): list of timestamps for start each unique event [in microseconds]
     Returns:
         tuple: a tuple containing the list of LArPix timestamp and trigger packets and the list of entries for the `mc_packets_assn` dataset
@@ -456,7 +458,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod, compres
     packets_mc_trj = []
     packets_frac_trj =[]
 
-    for evt_time in event_start_times:
+    for event, evt_time in zip(event_ids, event_start_times):
 
         t_trig = int(np.floor(evt_time / detector.CLOCK_CYCLE)) % detector.CLOCK_RESET_PERIOD # tick
 
@@ -465,7 +467,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod, compres
         # timestamp packets
         packets.append(TimestampPacket(timestamp=evt_time*units.mus/units.s)) # s
         packets[-1].chip_key = Key(io_group,0,0)
-        packets_mc_evt.append(np.array([-1]))
+        packets_mc_evt.append(np.array([event]))
         packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
         packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
         packets_mc_trj.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
@@ -473,7 +475,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod, compres
 
         # trigger packets
         packets.append(TriggerPacket(io_group=io_group, trigger_type=b'\x02', timestamp=t_trig)) # tick
-        packets_mc_evt.append(np.array([-1]))
+        packets_mc_evt.append(np.array([event]))
         packets_mc_trk.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))
         packets_frac.append(np.array([0] * sim.ASSOCIATION_COUNT_TO_STORE))
         packets_mc_trj.append(np.array([-1] * sim.ASSOCIATION_COUNT_TO_STORE))

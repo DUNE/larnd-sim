@@ -1001,11 +1001,11 @@ def run_simulation(input_filename,
                     #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
                     sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                     if len(sync_times) > 0:
-                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod, compression=compression)
+                        fee.export_sync_to_hdf5(output_filename, ievd, sync_times_export, i_mod, compression=compression)
                         sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
                 if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod, compression=compression)
+                    fee.export_timestamp_trigger_to_hdf5(output_filename, [ievd], this_event_time, i_mod, compression=compression)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
