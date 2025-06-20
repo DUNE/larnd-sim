@@ -763,7 +763,7 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression)
     export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod, compression)
 
-def merge_module_light_wvfm_same_trigger(output_filename):
+def merge_module_light_wvfm_same_trigger(output_filename, compression=None):
     """
     Merge light waveforms for each module if the modular variation is activated
     """

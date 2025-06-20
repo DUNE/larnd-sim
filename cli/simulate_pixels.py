@@ -1377,7 +1377,7 @@ def run_simulation(input_filename,
     # merge light waveforms per module
     # correspond to light_sim.export_light_wvfm_to_hdf5
     if light.LIGHT_SIMULATED and mod2mod_variation:
-        light_sim.merge_module_light_wvfm_same_trigger(output_filename)
+        light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression)
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:

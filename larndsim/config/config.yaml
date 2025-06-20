@@ -1,7 +1,7 @@
 # module 0 (single 2x2 module), non-beam
 module0:
     SIM_PROPERTIES:  singles_sim.yaml
-    PIXEL_LAYOUT:    multi_tile_layout-2.3.16.yaml
+    PIXEL_LAYOUT:    multi_tile_layout-2.4.16_v4.yaml
     DET_PROPERTIES:  module0.yaml
     RESPONSE:        response_44_v2a_full.npz
     # Path to light LUT at NERSC
