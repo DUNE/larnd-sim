@@ -2,7 +2,7 @@
 """
 Command-line interface to larnd-sim module.
 """
-from math import ceil
+from math import ceil, floor
 from time import time
 import warnings
 from collections import defaultdict
@@ -1068,8 +1068,20 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+
+                BPG_X_subbatch = min(floor(len(rng_states) / (np.prod(TPB) * BPG[1] * BPG[2])), BPG_X)
+                BPG_subbatch = (BPG_X_subbatch, BPG_Y, BPG_Z)
+                subbatches_size = BPG_X_subbatch
+                n_subbatches = ceil(BPG_X/subbatches_size)
+
+                for i_subbatch in range(n_subbatches):
+                    start = i_subbatch*subbatches_size
+                    end = (i_subbatch+1)*subbatches_size
+                    detsim.tracks_current_mc[BPG_subbatch,TPB](signals[start:end],
+                                                                 neighboring_pixels[start:end],
+                                                                 selected_tracks[start:end],
+                                                                 response, rng_states)
+
                 RangePop()
 
                 RangePush("pixel_index_map")
