@@ -61,15 +61,24 @@ def overlapping_segment(x, y, start, end, radius):
     The projected positions of the new start and end on the pixel plane has distances of one "radius" away from the pixel center.
     The new start and end of the segment is along the original segment.
     """
+    skip = False
     dxy = x - start[0], y - start[1]
     v = end[0] - start[0], end[1] - start[1]
     l = sqrt(v[0]**2 + v[1]**2)
+    if l == 0: # vertical to the anode
+        dist = sqrt((x-start[0])**2 + (y-start[1])**2)
+        if dist > radius:
+            skip = True
+            return start, end, skip
+        else:
+            return start, end, skip
     v = v[0]/l, v[1]/l
     s = (dxy[0] * v[0] + dxy[1] * v[1])/l # position of point of closest approach
 
     r = sqrt((dxy[0] - v[0] * s * l)**2 + (dxy[1] - v[1] * s * l)**2)
     if r > radius:
-        return start, start # no overlap
+        skip = True
+        return start, start, skip # no overlap
 
     s_plus = s + sqrt(radius**2 - r**2) / l
     s_minus = s - sqrt(radius**2 - r**2) / l
@@ -90,7 +99,7 @@ def overlapping_segment(x, y, start, end, radius):
                start[1] * (1 - s_plus) + end[1] * s_plus,
                start[2] * (1 - s_plus) + end[2] * s_plus)
 
-    return new_start, new_end
+    return new_start, new_end, skip
 
 # @cuda.jit
 @cuda.jit(max_registers=128,  fastmath=True)
@@ -153,7 +162,9 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             impact_factor = sqrt(response.shape[0]**2 +
                                      response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
 
-            subsegment_start, subsegment_end = overlapping_segment(x_p, y_p, start, end, impact_factor)
+            subsegment_start, subsegment_end, skip = overlapping_segment(x_p, y_p, start, end, impact_factor)
+            if skip:
+                return
             subsegment = (subsegment_end[0]-subsegment_start[0],
                           subsegment_end[1]-subsegment_start[1],
                           subsegment_end[2]-subsegment_start[2])
