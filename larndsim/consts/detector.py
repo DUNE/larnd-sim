@@ -133,6 +133,9 @@ DISCRIMINATOR_NOISE = 650 # e
 EVENT_RATE = 100000 # 10Hz
 #: Offset of the non-beam event time in microseconds
 NON_BEAM_EVENT_GAP = 0 # us
+#: T0 delay cut 
+#: The assumption is the late signals are small, and if they don't overlap with the main, they are not considered
+SIGNAL_OVERLAP_CUT = 30 # us
 
 def electron_mobility(efield, temperature):
     """
@@ -256,6 +259,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global DISCRIMINATOR_NOISE
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
+    global SIGNAL_OVERLAP_CUT
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -347,6 +351,8 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
+    SIGNAL_OVERLAP_CUT = detprop.get('signal_overlap_cut', SIGNAL_OVERLAP_CUT)
+
     if not geo_only:
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
         DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
@@ -395,7 +401,6 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             RESPONSE_BIN_SIZE = float(response['bin_size'])
             MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
             MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
-            print("MAX_RADIUS: ", MAX_RADIUS)
         else:
             warnings.warn(f'Charge response not set!')
 

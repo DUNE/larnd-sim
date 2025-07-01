@@ -529,14 +529,6 @@ def run_simulation(input_filename,
             tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
-            # filter out highly delayed segments (neutron decay, etc)
-            t0_cutoff = 300
-            tracks_reject = tracks[tracks['t0'] >= t0_cutoff]
-            tracks = tracks[tracks['t0'] < t0_cutoff]
-            if tracks_reject.size > 0:
-              print("Rejecting ",tracks_reject.size," delayed truth segments with t0 > ",t0_cutoff," microseconds:")
-              for val in tracks_reject:
-                print(' t0 = ',val['t0'])
 
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
@@ -694,14 +686,22 @@ def run_simulation(input_filename,
         consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
         from larndsim.consts import detector
 
-    # Sub-select only segments in active volumes
+    # Sub-select segments in active volumes and that's not too "late"
+    # TODO it seems the late signals are all very small, so it's current NOT simulated
+    # However, to correctly include this part, one needs to append it to pixels_signals and run get adc_values on it
+    # In that case it's possible to have multiple entries for the same pixel
     print("Skipping non-active volumes..." , end="")
     start_mask = time()
     active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-    tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
-    segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
-    trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
+    t0_delay_mask = (all_mod_tracks['t0'] > detector.SIGNAL_OVERLAP_CUT)
+    tracks_mask = (active_tracks_mask & t0_delay_mask)
+    tracks = all_mod_tracks = all_mod_tracks[tracks_mask]
+    segment_ids = all_mod_segment_ids = all_mod_segment_ids[tracks_mask]
+    trajectory_ids = all_mod_trajectory_ids[tracks_mask]
     end_mask = time()
+    print(f"{sum(np.nonzero(active_tracks_mask))} segments are removed due to the active volume cut. \
+            {sum(np.nonzero(t0_delay_mask))} segments are removed due to the t0 delay cut. \
+            In total {sum(np.nonzero(tracks_mask))} segments are removed.")
     print(f" {end_mask-start_mask:.2f} s")
 
     # We need to make cupy arrays of these and pass them to the kernels;
@@ -975,10 +975,11 @@ def run_simulation(input_filename,
                 max_pixels = np.array([0])
                 pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
                 RangePop()
-
+                print("max_pixels: ", max_pixels)
                 # This formula tries to estimate the maximum number of pixels which can have
                 # a current induced on them.
-                max_neighboring_pixels = (2*detector.MAX_RADIUS + 1)**2 * max_pixels[0]
+                max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
+                max_neighboring_pixels = np.clip([max_neighboring_pixels], max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the max_neighboring_pixels by the total number of pixels in a TPC
 
                 active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
                 neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
@@ -1006,6 +1007,10 @@ def run_simulation(input_filename,
                 joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
                 unique_pix = cp.unique(joined)
                 unique_pix = unique_pix[(unique_pix != -1)]
+                print("neighboring_pixels.shape: ", neighboring_pixels.shape)
+                print("neighboring_pixels: ", neighboring_pixels)
+                print("unique_pix: ", unique_pix.shape)
+                print("unique_pix: ", unique_pix)
 
                 RangePop()
 
@@ -1051,10 +1056,11 @@ def run_simulation(input_filename,
                 RangePush("tracks_current")
                 # Here we find the longest signal in time
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
+                # remove t0 and account it later
                 if detector.RESPONSE_MAX_TIME > detector.DRIFT_MAX_TIME:
-                    max_signal_time = selected_tracks['t_end'].max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
                 else:
-                    max_signal_time = selected_tracks['t_end'].max()
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max()
                 signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
 
                 # Here we calculate the induced current on each pixel
@@ -1103,7 +1109,10 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                pixels_signals = cp.zeros((len(unique_pix), signals_ticks))
+                # Here inflate the signal_ticks by the track t0
+                # All the late segments have been removed in the loading stage
+                signals_ticks_t0 = signals_ticks + ceil(selected_tracks['t0'].max() / detector.TIME_SAMPLING)
+                pixels_signals = cp.zeros((len(unique_pix), signals_ticks_t0))
                 # Note, track_pixel_map has shape (#unique pix, max tracks per pixel)
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
@@ -1113,7 +1122,7 @@ def run_simulation(input_filename,
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
                 # by the segment index (whose size depends on the pixel). See sum_pixel_signals.
-                pixels_tracks_signals = cp.zeros(signals_ticks * int(num_backtrack.sum()))
+                pixels_tracks_signals = cp.zeros(signals_ticks_t0 * int(num_backtrack.sum()))
                 # offset_backtrack[ipix] is the total number of pixel<->segment
                 # pairs summed over pixels [0, 1, ..., ipix-1]. The kernel uses
                 # it to jump to the pixel's storage in pixels_tracks_signals.
@@ -1123,6 +1132,7 @@ def run_simulation(input_filename,
 
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
+                                                  cp.array(selected_tracks['t0']),
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,

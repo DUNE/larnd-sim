@@ -150,7 +150,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             # In order to conservatively include more time ticks
             # we use the longest response time, and shortest distance to the cathode from the segments
             # the distance is converted to time using nominal drift velocity
-            if (this_time - t['t0']) > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
+            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -200,17 +200,18 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     continue
                 if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                     continue
-                if (this_time - t['t0'] + shift_t_collect) < 0 or (this_time - t['t0'] + shift_t_collect) > detector.RESPONSE_MAX_TIME:
+                if (this_time + shift_t_collect) < 0 or (this_time + shift_t_collect) > detector.RESPONSE_MAX_TIME:
                     continue
 
-                # (this_time - t['t0']) is the drift/readout time
+                # this_time is the drift/readout time
+                # t0 is considered in a later stage
                 # (shift_t_collect) shifts the readout to the corresponding position 
-                total_current += charge * get_closest_waveform(x_dist, y_dist, this_time - t['t0'] + shift_t_collect, response)
+                total_current += charge * get_closest_waveform(x_dist, y_dist, this_time + shift_t_collect, response)
 
             signals[itrk,ipix,it] = total_current
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map, pixels_tracks_signals,
+def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_pixel_map, pixels_tracks_signals,
                       num_backtrack, offset_backtrack, overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
@@ -229,7 +230,7 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
             the track index and the pixel ID index.
         track_pixel_map (:obj:`numpy.ndarray`): 2D array containing the association between
             the unique pixels array and the array containing the pixels for each track.
-        pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
+        pixels_tracks_signals (:obj:`numpy.ndarray`): 1D jagged array that collapse the information of (#unique_pix, #ticks, backtracked_segments) for backtracking info per pixel per time tick.
             for each pixel and each track that induced current on the pixel.
         overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
             MAX_TRACKS_PER_PIXEL is insufficient
@@ -252,7 +253,8 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
 
         pixel_index = pixel_index_map[itrk][ipix]
         # index into the jagged pixels_tracks_signals array for this pixel and tick
-        base_idx = total_backtracks * itick + offset_backtrack[pixel_index]
+        # account track t0 in the backtracking
+        base_idx = total_backtracks * (itick + track_t0[itrk]) + offset_backtrack[pixel_index]
 
         if pixel_index >= 0:
             counter = -99
@@ -263,8 +265,9 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
                     counter = track_idx
                     if counter >= 0 and itick < signals.shape[2]:
                         if itick < pixels_signals.shape[1] and itick > -1:
+                            # account track t0 here
                             cuda.atomic.add(pixels_signals,
-                                            (pixel_index, itick),
+                                            (pixel_index, itick + track_t0[itrk]),
                                             signals[itrk][ipix][itick])
                             cuda.atomic.add(pixels_tracks_signals,
                                             base_idx + counter,
