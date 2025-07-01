@@ -692,16 +692,18 @@ def run_simulation(input_filename,
     # In that case it's possible to have multiple entries for the same pixel
     print("Skipping non-active volumes..." , end="")
     start_mask = time()
-    active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-    t0_delay_mask = (all_mod_tracks['t0'] > detector.SIGNAL_OVERLAP_CUT)
-    tracks_mask = (active_tracks_mask & t0_delay_mask)
-    tracks = all_mod_tracks = all_mod_tracks[tracks_mask]
-    segment_ids = all_mod_segment_ids = all_mod_segment_ids[tracks_mask]
-    trajectory_ids = all_mod_trajectory_ids[tracks_mask]
+    active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS) # return indices of selected segments
+    active_tracks = all_mod_tracks[active_tracks_mask]
+    active_segment_ids = all_mod_segment_ids[active_tracks_mask]
+    active_trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
+
+    t0_delay_mask = (active_tracks['t0'] < detector.SIGNAL_OVERLAP_CUT)
+    tracks = active_tracks[t0_delay_mask]
+    segment_ids = active_segment_ids[t0_delay_mask]
+    trajectory_ids = active_trajectory_ids[t0_delay_mask]
     end_mask = time()
-    print(f"{sum(np.nonzero(active_tracks_mask))} segments are removed due to the active volume cut. \
-            {sum(np.nonzero(t0_delay_mask))} segments are removed due to the t0 delay cut. \
-            In total {sum(np.nonzero(tracks_mask))} segments are removed.")
+    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut. \
+            In addition, {np.count_nonzero(~t0_delay_mask)} segments are removed due to the t0 delay cut.")
     print(f" {end_mask-start_mask:.2f} s")
 
     # We need to make cupy arrays of these and pass them to the kernels;
@@ -1007,10 +1009,6 @@ def run_simulation(input_filename,
                 joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
                 unique_pix = cp.unique(joined)
                 unique_pix = unique_pix[(unique_pix != -1)]
-                print("neighboring_pixels.shape: ", neighboring_pixels.shape)
-                print("neighboring_pixels: ", neighboring_pixels)
-                print("unique_pix: ", unique_pix.shape)
-                print("unique_pix: ", unique_pix)
 
                 RangePop()
 
@@ -1186,6 +1184,8 @@ def run_simulation(input_filename,
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
+
+                cp.savez(f'signals_wvfm.npz', signals = signals, pixels_signals=pixels_signals, adc_list=adc_list, adc_ticks_list=adc_ticks_list, pixel_index_map=pixel_index_map, track_pixel_map=track_pixel_map, unique_pix=unique_pix)
 
                 results_acc['event_id'].append(adc_event_ids)
                 results_acc['adc_tot'].append(adc_list)
