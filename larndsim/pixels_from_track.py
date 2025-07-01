@@ -5,7 +5,6 @@ pixels.
 """
 import numba as nb
 from numba import cuda
-#from .consts.detector import PIXEL_PITCH, N_PIXELS, TPC_BORDERS
 from .consts import detector
 
 MAX_NEIGHBOR_BACKTRACK_DISTANCE=4
@@ -65,7 +64,7 @@ def max_pixels(tracks, n_max_pixels):
         cuda.atomic.max(n_max_pixels, 0, n_active_pixels)
 
 @cuda.jit
-def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_pixels_list, radius):
+def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_pixels_list):
     """
     For all tracks, takes the xy start and end position
     and calculates all impacted pixels by the track segment
@@ -84,8 +83,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_
             the segments
         n_pixels_list (:obj:`numpy.ndarray`): number of total involved
             pixels
-        radius (int): number of pixels around the active pixels that
-            we are considering
     """
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
@@ -104,7 +101,6 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_
         get_active_pixels(start_pixel[0], start_pixel[1], end_pixel[0], end_pixel[1],
                           t["pixel_plane"], active_pixels[itrk])
         n_pixels_list[itrk] = get_neighboring_pixels(active_pixels[itrk],
-                                                     radius,
                                                      neighboring_pixels[itrk],
                                                      neighboring_radius[itrk])
 
@@ -199,7 +195,7 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
             tot_pixels[i] = pixel2id(x0, y0, plane_id)
 
 @cuda.jit(device=True)
-def get_neighboring_pixels(active_pixels, radius, neighboring_pixels, neighboring_radius):
+def get_neighboring_pixels(active_pixels, neighboring_pixels, neighboring_radius):
     """
     For each active_pixel, it includes all
     neighboring pixels within a specified radius
@@ -208,8 +204,6 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels, neighborin
         active_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments
-        radius (int): number of layers of neighboring pixels we
-            want to consider
         neighboring_pixels (:obj:`numpy.ndarray`): array where we store
             the IDs of the pixels directly below the projection of
             the segments and the ones next to them
@@ -227,8 +221,8 @@ def get_neighboring_pixels(active_pixels, radius, neighboring_pixels, neighborin
         if active_pixels[pix] == -1:
             continue
 
-        for x_r in range(-radius, radius+1):
-            for y_r in range(-radius, radius+1):
+        for x_r in range(-detector.MAX_RADIUS, detector.MAX_RADIUS+1):
+            for y_r in range(-detector.MAX_RADIUS, detector.MAX_RADIUS+1):
                 active_x, active_y, plane_id = id2pixel(active_pixels[pix])
                 new_x, new_y = active_x + x_r, active_y + y_r
                 is_unique = True

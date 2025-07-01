@@ -56,6 +56,8 @@ RESPONSE_SAMPLING = 0.05
 RESPONSE_BIN_SIZE = 0.04434
 #: The longest cathode charge response in time :math:`\mu s`
 RESPONSE_MAX_TIME = 0.0
+#: The maximum radius to consider the neighbouring charge response
+MAX_RADIUS = 4
 #: The step size to chop up segments :math:`cm`
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
@@ -230,6 +232,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global TPC_TO_MODULE
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
+    global MAX_RADIUS
     global MIN_STEP_SIZE
     global TPC_OFFSETS
     global MOD_IDS
@@ -264,35 +267,6 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
-
-    if not geo_only:
-        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
-
-        e_field_bucket = detprop.get('e_field', E_FIELD)
-        E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
-        V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
-
-        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
-        ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
-
-        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
-        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
-
-        # Get response sampling and bin size
-        if response_file is not None:
-            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
-            if isinstance(response_file, list):
-                if i_module < 0:
-                    response_file = response_file[0]
-                else:
-                    response_file = response_file[i_module-1]
-            response = cp.load(response_file)
-            RESPONSE_SAMPLING = float(response['time_tick'])
-            RESPONSE_BIN_SIZE = float(response['bin_size'])
-            MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
-        else:
-            warnings.warn(f'Charge response not set!')
-
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -395,6 +369,35 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
+
+        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+
+        e_field_bucket = detprop.get('e_field', E_FIELD)
+        E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
+        V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
+
+        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
+        ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
+
+        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
+        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
+
+        # Get response sampling and bin size
+        if response_file is not None:
+            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
+            if isinstance(response_file, list):
+                if i_module < 0:
+                    response_file = response_file[0]
+                else:
+                    response_file = response_file[i_module-1]
+            response = cp.load(response_file)
+            RESPONSE_SAMPLING = float(response['time_tick'])
+            RESPONSE_BIN_SIZE = float(response['bin_size'])
+            MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
+            MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
+            print("MAX_RADIUS: ", MAX_RADIUS)
+        else:
+            warnings.warn(f'Charge response not set!')
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME
