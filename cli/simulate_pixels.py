@@ -1057,7 +1057,9 @@ def run_simulation(input_filename,
                     max_signal_time = selected_tracks['t_end'].max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
                 else:
                     max_signal_time = selected_tracks['t_end'].max()
-                signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
+
+                max_long_diff = max(selected_tracks["long_diff"])*10/detector.V_DRIFT
+                signals_ticks = ceil((max_signal_time + max_long_diff) / detector.TIME_SAMPLING) + 1 # signal span in time ticks
 
                 # Here we calculate the induced current on each pixel
                 signals = cp.zeros((selected_tracks.shape[0],
@@ -1069,7 +1071,7 @@ def run_simulation(input_filename,
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states, max_long_diff)
                 RangePop()
 
                 RangePush("pixel_index_map")

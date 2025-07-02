@@ -94,7 +94,7 @@ def overlapping_segment(x, y, start, end, radius):
 
 # @cuda.jit
 @cuda.jit(max_registers=128,  fastmath=True)
-def tracks_current_mc(signals, pixels, tracks, response, rng_states):
+def tracks_current_mc(signals, pixels, tracks, response, rng_states, tpadding):
     """
     This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
     MC method
@@ -109,6 +109,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
         response (:obj:`numpy.ndarray`): 3D array containing the tabulated response.
         rng_states (:obj:`numpy.ndarray`): array of random states for noise
             generation
+        tpadding (:obj: `float`): float number to address diffusions along drift direction.
     """
     itrk, ipix, it = cuda.grid(3)
     ntrk, _, _ = cuda.gridsize(3)
@@ -141,7 +142,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             # In order to conservatively include more time ticks
             # we use the longest response time, and shortest distance to the cathode from the segments
             # the distance is converted to time using nominal drift velocity
-            if (this_time - t['t0']) > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
+            if (this_time - t['t0']) > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT + tpadding):
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -189,7 +190,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     continue
                 if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                     continue
-                if (this_time - t['t0'] + shift_t_collect) < 0 or (this_time - t['t0'] + shift_t_collect) > detector.RESPONSE_MAX_TIME:
+                if (this_time - t['t0'] + shift_t_collect) < 0 or (this_time - t['t0'] + shift_t_collect) > (detector.RESPONSE_MAX_TIME + tpadding):
                     continue
 
                 # (this_time - t['t0']) is the drift/readout time
@@ -319,7 +320,7 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
     upix = unique_pix[index]
 
     for target_dist in range(max_distance):
-    
+
         for itrk in range(pixels.shape[0]):
 
             for ipix in range(pixels.shape[1]):
