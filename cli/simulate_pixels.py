@@ -977,7 +977,6 @@ def run_simulation(input_filename,
                 max_pixels = np.array([0])
                 pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
                 RangePop()
-                print("max_pixels: ", max_pixels)
                 # This formula tries to estimate the maximum number of pixels which can have
                 # a current induced on them.
                 max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
@@ -1011,6 +1010,7 @@ def run_simulation(input_filename,
                 unique_pix = unique_pix[(unique_pix != -1)]
 
                 RangePop()
+                print("active_pixels: ", active_pixels)
 
                 ###################################
                 # Kazu 2024-07-01 Useful if we modify the output to store all contributions
@@ -1056,9 +1056,9 @@ def run_simulation(input_filename,
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
                 # remove t0 and account it later
                 if detector.RESPONSE_MAX_TIME > detector.DRIFT_MAX_TIME:
-                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() * detector.DIFF_N_SIGMAS + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
                 else:
-                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max()
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() * detector.DIFF_N_SIGMAS
                 signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
 
                 # Here we calculate the induced current on each pixel
@@ -1137,6 +1137,8 @@ def run_simulation(input_filename,
                                                   num_backtrack,
                                                   offset_backtrack,
                                                   overflow_flag)
+                print("overflow_flag: ", overflow_flag)
+                print("cp.count_nonzero(overflow_flag): ", cp.count_nonzero(overflow_flag))
                 if cp.any(overflow_flag):
                     warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
                                   + f"{sim.MAX_TRACKS_PER_PIXEL}")
@@ -1185,7 +1187,7 @@ def run_simulation(input_filename,
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
 
-                cp.savez(f'signals_wvfm.npz', signals = signals, pixels_signals=pixels_signals, adc_list=adc_list, adc_ticks_list=adc_ticks_list, pixel_index_map=pixel_index_map, track_pixel_map=track_pixel_map, unique_pix=unique_pix)
+                cp.savez(f'signals_wvfm22.npz', signals = signals, pixels_signals=pixels_signals, adc_list=adc_list, adc_ticks_list=adc_ticks_list, pixel_index_map=pixel_index_map, track_pixel_map=track_pixel_map, unique_pix=unique_pix, active_pixels=active_pixels)
 
                 results_acc['event_id'].append(adc_event_ids)
                 results_acc['adc_tot'].append(adc_list)

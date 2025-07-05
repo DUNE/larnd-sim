@@ -136,6 +136,8 @@ NON_BEAM_EVENT_GAP = 0 # us
 #: T0 delay cut 
 #: The assumption is the late signals are small, and if they don't overlap with the main, they are not considered
 SIGNAL_OVERLAP_CUT = 30 # us
+#: Pad the signal range to allow N sigmas of diffusion
+DIFF_N_SIGMAS = 5
 
 def electron_mobility(efield, temperature):
     """
@@ -260,6 +262,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
     global SIGNAL_OVERLAP_CUT
+    global DIFF_N_SIGMAS
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -352,6 +355,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
     SIGNAL_OVERLAP_CUT = detprop.get('signal_overlap_cut', SIGNAL_OVERLAP_CUT)
+    DIFF_N_SIGMAS = detprop.get('signal_overlap_cut', DIFF_N_SIGMAS)
 
     if not geo_only:
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)

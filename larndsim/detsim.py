@@ -150,7 +150,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             # In order to conservatively include more time ticks
             # we use the longest response time, and shortest distance to the cathode from the segments
             # the distance is converted to time using nominal drift velocity
-            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
+            # pad with 5 times of longitudinal diffusion
+            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT) + t['long_diff'] * detector.DIFF_N_SIGMAS:
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -159,8 +160,9 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
 
+            # full response range and 5 sigmas of transverse diffusion
             impact_factor = sqrt(response.shape[0]**2 +
-                                     response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
+                                     response.shape[1]**2) * detector.RESPONSE_BIN_SIZE + t['tran_diff'] * detector.DIFF_N_SIGMAS
 
             subsegment_start, subsegment_end, skip = overlapping_segment(x_p, y_p, start, end, impact_factor)
             if skip:
@@ -275,6 +277,7 @@ def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_
                     break
 
             if counter < 0:
+                # The overflow_flag is for both overflow (too many segments for backtracking) and underflow (no backtracking the pixel is considered too far from the segments)
                 overflow_flag[pixel_index] = 1
 
 @cuda.jit
