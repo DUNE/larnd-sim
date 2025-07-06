@@ -408,6 +408,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             RESPONSE_BIN_SIZE = float(response['bin_size'])
             MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
             MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
+            NEIGHBORING_PIX_DIST = []
             for i in range(MAX_RADIUS + 1):
                 for j in range(MAX_RADIUS + 1):
                     NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))

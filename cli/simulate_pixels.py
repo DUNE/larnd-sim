@@ -1010,7 +1010,6 @@ def run_simulation(input_filename,
                 unique_pix = unique_pix[(unique_pix != -1)]
 
                 RangePop()
-                print("active_pixels: ", active_pixels)
 
                 ###################################
                 # Kazu 2024-07-01 Useful if we modify the output to store all contributions
