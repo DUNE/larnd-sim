@@ -984,7 +984,7 @@ def run_simulation(input_filename,
 
                 active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
                 neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
-                neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
+                neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.float32)
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
 
                 if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
@@ -1093,10 +1093,8 @@ def run_simulation(input_filename,
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
                 detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
                     unique_pix,
-                    #active_pixels,
                     neighboring_pixels,
                     neighboring_radius,
-                    neighboring_radius.max().item()+1,
                     )
                 RangePop()
 
@@ -1137,8 +1135,6 @@ def run_simulation(input_filename,
                                                   num_backtrack,
                                                   offset_backtrack,
                                                   overflow_flag)
-                print("overflow_flag: ", overflow_flag)
-                print("cp.count_nonzero(overflow_flag): ", cp.count_nonzero(overflow_flag))
                 if cp.any(overflow_flag):
                     warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
                                   + f"{sim.MAX_TRACKS_PER_PIXEL}")
@@ -1186,8 +1182,6 @@ def run_simulation(input_filename,
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
-
-                cp.savez(f'signals_wvfm22.npz', signals = signals, pixels_signals=pixels_signals, adc_list=adc_list, adc_ticks_list=adc_ticks_list, pixel_index_map=pixel_index_map, track_pixel_map=track_pixel_map, unique_pix=unique_pix, active_pixels=active_pixels)
 
                 results_acc['event_id'].append(adc_event_ids)
                 results_acc['adc_tot'].append(adc_list)

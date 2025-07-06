@@ -317,17 +317,13 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
                     track_pixel_map[index][imap] = itrk
 
 @cuda.jit
-def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_distance):
+def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
     """
     This kernel fills a 2D array which contains, for each unique pixel,
     an array with the track indeces associated to that pixel.
-
-    Args:
-        track_pixel_map_col (:obj:`numpy.ndarray`): 2D array that will contain the
-            association between the unique pixels array and the track indeces
-        unique_pix (:obj:`numpy.ndarray`): 1D array containing the unique pixels
-        pixels (:obj:`numpy.ndarray`): 2D array containing the pixels for each
-            track.
+    Summary of the different get_track_pixel_map
+    get_track_pixel_map, fills track_pixel_map without distance ranking
+    get_track_pixel_map3, fills track_pixel_map ranked by distances of unit pixel pitch
     """
     # index of unique_pix array
     index = cuda.grid(1)
@@ -335,8 +331,8 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
         return
     upix = unique_pix[index]
 
-    for target_dist in range(max_distance):
-    
+    for target_dist in detector.NEIGHBORING_PIX_DIST:
+
         for itrk in range(pixels.shape[0]):
 
             for ipix in range(pixels.shape[1]):
@@ -344,8 +340,7 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
                 dist = distances[itrk][ipix]
 
                 if (upix == pID):
-                    if (dist == target_dist): 
-
+                    if (dist == target_dist):
                         imap = 0
                         #while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
                         while imap < track_pixel_map.shape[1]:

@@ -238,28 +238,6 @@ def get_neighboring_pixels(active_pixels, neighboring_pixels, neighboring_radius
                     if is_unique:
                         neighboring_pixels[count] = new_pixel
                         dist=pow(x_r**2+y_r**2,0.5)
-
-                        dx,dy = abs(x_r),abs(y_r)
-                        dmax,dmin = max(dx,dy),min(dx,dy)
-                        dsum = dmax+dmin
-                        if dsum > MAX_NEIGHBOR_BACKTRACK_DISTANCE:
-                            dist = -1
-                        elif dsum <=1: 
-                            dist = dsum
-                        elif dsum == 2:
-                            dist = 2 if dmax==1 else 3
-                        elif dsum == 3:
-                            dist = 4 if dmax==2 else 5
-                        elif dsum == 4:
-                            if dmax == 2:
-                                dist = 6
-                            elif dmax == 3:
-                                dist = 7
-                            elif dmax == 4:
-                                dist = 8
-                        else:
-                            print('Unsupported dsum',dsum)
-                            dist=-1
                         neighboring_radius[count] = dist
                         count += 1
 

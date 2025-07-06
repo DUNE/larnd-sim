@@ -138,6 +138,8 @@ NON_BEAM_EVENT_GAP = 0 # us
 SIGNAL_OVERLAP_CUT = 30 # us
 #: Pad the signal range to allow N sigmas of diffusion
 DIFF_N_SIGMAS = 5
+#: Distances of the neighboring pixels to the center pixel
+NEIGHBORING_PIX_DIST = []
 
 def electron_mobility(efield, temperature):
     """
@@ -263,6 +265,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global NON_BEAM_EVENT_GAP
     global SIGNAL_OVERLAP_CUT
     global DIFF_N_SIGMAS
+    global NEIGHBORING_PIX_DIST
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -405,6 +408,10 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             RESPONSE_BIN_SIZE = float(response['bin_size'])
             MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
             MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
+            for i in range(MAX_RADIUS + 1):
+                for j in range(MAX_RADIUS + 1):
+                    NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
+            NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
         else:
             warnings.warn(f'Charge response not set!')
 
