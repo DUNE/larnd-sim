@@ -2,7 +2,7 @@
 """
 Command-line interface to larnd-sim module.
 """
-from math import ceil
+from math import ceil, floor
 from time import time
 import warnings
 from collections import defaultdict
@@ -98,7 +98,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
     if n > len(rng_states):
         new_states = device_array(n, dtype=rng_states.dtype)
         new_states[:len(rng_states)] = rng_states
-        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed)
+        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed, subsequence_start = len(rng_states))
         return new_states
 
     return rng_states
@@ -1097,8 +1097,20 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+
+                BPG_X_subbatch = min(floor(len(rng_states) / (np.prod(TPB) * BPG[1] * BPG[2])), BPG_X)
+                BPG_subbatch = (BPG_X_subbatch, BPG_Y, BPG_Z)
+                subbatches_size = BPG_X_subbatch
+                n_subbatches = ceil(BPG_X/subbatches_size)
+
+                for i_subbatch in range(n_subbatches):
+                    start = i_subbatch*subbatches_size
+                    end = (i_subbatch+1)*subbatches_size
+                    detsim.tracks_current_mc[BPG_subbatch,TPB](signals[start:end],
+                                                                 neighboring_pixels[start:end],
+                                                                 selected_tracks[start:end],
+                                                                 response, rng_states)
+
                 RangePop()
 
                 RangePush("pixel_index_map")
@@ -1176,7 +1188,7 @@ def run_simulation(input_filename,
                 # TPB = 128
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
                 BPG = ceil(pixels_signals.shape[0] / TPB)
-                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed, rng_states=rng_states)
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
                 if pixel_thresholds_file is not None:
@@ -1276,7 +1288,7 @@ def run_simulation(input_filename,
 
                     light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                     rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                         seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                                                         seed=rand_seed, rng_states=rng_states)
                     light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                     RangePop()
 
