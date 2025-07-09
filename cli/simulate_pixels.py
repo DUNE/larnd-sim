@@ -1288,23 +1288,23 @@ def run_simulation(input_filename,
                         warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
                     RangePush("sim_scintillation")
-                    light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                    light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                    light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                    light_sample_inc_scint = light_sample_inc
+                    light_sample_inc_scint_true_track_id = light_sample_inc_true_track_id
+                    light_sample_inc_scint_true_photons = light_sample_inc_true_photons
                     light_sim.calc_scintillation_effect[BPG, TPB](
                         light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
                         light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
 
-                    light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                    light_sample_inc_disc = light_sample_inc_scint
                     rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
                                                          seed=rand_seed, rng_states=rng_states)
                     light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                     RangePop()
 
                     RangePush("sim_light_det_response")
-                    light_response = cp.zeros_like(light_sample_inc)
-                    light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                    light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                    light_response = light_sample_inc_disc
+                    light_response_true_track_id = light_sample_inc_true_track_id
+                    light_response_true_photons = light_sample_inc_true_photons
                     light_sim.calc_light_detector_response[BPG, TPB](
                         light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                         light_response, light_response_true_track_id, light_response_true_photons, light_gain)
