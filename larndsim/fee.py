@@ -174,7 +174,7 @@ def export_to_hdf5(event_id_list,
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
 
-            if adc > digitize(0):
+            if adc > 0:
                 while True:
                     event = event_id_list[itick,iadc]
                     event_t0 = event_start_time_list[itick]
@@ -511,7 +511,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1, comp
 
     return packets, packets_mc_ds
 
-def digitize(integral_list, gain=detector.GAIN * mV / e):
+def digitize(integral_list, gain=detector.GAIN * mV / e, pedestal=detector.V_PEDESTAL):
     """
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
@@ -524,8 +524,10 @@ def digitize(integral_list, gain=detector.GAIN * mV / e):
         :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
-    adcs = xp.floor(xp.minimum(xp.maximum((integral_list * gain + detector.V_PEDESTAL * mV - detector.V_CM * mV), 0)
+    adcs = xp.floor(xp.minimum(xp.maximum((integral_list * gain + pedestal * mV - detector.V_CM * mV), 0)
                                 * detector.ADC_COUNTS / (detector.V_REF * mV - detector.V_CM * mV), detector.ADC_COUNTS-1))
+
+    adcs[integral_list == 0] = 0
 
     return adcs
 

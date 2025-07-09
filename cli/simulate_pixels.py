@@ -2,7 +2,7 @@
 """
 Command-line interface to larnd-sim module.
 """
-from math import ceil
+from math import ceil, floor
 from time import time
 import warnings
 from collections import defaultdict
@@ -98,7 +98,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
     if n > len(rng_states):
         new_states = device_array(n, dtype=rng_states.dtype)
         new_states[:len(rng_states)] = rng_states
-        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed)
+        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed, subsequence_start = len(rng_states))
         return new_states
 
     return rng_states
@@ -141,6 +141,8 @@ def run_simulation(input_filename,
                    pixel_thresholds_id=None,
                    pixel_gains_file=None,
                    pixel_gains_id=None,
+                   pixel_pedestals_file=None,
+                   pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
                    save_memory=None):
@@ -171,6 +173,7 @@ def run_simulation(input_filename,
         pixel_thresholds_file (str, optional): path to npz file containing pixel thresholds. Defaults
             to None.
         pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
+        pixel_pedestals_file (str, optional): path to npx files containing pixel pedestals. Defaults to None.
         rand_seed (int, optional): the random number generator seed that can be set through 
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
@@ -310,6 +313,13 @@ def run_simulation(input_filename,
             pixel_gains_id = cfg['PIXEL_GAINS_ID']
         except:
             print("Pixel gain files are not provided. Using the default gains.")
+    if pixel_pedestals_file is None:
+        try:
+            pixel_pedestals_file = cfg['PIXEL_PEDESTALS_FILE']
+            pixel_pedestals_id = cfg['PIXEL_PEDESTALS_ID']
+        except:
+            print("Pixel pedestals files are not provided. Using the default pedestals.")
+
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
     if light_simulated is None:
@@ -370,6 +380,8 @@ def run_simulation(input_filename,
         print("Pixel threshold file: ", pixel_thresholds_file)
     if pixel_gains_file:
         print("Pixel gain file: ", pixel_gains_file)
+    if pixel_pedestals_file:
+        print("Pixel pedestals file: ", pixel_pedestals_file)
     if light_lut_filename:
         print("Light LUT:", light_lut_filename)
     if light_det_noise_filename:
@@ -396,6 +408,7 @@ def run_simulation(input_filename,
         response_file = load_mod2mod_variation_properties(response_file, response_id, n_modules, message="response files")
         pixel_thresholds_file = load_mod2mod_variation_properties(pixel_thresholds_file, pixel_thresholds_id, n_modules, message="pixel threshold files")
         pixel_gains_file = load_mod2mod_variation_properties(pixel_gains_file, pixel_gains_id, n_modules, message="pixel gain files")
+        pixel_pedestals_file = load_mod2mod_variation_properties(pixel_pedestals_file, pixel_pedestals_id, n_modules, message="pixel pedestals files")
         if light_simulated:
             light_lut_filename = load_mod2mod_variation_properties(light_lut_filename, light_lut_id, n_modules, message="light LUT")
 
@@ -442,6 +455,11 @@ def run_simulation(input_filename,
         elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
             pixel_gains_file = pixel_gains_file[0]
 
+        if isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) > 1:
+            raise KeyError("Provided more than one pixel pedestal file for the simulation with no module variation.")
+        elif isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) == 1:
+            pixel_pedestals_file = pixel_pedestals_file[0]
+
         if isinstance(light_lut_filename, list) and len(light_lut_filename) > 1:
             raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
         elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
@@ -466,6 +484,12 @@ def run_simulation(input_filename,
         if pixel_gains_file is not None:
             print("Pixel gains file:", pixel_gains_file)
             pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+        RangePop()
+
+        RangePush("load_pixel_pedestals")
+        if pixel_pedestals_file is not None:
+            print("Pixel pedestals file:", pixel_pedestals_file)
+            pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
         RangePop()
     else:
         consts.light.set_light_properties(detector_properties)
@@ -746,6 +770,11 @@ def run_simulation(input_filename,
             RangePush("load_pixel_gains")
             if pixel_gains_file is not None:
                 pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
+            RangePop()
+
+            RangePush("load_pixel_pedestals")
+            if pixel_pedestals_file is not None:
+                pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_segments_in_module")
@@ -1069,8 +1098,20 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+itrk, rng_states=rng_states)
-                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+
+                BPG_X_subbatch = min(floor(len(rng_states) / (np.prod(TPB) * BPG[1] * BPG[2])), BPG_X)
+                BPG_subbatch = (BPG_X_subbatch, BPG_Y, BPG_Z)
+                subbatches_size = BPG_X_subbatch
+                n_subbatches = ceil(BPG_X/subbatches_size)
+
+                for i_subbatch in range(n_subbatches):
+                    start = i_subbatch*subbatches_size
+                    end = (i_subbatch+1)*subbatches_size
+                    detsim.tracks_current_mc[BPG_subbatch,TPB](signals[start:end],
+                                                                 neighboring_pixels[start:end],
+                                                                 selected_tracks[start:end],
+                                                                 response, rng_states)
+
                 RangePop()
 
                 RangePush("pixel_index_map")
@@ -1150,7 +1191,7 @@ def run_simulation(input_filename,
                 # TPB = 128
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
                 BPG = ceil(pixels_signals.shape[0] / TPB)
-                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed, rng_states=rng_states)
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
                 if pixel_thresholds_file is not None:
@@ -1175,9 +1216,16 @@ def run_simulation(input_filename,
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
                     gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                    adc_list = fee.digitize(integral_list, gain_list)
                 else:
-                    adc_list = fee.digitize(integral_list)
+                    gain_list = detector.GAIN * consts.units.mV / consts.units.e
+
+                if pixel_pedestals_file is not None:
+                    pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
+                    pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                else:
+                    pedestal_list = detector.V_PEDESTAL
+
+                adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
@@ -1243,7 +1291,7 @@ def run_simulation(input_filename,
 
                     light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                     rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                         seed=rand_seed+ievd+itrk, rng_states=rng_states)
+                                                         seed=rand_seed, rng_states=rng_states)
                     light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                     RangePop()
 
