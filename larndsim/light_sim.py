@@ -267,9 +267,7 @@ def interp(idx, arr, low, high):
     i1 = i0 + 1
     v0 = arr[i0]
     v1 = arr[i1]
-
     return v0 + (v1 - v0) * (idx - i0)
-                
 
 @nb.njit
 def sipm_response_model(idet, time_tick):
@@ -631,33 +629,34 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
 
     Returns:
-        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on arecorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
+        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
-    event_id, trigger_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(6)]
-    indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
+    # Get total number of non-default entries
+    mask = waveforms_true_track_id != -1
+    num_idx = np.prod(waveforms_true_track_id[mask].shape)
+    # Get indices of those valid entires and destructure the tuple
+    idx0, idx1, idx2, idx3 = np.nonzero(waveforms_true_track_id != -1)
+
     truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
-    for i in range(len(indices)):
-        this_trig = indices[i][0]
-        i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
-        i_op_channel = indices[i][1]
-        i_sample = indices[i][2]
-        i_content = indices[i][3]
-        trigger_id.append(i_trig)
-        op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
-        tick.append(i_sample)
-        event_id.append(i_evt)
-        segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
-        pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
-    truth_data = np.empty(len(indices), dtype=truth_dtype)
-    truth_data['trigger_id'] = np.array(trigger_id)
-    truth_data['op_channel_id'] = np.array(op_channel_id)
-    truth_data['tick'] = np.array(tick)
-    truth_data['event_id'] = np.array(event_id)
-    truth_data['segment_id'] = np.array(segment_id)
-    truth_data['pe_current'] = np.array(pe_current)
+    truth_data = np.empty(num_idx, dtype=truth_dtype)
+
+    # Careful with all the indices
+    for x, (i, j, k, l) in enumerate(zip(idx0, idx1, idx2, idx3)):
+        this_trig = i #idx0
+        i_trig = i_trig + i #FIXME currently idx0 is always 0. probably further change is needed for multiple light triggers in one trueevent
+        i_op_channel = j #idx1
+        i_sample = k  #idx2
+        i_content = l #idx3
+        truth_data[x]['trigger_id'] = i_trig
+        truth_data[x]['op_channel_id'] = op_channel[i_op_channel]
+        truth_data[x]['tick'] = i_sample
+        truth_data[x]['event_id'] = i_evt
+        truth_data[x]['segment_id'] = waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content]
+        truth_data[x]['pe_current'] = waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content]
+
     return truth_data
 
 def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1, compression=None):
