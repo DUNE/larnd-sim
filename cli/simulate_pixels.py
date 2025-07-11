@@ -1099,6 +1099,15 @@ def run_simulation(input_filename,
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
 
+                # To conserve memory, we break up the signals calculation into subbatches.
+                # The subbatches are sized so that rng_states array won't have to be expanded.
+                # This is achieved by choosing a BPG_X_subbatch <= BPG_X that lets
+                # the existing length of rng_states be able to accomdate the number of threads (BPG_X_subbatch, BPG_Y, BPG_Z) x TPB.
+
+                # In the case that there are not enough rng states for even BPG_X_subbatch = 1, we will have to expand rng_states.
+                if len(rng_states) < (np.prod(TPB) * BPG[1] * BPG[2]):
+                    rng_states = maybe_create_rng_states(int(np.prod(TPB) * BPG[1] * BPG[2]), seed=rand_seed, rng_states=rng_states)
+
                 BPG_X_subbatch = min(floor(len(rng_states) / (np.prod(TPB) * BPG[1] * BPG[2])), BPG_X)
                 BPG_subbatch = (BPG_X_subbatch, BPG_Y, BPG_Z)
                 subbatches_size = BPG_X_subbatch
