@@ -151,7 +151,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             # we use the longest response time, and shortest distance to the cathode from the segments
             # the distance is converted to time using nominal drift velocity
             # pad with 5 times of longitudinal diffusion
-            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT) + t['long_diff'] * detector.DIFF_N_SIGMAS:
+            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT) + t['long_diff'] / detector.V_DRIFT * detector.DIFF_N_SIGMAS:
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -339,7 +339,7 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
                 dist = distances[itrk][ipix]
 
                 if (upix == pID):
-                    if (dist == target_dist):
+                    if abs(dist - target_dist) < 1E-6:
                         imap = 0
                         #while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
                         while imap < track_pixel_map.shape[1]:

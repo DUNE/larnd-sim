@@ -1084,9 +1084,9 @@ def run_simulation(input_filename,
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
                 # remove t0 and account it later
                 if detector.RESPONSE_MAX_TIME > detector.DRIFT_MAX_TIME:
-                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() * detector.DIFF_N_SIGMAS + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() / detector.V_DRIFT * detector.DIFF_N_SIGMAS + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
                 else:
-                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() * detector.DIFF_N_SIGMAS
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() / detector.V_DRIFT * detector.DIFF_N_SIGMAS
                 signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
 
                 # Here we calculate the induced current on each pixel
