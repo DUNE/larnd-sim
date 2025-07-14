@@ -62,7 +62,7 @@ MAX_RADIUS = 4
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
 #: and the bin size in t is 50 ns, which is roughly 0.007 cm
-MIN_STEP_SIZE = 0.0064 # Change it to sub 0.001 # cm after the seed issue is fixed to allow per response bin to have a "reasonable" diffusion distribution
+MIN_STEP_SIZE = 0.001 # allow per response bin to have a "reasonable" diffusion distribution
 #: Default value for pixel_plane, to indicate out-of-bounds edep
 DEFAULT_PLANE_INDEX = 0x0000BEEF
 #: Total number of pixels
