@@ -25,20 +25,29 @@ def quench(tracks, mode):
     if itrk < tracks.shape[0]:
         dEdx = tracks[itrk]["dEdx"]
         dE = tracks[itrk]["dE"]
+        # TODO: ensure 'dE' is visible energy (may require subtracting off the SecondaryEnergyDeposit
+        #       calculated by edepsim that accounts for non-ionizing energy loss)
+        
+        # initialize to zero
+        tracks[itrk]["n_electrons"] = 0
+        tracks[itrk]["n_photons"]   = 0
 
-        recomb = 0
-        if mode == physics.BOX:
-            # Baller, 2013 JINST 8 P08005
-            csi = physics.BOX_BETA * dEdx / (detector.E_FIELD * detector.LAR_DENSITY)
-            recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
-        elif mode == physics.BIRKS:
-            # Amoruso, et al NIM A 523 (2004) 275
-            recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
-        else:
-            raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
+        # if this isn't a gamma or neutron, calculate charge/light
+        pdg = tracks[itrk]["pdg_id"]
+        if dEdx > 0 and pdg != 22 and pdg != 2112:
+            recomb = 0
+            if mode == physics.BOX:
+                # Baller, 2013 JINST 8 P08005
+                csi = physics.BOX_BETA * dEdx / (detector.E_FIELD * detector.LAR_DENSITY)
+                recomb = max(0, log(physics.BOX_ALPHA + csi)/csi)
+            elif mode == physics.BIRKS:
+                # Amoruso, et al NIM A 523 (2004) 275
+                recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            else:
+                raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
 
-        if isnan(recomb):
-            raise RuntimeError("Invalid recombination value")
-
-        tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
-        tracks[itrk]["n_photons"] = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
+            if isnan(recomb):
+                raise RuntimeError("Invalid recombination value")
+            
+            tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
+            tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

@@ -2,8 +2,7 @@
 """
 Command-line interface to larnd-sim module.
 """
-
-from math import ceil
+from math import ceil, floor
 from time import time
 import warnings
 from collections import defaultdict
@@ -102,7 +101,7 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
     if n > len(rng_states):
         new_states = device_array(n, dtype=rng_states.dtype)
         new_states[:len(rng_states)] = rng_states
-        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed)
+        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed, subsequence_start = len(rng_states))
         return new_states
 
     return rng_states
@@ -174,7 +173,10 @@ def run_simulation(input_filename,
                    pixel_thresholds_id=None,
                    pixel_gains_file=None,
                    pixel_gains_id=None,
+                   pixel_pedestals_file=None,
+                   pixel_pedestals_id=None,
                    rand_seed=None,
+                   compression=None,
                    save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
@@ -203,10 +205,13 @@ def run_simulation(input_filename,
         pixel_thresholds_file (str, optional): path to npz file containing pixel thresholds. Defaults
             to None.
         pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
+        pixel_pedestals_file (str, optional): path to npx files containing pixel pedestals. Defaults to None.
         rand_seed (int, optional): the random number generator seed that can be set through 
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
             store memory snapshot information
+        compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
+            supported options are 'lzf' and 'gzip'
     """
     # Define a nested function to save the results
     def save_results(event_times, results, i_trig, i_mod=-1, light_only=False):
@@ -266,7 +271,8 @@ def run_simulation(input_filename,
                                light_trigger_event_id=light_trigger_event_ids,
                                light_trigger_modules=light_trigger_modules,
                                bad_channels=bad_channels, # defined earlier in script
-                               i_mod=i_mod)
+                               i_mod=i_mod,
+                               compression=compression)
 
         if light.LIGHT_SIMULATED and len(results['light_event_id']):
             if light.LIGHT_TRIG_MODE == 0:
@@ -280,7 +286,8 @@ def run_simulation(input_filename,
                                          results['light_waveforms_true_track_id'],
                                          results['light_waveforms_true_photons'],
                                          i_trig,
-                                         i_mod)
+                                         i_mod,
+                                         compression)
             elif light.LIGHT_TRIG_MODE == 1:
                 light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
                                                     results['light_waveforms'],
@@ -288,7 +295,8 @@ def run_simulation(input_filename,
                                                     results['light_waveforms_true_track_id'],
                                                     results['light_waveforms_true_photons'],
                                                     i_trig,
-                                                    i_mod)
+                                                    i_mod,
+                                                    compression)
     ###########################################################################################
 
     print(LOGO)
@@ -337,6 +345,13 @@ def run_simulation(input_filename,
             pixel_gains_id = cfg['PIXEL_GAINS_ID']
         except:
             print("Pixel gain files are not provided. Using the default gains.")
+    if pixel_pedestals_file is None:
+        try:
+            pixel_pedestals_file = cfg['PIXEL_PEDESTALS_FILE']
+            pixel_pedestals_id = cfg['PIXEL_PEDESTALS_ID']
+        except:
+            print("Pixel pedestals files are not provided. Using the default pedestals.")
+
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
     if light_simulated is None:
@@ -385,10 +400,8 @@ def run_simulation(input_filename,
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
     print("")
-
-    # TODO: Remove this printout (added for benchmarking purposes)
     print("Pixel batch size:", PIXEL_BATCH_SIZE)
-
+    print("Compression:", compression)
     print("Random seed:", rand_seed)
     print("Simulation properties file:", simulation_properties)
     print("Detector properties file:", detector_properties)
@@ -400,6 +413,8 @@ def run_simulation(input_filename,
         print("Pixel threshold file: ", pixel_thresholds_file)
     if pixel_gains_file:
         print("Pixel gain file: ", pixel_gains_file)
+    if pixel_pedestals_file:
+        print("Pixel pedestals file: ", pixel_pedestals_file)
     if light_lut_filename:
         print("Light LUT:", light_lut_filename)
     if light_det_noise_filename:
@@ -426,6 +441,7 @@ def run_simulation(input_filename,
         response_file = load_mod2mod_variation_properties(response_file, response_id, n_modules, message="response files")
         pixel_thresholds_file = load_mod2mod_variation_properties(pixel_thresholds_file, pixel_thresholds_id, n_modules, message="pixel threshold files")
         pixel_gains_file = load_mod2mod_variation_properties(pixel_gains_file, pixel_gains_id, n_modules, message="pixel gain files")
+        pixel_pedestals_file = load_mod2mod_variation_properties(pixel_pedestals_file, pixel_pedestals_id, n_modules, message="pixel pedestals files")
         if light_simulated:
             light_lut_filename = load_mod2mod_variation_properties(light_lut_filename, light_lut_id, n_modules, message="light LUT")
 
@@ -472,6 +488,11 @@ def run_simulation(input_filename,
         elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
             pixel_gains_file = pixel_gains_file[0]
 
+        if isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) > 1:
+            raise KeyError("Provided more than one pixel pedestal file for the simulation with no module variation.")
+        elif isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) == 1:
+            pixel_pedestals_file = pixel_pedestals_file[0]
+
         if isinstance(light_lut_filename, list) and len(light_lut_filename) > 1:
             raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
         elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
@@ -496,6 +517,12 @@ def run_simulation(input_filename,
         if pixel_gains_file is not None:
             print("Pixel gains file:", pixel_gains_file)
             pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
+        RangePop()
+
+        RangePush("load_pixel_pedestals")
+        if pixel_pedestals_file is not None:
+            print("Pixel pedestals file:", pixel_pedestals_file)
+            pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
         RangePop()
     else:
         consts.light.set_light_properties(detector_properties)
@@ -776,6 +803,11 @@ def run_simulation(input_filename,
                 pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
             RangePop()
 
+            RangePush("load_pixel_pedestals")
+            if pixel_pedestals_file is not None:
+                pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
+            RangePop()
+
             RangePush("load_segments_in_module")
             module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
             module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
@@ -968,11 +1000,11 @@ def run_simulation(input_filename,
                     #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
                     sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                     if len(sync_times) > 0:
-                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod)
+                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod, compression)
                         sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
                 if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod)
+                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod, compression)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
@@ -1097,7 +1129,7 @@ def run_simulation(input_filename,
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                        seed=rand_seed+ievd, rng_states=rng_states)
+                                                        seed=rand_seed, rng_states=rng_states)
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
@@ -1205,8 +1237,29 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB[:2]) * np.prod(BPG[:2])), seed=rand_seed+ievd+ipix, rng_states=rng_states)
-                detsim.tracks_current_mc[BPG,TPB](signals, neighboring_pixels, selected_tracks, response, rng_states)
+
+                # To conserve memory, we break up the signals calculation into subbatches.
+                # The subbatches are sized so that rng_states array won't have to be expanded.
+                # This is achieved by choosing a BPG_X_subbatch <= BPG_X that lets
+                # the existing length of rng_states be able to accomdate the number of threads (BPG_X_subbatch, BPG_Y, BPG_Z) x TPB.
+
+                # In the case that there are not enough rng states for even BPG_X_subbatch = 1, we will have to expand rng_states.
+                if len(rng_states) < (np.prod(TPB) * BPG[1] * BPG[2]):
+                    rng_states = maybe_create_rng_states(int(np.prod(TPB) * BPG[1] * BPG[2]), seed=rand_seed, rng_states=rng_states)
+
+                BPG_X_subbatch = min(floor(len(rng_states) / (np.prod(TPB) * BPG[1] * BPG[2])), BPG_X)
+                BPG_subbatch = (BPG_X_subbatch, BPG_Y, BPG_Z)
+                subbatches_size = BPG_X_subbatch
+                n_subbatches = ceil(BPG_X/subbatches_size)
+
+                for i_subbatch in range(n_subbatches):
+                    start = i_subbatch*subbatches_size
+                    end = (i_subbatch+1)*subbatches_size
+                    detsim.tracks_current_mc[BPG_subbatch,TPB](signals[start:end],
+                                                                 neighboring_pixels[start:end],
+                                                                 selected_tracks[start:end],
+                                                                 response, rng_states)
+
                 RangePop()
 
                 RangePush("pixel_index_map")
@@ -1284,7 +1337,7 @@ def run_simulation(input_filename,
                 # TPB = 128
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
                 BPG = ceil(pixels_signals.shape[0] / TPB)
-                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed+ievd+ipix, rng_states=rng_states)
+                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed, rng_states=rng_states)
                 TPB_lut = 128 # supposed to be 128
                 BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
                 if pixel_thresholds_file is not None:
@@ -1309,9 +1362,16 @@ def run_simulation(input_filename,
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
                     gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                    adc_list = fee.digitize(integral_list, gain_list)
                 else:
-                    adc_list = fee.digitize(integral_list)
+                    gain_list = detector.GAIN * consts.units.mV / consts.units.e
+
+                if pixel_pedestals_file is not None:
+                    pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
+                    pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+                else:
+                    pedestal_list = detector.V_PEDESTAL
+
+                adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
                 
                 adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
                 RangePop()
@@ -1380,7 +1440,7 @@ def run_simulation(input_filename,
         light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
         light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
 
-        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times)
+        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression)
         #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
@@ -1390,7 +1450,7 @@ def run_simulation(input_filename,
     # merge light waveforms per module
     # correspond to light_sim.export_light_wvfm_to_hdf5
     if light.LIGHT_SIMULATED and mod2mod_variation:
-        light_sim.merge_module_light_wvfm_same_trigger(output_filename)
+        light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression)
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
@@ -1399,7 +1459,7 @@ def run_simulation(input_filename,
         swap_coordinates(segments_to_files)
 
         # Store all tracks in the gdml module volume, could have small differences because of the active volume check
-        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files)
+        output_file.create_dataset(sim.TRACKS_DSET_NAME, data=segments_to_files, compression=compression)
 
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
@@ -1408,17 +1468,17 @@ def run_simulation(input_filename,
             # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
             if mod2mod_variation:
                 for i_mod in mod_ids:
-                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1])
+                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1], compression=compression)
             else:
-                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0])
+                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0], compression=compression)
         if input_has_trajectories:
-            output_file.create_dataset("trajectories", data=trajectories)
+            output_file.create_dataset("trajectories", data=trajectories, compression=compression)
         if input_has_vertices:
-            output_file.create_dataset("vertices", data=vertices)
+            output_file.create_dataset("vertices", data=vertices, compression=compression)
         if input_has_mc_hdr:
-            output_file.create_dataset("mc_hdr", data=mc_hdr)
+            output_file.create_dataset("mc_hdr", data=mc_hdr, compression=compression)
         if input_has_mc_stack:
-            output_file.create_dataset("mc_stack", data=mc_stack)
+            output_file.create_dataset("mc_stack", data=mc_stack, compression=compression)
 
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():

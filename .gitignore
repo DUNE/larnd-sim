@@ -10,3 +10,4 @@ docs/build
 .vscode
 examples/module0_corsika.h5
 test
+*.*.swp
