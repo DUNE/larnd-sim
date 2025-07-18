@@ -1150,7 +1150,7 @@ def run_simulation(input_filename,
 
                 RangePush("sum_pixels_signals")
                 # Here we combine the induced current on the same pixels by different tracks
-                TPB = (1,1,64)
+                TPB = (1,4,64)
                 BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
