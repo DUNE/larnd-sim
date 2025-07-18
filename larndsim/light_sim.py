@@ -269,8 +269,8 @@ def interp(idx, arr, low, high):
     v1 = arr[i1]
     return v0 + (v1 - v0) * (idx - i0)
 
-@nb.njit
-def sipm_response_model(idet, time_tick):
+@nb.njit()
+def sipm_response_model(time_tick):
     """
     Calculates the SiPM response from a PE at `time_tick` relative to the PE time
     
@@ -296,10 +296,15 @@ def sipm_response_model(idet, time_tick):
         # normalize to 1
         impulse /=  light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
         return impulse
-            
+
+@nb.njit()
+def sipm_response_fast(sipm_response):
+    for time_tick in range(sipm_response.shape[0]):
+        sipm_response[time_tick] = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
+    sipm_response /= light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain):
+def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
     """
     Simulates the SiPM reponse and digit
     
@@ -314,7 +319,7 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
-                tick_weight = sipm_response_model(idet, itick-jtick)
+                tick_weight = sipm_response[itick-jtick]
                 light_response[idet,itick] += light_gain[idet] * tick_weight * light_sample_inc[idet,jtick]
                     
                 # loop over convolution tick truth
