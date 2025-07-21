@@ -655,12 +655,9 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         i_op_channel = j #idx1
         i_sample = k  #idx2
         i_content = l #idx3
-        truth_data[x]['trigger_id'] = i_trig
-        truth_data[x]['op_channel_id'] = op_channel[i_op_channel]
-        truth_data[x]['tick'] = i_sample
-        truth_data[x]['event_id'] = i_evt
-        truth_data[x]['segment_id'] = waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content]
-        truth_data[x]['pe_current'] = waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content]
+        truth_data[x] = (i_trig, op_channel[i_op_channel], i_sample, i_evt,
+                         waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content],
+                         waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
 
     return truth_data
 
