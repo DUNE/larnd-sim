@@ -1115,11 +1115,13 @@ def run_simulation(input_filename,
 
                 RangePush("pixel_index_map")
                 # Here we create a map between tracks and index in the unique pixel array
-                pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-                for i_ in range(selected_tracks.shape[0]):
-                    compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
-                    indices = cp.where(compare)
-                    pixel_index_map[i_, indices[0]] = indices[1]
+                # First, create a lookup table for unique_pix values to their indices
+                max_pix_val = int(cp.max(unique_pix)) + 1
+                pix_lookup = cp.full((max_pix_val,), -1, dtype=cp.int32)
+                pix_lookup[unique_pix] = cp.arange(unique_pix.shape[0], dtype=cp.int32)
+                
+                # Now directly map neighboring_pixels to pixel indices using lookup
+                pixel_index_map = pix_lookup[neighboring_pixels]
                 RangePop()
 
                 RangePush("track_pixel_map")
