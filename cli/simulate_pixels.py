@@ -1299,7 +1299,7 @@ def run_simulation(input_filename,
                     light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                     light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                     sipm_response = np.zeros(n_light_ticks, dtype=np.float32)
-                    light_sim.sipm_response_fast(sipm_response) #precalculate the sipm_response
+                    light_sim.sipm_response_array(sipm_response) #precalculate the sipm_response
                     light_sim.calc_light_detector_response[BPG, TPB](
                         light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                         light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response)

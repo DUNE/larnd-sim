@@ -298,10 +298,25 @@ def sipm_response_model(time_tick):
         return impulse
 
 @nb.njit()
-def sipm_response_fast(sipm_response):
-    for time_tick in range(sipm_response.shape[0]):
-        sipm_response[time_tick] = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
-    sipm_response /= light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
+def sipm_response_array(sipm_response):
+    """
+    Calculates the SiPM response from a PE at every `time_tick` relative to the PE time
+    for the given array
+    
+    Args:
+        sipm_response: array to store response
+    """
+    if light.SIPM_RESPONSE_MODEL == 0:
+        for time_tick in range(sipm_response.shape[0]):
+            t = time_tick * light.LIGHT_TICK_SIZE
+            sipm_response[time_tick] = (t>=0) * exp(-t/light.LIGHT_RESPONSE_TIME) * sin(t/light.LIGHT_OSCILLATION_PERIOD)
+        sipm_response /= light.LIGHT_OSCILLATION_PERIOD * light.LIGHT_RESPONSE_TIME**2
+        sipm_response *= light.LIGHT_OSCILLATION_PERIOD**2 + light.LIGHT_RESPONSE_TIME**2
+
+    if light.SIPM_RESPONSE_MODEL == 1:
+        for time_tick in range(sipm_response.shape[0]):
+            sipm_response[time_tick] = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
+        sipm_response /= light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
 
 @cuda.jit
 def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
