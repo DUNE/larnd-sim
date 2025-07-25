@@ -1284,9 +1284,11 @@ def run_simulation(input_filename,
                     light_sample_inc_scint = cp.zeros_like(light_sample_inc)
                     light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                     light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                    scint_model = np.zeros(n_light_ticks, dtype=np.float32)
+                    light_sim.scintillation_array(scint_model)
                     light_sim.calc_scintillation_effect[BPG, TPB](
                         light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                        light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
+                        light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model)
 
                     light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                     rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),

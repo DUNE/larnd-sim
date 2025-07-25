@@ -144,9 +144,23 @@ def scintillation_model(time_tick):
     p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
     return (p1 + p3) * (time_tick >= 0)
 
+@nb.njit
+def scintillation_array(scint_model):
+    """
+    Calculates the fraction of scintillation photons emitted 
+    during time interval `time_tick` to `time_tick + 1` for
+    the entire input array.
+    
+    Args:
+        scint_model: array to store result
+    """
+    for time_tick in range(scint_model.shape[0]):
+        p1 = light.SINGLET_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
+        p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
+        scint_model[time_tick] = p1 + p3
 
 @cuda.jit
-def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons):
+def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
     """
     Applies a smearing effect due to the liquid argon scintillation time profile using
     a two decay component scintillation model.
@@ -164,7 +178,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 if light_sample_inc[idet,jtick] == 0:
                     continue
-                tick_weight = scintillation_model(itick-jtick)
+                tick_weight = scint_model[itick-jtick]
                 light_sample_inc_scint[idet,itick] += tick_weight * light_sample_inc[idet,jtick]
 
                 # loop over convolution tick truth
