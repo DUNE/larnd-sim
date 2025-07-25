@@ -1080,94 +1080,6 @@ def run_simulation(input_filename,
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
 
-            # ~~~ Light detector response simulation ~~~
-            if light.LIGHT_SIMULATED:
-                RangePush("sum_light_signals")
-                light_inc = light_sim_dat[batch_mask]
-                selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
-                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
-                n_light_ticks = min(n_light_ticks,int(5E4))
-                # at least the optical channels from a whole module are activated together
-
-                # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
-                # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
-                # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
-                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
-                op_channel = cp.array(op_channel)
-                #op_channel = light_sim.get_active_op_channel(light_inc)
-                n_light_det = op_channel.shape[0]
-                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
-
-                ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
-                ### FIXME: this is a temporary fix to avoid memory issues ###
-                sorted_indices = np.zeros((n_light_det, all_selected_tracks.shape[0]), dtype=np.int32)
-
-                for idet in range(n_light_det):
-                    sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
-                ### END OF TEMPORARY FIX ###
-
-                TPB = (1,64)
-                BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
-                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                light_sim.sum_light_signals[BPG, TPB](
-                    all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
-                    light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                    light_sample_inc_true_photons, sorted_indices, t0_profile_length)
-                RangePop()
-                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
-                    warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
-
-                RangePush("sim_scintillation")
-                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                light_sim.calc_scintillation_effect[BPG, TPB](
-                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
-
-                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
-                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                        seed=rand_seed, rng_states=rng_states)
-                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
-                RangePop()
-
-                RangePush("sim_light_det_response")
-                light_response = cp.zeros_like(light_sample_inc)
-                light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                light_sim.calc_light_detector_response[BPG, TPB](
-                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                    light_response, light_response_true_track_id, light_response_true_photons, light_gain)
-                #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-                RangePop()
-
-                RangePush("sim_light_triggers")
-                light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
-                light_threshold = light_threshold.ravel()[op_channel.get()].copy()
-                light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
-                TPB = (1,1,64)
-                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
-                        max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
-                        max(ceil(digit_samples / TPB[2]),1))
-
-                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-                    digit_samples, light_noise)
-                RangePop()
-
-                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
-                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-                results_acc['light_trigger_idx'].append(trigger_idx)
-                results_acc['trigger_type'].append(trigger_type)
-                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-                results_acc['light_waveforms'].append(light_digit_signal)
-                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-
             for ipix in tqdm(range(0, all_unique_pix.shape[0], PIXEL_BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
                 selected_pix = all_unique_pix[ipix:ipix+PIXEL_BATCH_SIZE]
@@ -1388,7 +1300,95 @@ def run_simulation(input_filename,
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
-            if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
+             # ~~~ Light detector response simulation ~~~
+            if light.LIGHT_SIMULATED:
+                RangePush("sum_light_signals")
+                light_inc = light_sim_dat[batch_mask]
+                selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
+                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
+                n_light_ticks = min(n_light_ticks,int(5E4))
+                # at least the optical channels from a whole module are activated together
+
+                # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
+                # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
+                # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
+                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                op_channel = cp.array(op_channel)
+                #op_channel = light_sim.get_active_op_channel(light_inc)
+                n_light_det = op_channel.shape[0]
+                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+
+                ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
+                ### FIXME: this is a temporary fix to avoid memory issues ###
+                sorted_indices = np.zeros((n_light_det, all_selected_tracks.shape[0]), dtype=np.int32)
+
+                for idet in range(n_light_det):
+                    sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
+                ### END OF TEMPORARY FIX ###
+
+                TPB = (1,64)
+                BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
+                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
+                light_sim.sum_light_signals[BPG, TPB](
+                    all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
+                    light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                    light_sample_inc_true_photons, sorted_indices, t0_profile_length)
+                RangePop()
+                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
+                    warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
+
+                RangePush("sim_scintillation")
+                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
+                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                light_sim.calc_scintillation_effect[BPG, TPB](
+                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
+                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
+
+                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
+                                                        seed=rand_seed, rng_states=rng_states)
+                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                RangePop()
+
+                RangePush("sim_light_det_response")
+                light_response = cp.zeros_like(light_sample_inc)
+                light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                light_sim.calc_light_detector_response[BPG, TPB](
+                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                    light_response, light_response_true_track_id, light_response_true_photons, light_gain)
+                #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+                RangePop()
+
+                RangePush("sim_light_triggers")
+                light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
+                light_threshold = light_threshold.ravel()[op_channel.get()].copy()
+                light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
+                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
+                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                TPB = (1,1,64)
+                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+                        max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
+                        max(ceil(digit_samples / TPB[2]),1))
+
+                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+                    digit_samples, light_noise)
+                RangePop()
+
+                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
+                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+                results_acc['light_trigger_idx'].append(trigger_idx)
+                results_acc['trigger_type'].append(trigger_type)
+                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+                results_acc['light_waveforms'].append(light_digit_signal)
+                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+
+           if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
                     i_trig += 1 # add to the trigger counter
