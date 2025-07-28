@@ -361,6 +361,21 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     DIFF_N_SIGMAS = detprop.get('signal_overlap_cut', DIFF_N_SIGMAS)
 
     if not geo_only:
+         # Get response sampling and bin size
+        if response_file is not None:
+            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
+            if isinstance(response_file, list):
+                if i_module < 0:
+                    response_file = response_file[0]
+                else:
+                    response_file = response_file[i_module-1]
+            response = cp.load(response_file)
+            RESPONSE_SAMPLING = float(response['time_tick'])
+            RESPONSE_BIN_SIZE = float(response['bin_size'])
+            MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
+        else:
+            warnings.warn(f'Charge response not set!')
+
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
         DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
         ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
@@ -395,26 +410,15 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
         TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-        # Get response sampling and bin size
-        if response_file is not None:
-            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
-            if isinstance(response_file, list):
-                if i_module < 0:
-                    response_file = response_file[0]
-                else:
-                    response_file = response_file[i_module-1]
-            response = cp.load(response_file)
-            RESPONSE_SAMPLING = float(response['time_tick'])
-            RESPONSE_BIN_SIZE = float(response['bin_size'])
-            MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
-            MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
-            NEIGHBORING_PIX_DIST = []
-            for i in range(MAX_RADIUS + 1):
-                for j in range(MAX_RADIUS + 1):
-                    NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
-            NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
-        else:
-            warnings.warn(f'Charge response not set!')
+        MAX_RADIUS = float(detprop.get('max_radius', MAX_RADIUS))
+
+        # Prepare neighbouring pixel distance for backtracking
+        # Currently backtracking range is used to convert from segment base to pixel base
+        NEIGHBORING_PIX_DIST = []
+        for i in range(MAX_RADIUS + 1):
+            for j in range(MAX_RADIUS + 1):
+                NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
+        NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME
