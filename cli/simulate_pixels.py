@@ -14,9 +14,6 @@ import numpy.lib.recfunctions as rfn
 import cupy as cp
 from cupy.cuda.nvtx import RangePush, RangePop
 
-# TODO: Make this a simulation_property
-PIXEL_BATCH_SIZE = int(os.getenv('LARNDSIM_PIXEL_BATCH_SIZE', '3200'))
-
 # Disabling the memory pool is useful when profiling
 # (we can then match memory spikes to the responsible allocations)
 if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
@@ -400,7 +397,6 @@ def run_simulation(input_filename,
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
     print("")
-    print("Pixel batch size:", PIXEL_BATCH_SIZE)
     print("Compression:", compression)
     print("Random seed:", rand_seed)
     print("Simulation properties file:", simulation_properties)
@@ -1080,11 +1076,11 @@ def run_simulation(input_filename,
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
 
-            for ipix in tqdm(range(0, all_unique_pix.shape[0], PIXEL_BATCH_SIZE),
+            for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
-                selected_pix = all_unique_pix[ipix:ipix+PIXEL_BATCH_SIZE]
+                selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
 
-                selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+PIXEL_BATCH_SIZE])
+                selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
                 selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
                 if selected_track_idcs.size == 0:
                     continue
@@ -1380,7 +1376,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-           if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
+            if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
                     i_trig += 1 # add to the trigger counter
