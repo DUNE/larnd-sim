@@ -1185,8 +1185,8 @@ def run_simulation(input_filename,
                                                   offset_backtrack,
                                                   overflow_flag)
                 if cp.any(overflow_flag):
-                    warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
-                                  + f"{sim.MAX_TRACKS_PER_PIXEL}")
+                    warnings.warn(f"More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, {sim.MAX_TRACKS_PER_PIXEL},
+                                    or no segments contributed to some pixels.")
 
                 RangePop()
 
