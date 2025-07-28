@@ -1121,15 +1121,7 @@ def run_simulation(input_filename,
                                                       max_radius)
                 RangePop()
 
-                RangePush("unique_pix")
-                shapes = neighboring_pixels.shape
-                joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
-                unique_pix = cp.unique(joined)
-                unique_pix = unique_pix[(unique_pix != -1)]
-                # XXX
-                # assert (cp.sort(unique_pix) == cp.sort(selected_pix)).all()
                 unique_pix = selected_pix
-                RangePop()
 
                 RangePush("tracks_current")
                 # Here we find the longest signal in time
