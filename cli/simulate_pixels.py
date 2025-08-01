@@ -36,6 +36,7 @@ if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
 import fire
 import h5py
 
+import numba as nb
 from numba.cuda import device_array, to_device
 from numba.cuda.random import create_xoroshiro128p_states
 from numba.core.errors import NumbaPerformanceWarning
@@ -124,6 +125,16 @@ def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
 ###################################
 # Kazu 2024-07-01 Useful if we modify the output to store all contributions
 ###################################
+@nb.njit
+def _invert_array_map_inner(in_map, pix_id2idx, curr_idx, out_map):
+    for seg_idx in range(in_map.shape[0]):
+        ass = in_map[seg_idx]
+        for pixid in ass:
+            if pixid<0: break
+            pix_idx = pix_id2idx[pixid.item()]
+            out_map[pix_idx][curr_idx[pix_idx]]=seg_idx
+            curr_idx[pix_idx] += 1
+
 def invert_array_map(in_map,pix_set):
     '''
     Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
@@ -137,17 +148,11 @@ def invert_array_map(in_map,pix_set):
     '''
     pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
 
-    pix_id2idx = {val.item():i for i,val in enumerate(pix_set)}
+    pix_id2idx = {val: i for i,val in enumerate(pix_set.get())}
 
     mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
     curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
-    for seg_idx in range(in_map.shape[0]):
-        ass = in_map[seg_idx]
-        for pixid in ass:
-            if pixid<0: break
-            pix_idx = pix_id2idx[pixid.item()]
-            mymap[pix_idx][curr_idx[pix_idx]]=seg_idx
-            curr_idx[pix_idx] += 1
+    _invert_array_map_inner(in_map, pix_id2idx, curr_idx, mymap)
     return cp.array(mymap)
 
 def run_simulation(input_filename,
