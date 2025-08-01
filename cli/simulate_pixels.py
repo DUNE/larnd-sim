@@ -127,7 +127,7 @@ def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
 def invert_array_map(in_map,pix_set):
     '''
     Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
-    pixel index => a set of segment IDs.
+    pixel index => a set of segment indexes (not IDs).
 
     Args:
         in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
