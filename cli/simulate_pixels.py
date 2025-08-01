@@ -148,7 +148,10 @@ def invert_array_map(in_map,pix_set):
     '''
     pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
 
-    pix_id2idx = {val: i for i,val in enumerate(pix_set.get())}
+    pix_id2idx = nb.typed.Dict.empty(key_type=nb.types.int64,
+                                     value_type=nb.types.int64)
+    for i, val in enumerate(pix_set.get()):
+        pix_id2idx[val] = i
 
     mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
     curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
