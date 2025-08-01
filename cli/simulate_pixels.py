@@ -139,8 +139,8 @@ def invert_array_map(in_map,pix_set):
 
     pix_id2idx = {val.item():i for i,val in enumerate(pix_set)}
 
-    mymap=cp.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
-    curr_idx=cp.zeros(shape=(len(pix_id2idx),),dtype=int)
+    mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
+    curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
     for seg_idx in range(in_map.shape[0]):
         ass = in_map[seg_idx]
         for pixid in ass:
@@ -148,7 +148,7 @@ def invert_array_map(in_map,pix_set):
             pix_idx = pix_id2idx[pixid.item()]
             mymap[pix_idx][curr_idx[pix_idx]]=seg_idx
             curr_idx[pix_idx] += 1
-    return mymap
+    return cp.array(mymap)
 
 def run_simulation(input_filename,
                    output_filename,
