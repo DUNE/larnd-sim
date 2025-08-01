@@ -155,7 +155,7 @@ def invert_array_map(in_map,pix_set):
 
     mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
     curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
-    _invert_array_map_inner(in_map, pix_id2idx, curr_idx, mymap)
+    _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
     return cp.array(mymap)
 
 def run_simulation(input_filename,
