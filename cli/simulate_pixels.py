@@ -1127,6 +1127,20 @@ def run_simulation(input_filename,
 
                 unique_pix = selected_pix
 
+                # Above, in get_pixels, the pixels returned in active_pixels may be
+                # a superset of the pixels in selected_pix. The next few lines filter out
+                # pixels that are not found in selected_pix (equivalent to unique_pix).
+                # Even if we don't remove the superfluous pixels here, the code seems to
+                # do it on its own later, but we don't want to rely on that...
+                active_pixels_isin_unique_pix = np.isin(active_pixels, unique_pix)
+                active_pixels[~active_pixels_isin_unique_pix] = -1
+
+                isin_unique_pix = np.isin(neighboring_pixels, unique_pix)
+                neighboring_pixels[~isin_unique_pix] = -1
+                neighboring_radius[~isin_unique_pix] = -1
+
+                n_pixels_list = isin_unique_pix.sum(axis = -1)
+
                 RangePush("tracks_current")
                 # Here we find the longest signal in time
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
