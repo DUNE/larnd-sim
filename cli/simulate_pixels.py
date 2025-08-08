@@ -1186,11 +1186,13 @@ def run_simulation(input_filename,
 
                 RangePush("pixel_index_map")
                 # Here we create a map between tracks and index in the unique pixel array
-                pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-                for i_ in range(selected_tracks.shape[0]):
-                    compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
-                    indices = cp.where(compare)
-                    pixel_index_map[i_, indices[0]] = indices[1]
+                # First, create a lookup table for unique_pix values to their indices
+                max_pix_val = int(cp.max(unique_pix)) + 1
+                pix_lookup = cp.full((max_pix_val,), -1, dtype=cp.int32)
+                pix_lookup[unique_pix] = cp.arange(unique_pix.shape[0], dtype=cp.int32)
+                
+                # Now directly map neighboring_pixels to pixel indices using lookup
+                pixel_index_map = pix_lookup[neighboring_pixels]
                 RangePop()
 
                 RangePush("track_pixel_map")
@@ -1353,9 +1355,11 @@ def run_simulation(input_filename,
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
                 light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                scint_model = np.zeros(n_light_ticks, dtype=np.float32)
+                light_sim.scintillation_array(scint_model)
                 light_sim.calc_scintillation_effect[BPG, TPB](
                     light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
+                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model)
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
@@ -1367,9 +1371,11 @@ def run_simulation(input_filename,
                 light_response = cp.zeros_like(light_sample_inc)
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                sipm_response = np.zeros(n_light_ticks, dtype=np.float32)
+                light_sim.sipm_response_array(sipm_response) #precalculate the sipm_response
                 light_sim.calc_light_detector_response[BPG, TPB](
                     light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                    light_response, light_response_true_track_id, light_response_true_photons, light_gain)
+                    light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response)
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()
 
