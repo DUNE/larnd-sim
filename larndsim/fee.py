@@ -269,7 +269,7 @@ def export_to_hdf5(event_id_list,
                             continue
                 p.chip_key = chip_key
                 p.channel_id = channel
-                p.receipt_timestamp = time_tick
+                p.receipt_timestamp = time_tick + 20 * detector.CLOCK_CYCLE
                 p.packet_type = 0
                 p.first_packet = 1
                 p.assign_parity()
@@ -677,8 +677,7 @@ def get_adc_values(pixels_signals,
                 crossing_time_tick = min((ic, len(time_ticks)-1))
                 # handle case when tick extends past end of current array
                 post_adc_ticks = max((ic - crossing_time_tick, 0))
-                #+2-tick delay from when the PACMAN receives the trigger and when it registers it.
-                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding-2+post_adc_ticks
+                adc_ticks_list[ip][iadc] = time_ticks[crossing_time_tick]+time_padding+post_adc_ticks
 
                 ic += round(detector.RESET_CYCLES * detector.CLOCK_CYCLE / detector.TIME_SAMPLING)
                 last_reset = ic
