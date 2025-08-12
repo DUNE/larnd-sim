@@ -532,7 +532,7 @@ def digitize(integral_list, gain=detector.GAIN * mV / e, pedestal=detector.V_PED
     return adcs
 
 # @cuda.jit
-@cuda.jit(max_registers=64)
+@cuda.jit(max_registers=128)
 def get_adc_values(pixels_signals,
                    pixels_signals_tracks,
                    num_backtrack,

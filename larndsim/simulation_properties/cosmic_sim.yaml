@@ -1,4 +1,4 @@
-batch_size: 10000             # track segments
+pixel_batch_size: 2000       # pixels
 event_batch_size: 2          # tpcs
 write_batch_size: 1          # batches
 is_spill_sim: 0              # boolean
