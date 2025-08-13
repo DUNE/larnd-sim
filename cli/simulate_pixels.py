@@ -1034,8 +1034,6 @@ def run_simulation(input_filename,
             # the anode plane using the Bresenham's algorithm. We also take into
             # account the neighboring pixels, due to the transverse diffusion of the charges.
             RangePush("max_pixels")
-            all_max_radius = ceil(max(all_selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
-
             TPB = 128
             BPG = max(ceil(all_selected_tracks.shape[0] / TPB),1)
             all_max_pixels = np.array([0])
@@ -1044,7 +1042,8 @@ def run_simulation(input_filename,
 
             # This formula tries to estimate the maximum number of pixels which can have
             # a current induced on them.
-            all_max_neighboring_pixels = (2*all_max_radius+1)*all_max_pixels[0]+(1+2*all_max_radius)*all_max_radius*2
+            all_max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*all_max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
+            all_max_neighboring_pixels = np.clip([all_max_neighboring_pixels], all_max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the all_max_neighboring_pixels by the total number of pixels in a TPC
 
             all_active_pixels = cp.full((all_selected_tracks.shape[0], all_max_pixels[0]), -1, dtype=np.int32)
             all_neighboring_pixels = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
@@ -1064,8 +1063,7 @@ def run_simulation(input_filename,
                                                   all_active_pixels,
                                                   all_neighboring_pixels,
                                                   all_neighboring_radius,
-                                                  all_n_pixels_list,
-                                                  all_max_radius)
+                                                  all_n_pixels_list)
             RangePop()
 
             RangePush("unique_pix")
