@@ -35,7 +35,7 @@ light_gain: -7.0
 light_tick_size: 0.016 # us
 light_det_noise_sample_spacing: 0.016 # us
 light_trig_threshold: [-2000, -4500] # [LCM, ACL]
-light_trig_mode: 1
+light_trig_mode: 0
 light_window: [0.00, 8.64] # us
 light_trig_window: [0.96, 8.64] # us
 light_digit_sample_spacing: 0.016 # us
