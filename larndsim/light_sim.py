@@ -144,9 +144,23 @@ def scintillation_model(time_tick):
     p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
     return (p1 + p3) * (time_tick >= 0)
 
+@nb.njit
+def scintillation_array(scint_model):
+    """
+    Calculates the fraction of scintillation photons emitted 
+    during time interval `time_tick` to `time_tick + 1` for
+    the entire input array.
+    
+    Args:
+        scint_model: array to store result
+    """
+    for time_tick in range(scint_model.shape[0]):
+        p1 = light.SINGLET_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
+        p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
+        scint_model[time_tick] = p1 + p3
 
 @cuda.jit
-def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons):
+def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
     """
     Applies a smearing effect due to the liquid argon scintillation time profile using
     a two decay component scintillation model.
@@ -164,7 +178,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 if light_sample_inc[idet,jtick] == 0:
                     continue
-                tick_weight = scintillation_model(itick-jtick)
+                tick_weight = scint_model[itick-jtick]
                 light_sample_inc_scint[idet,itick] += tick_weight * light_sample_inc[idet,jtick]
 
                 # loop over convolution tick truth
@@ -267,12 +281,10 @@ def interp(idx, arr, low, high):
     i1 = i0 + 1
     v0 = arr[i0]
     v1 = arr[i1]
-
     return v0 + (v1 - v0) * (idx - i0)
-                
 
-@nb.njit
-def sipm_response_model(idet, time_tick):
+@nb.njit()
+def sipm_response_model(time_tick):
     """
     Calculates the SiPM response from a PE at `time_tick` relative to the PE time
     
@@ -298,10 +310,30 @@ def sipm_response_model(idet, time_tick):
         # normalize to 1
         impulse /=  light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
         return impulse
-            
+
+@nb.njit()
+def sipm_response_array(sipm_response):
+    """
+    Calculates the SiPM response from a PE at every `time_tick` relative to the PE time
+    for the given array
+    
+    Args:
+        sipm_response: array to store response
+    """
+    if light.SIPM_RESPONSE_MODEL == 0:
+        for time_tick in range(sipm_response.shape[0]):
+            t = time_tick * light.LIGHT_TICK_SIZE
+            sipm_response[time_tick] = (t>=0) * exp(-t/light.LIGHT_RESPONSE_TIME) * sin(t/light.LIGHT_OSCILLATION_PERIOD)
+        sipm_response /= light.LIGHT_OSCILLATION_PERIOD * light.LIGHT_RESPONSE_TIME**2
+        sipm_response *= light.LIGHT_OSCILLATION_PERIOD**2 + light.LIGHT_RESPONSE_TIME**2
+
+    if light.SIPM_RESPONSE_MODEL == 1:
+        for time_tick in range(sipm_response.shape[0]):
+            sipm_response[time_tick] = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
+        sipm_response /= light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
 
 @cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain):
+def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
     """
     Simulates the SiPM reponse and digit
     
@@ -316,7 +348,7 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
             
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
-                tick_weight = sipm_response_model(idet, itick-jtick)
+                tick_weight = sipm_response[itick-jtick]
                 light_response[idet,itick] += light_gain[idet] * tick_weight * light_sample_inc[idet,jtick]
                     
                 # loop over convolution tick truth
@@ -631,33 +663,31 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
 
     Returns:
-        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on arecorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
+        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
-    event_id, trigger_id, op_channel_id, segment_id, pe_current, tick = [[] for i in range(6)]
-    indices = [index for index, x in np.ndenumerate(waveforms_true_track_id) if x!=-1]
+    # Get total number of non-default entries
+    mask = waveforms_true_track_id != -1
+    num_idx = np.prod(waveforms_true_track_id[mask].shape)
+    # Get indices of those valid entires and destructure the tuple
+    idx0, idx1, idx2, idx3 = np.nonzero(waveforms_true_track_id != -1)
+
     truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
-    for i in range(len(indices)):
-        this_trig = indices[i][0]
-        i_trig = i_trig + this_trig #FIXME currently indices[i][0] is always 0. probably further change is needed for multiple light triggers in one trueevent
-        i_op_channel = indices[i][1]
-        i_sample = indices[i][2]
-        i_content = indices[i][3]
-        trigger_id.append(i_trig)
-        op_channel_id.append(op_channel[i_op_channel]) # in case of non trivial op channel indexing
-        tick.append(i_sample)
-        event_id.append(i_evt)
-        segment_id.append(waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content])
-        pe_current.append(waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
-    truth_data = np.empty(len(indices), dtype=truth_dtype)
-    truth_data['trigger_id'] = np.array(trigger_id)
-    truth_data['op_channel_id'] = np.array(op_channel_id)
-    truth_data['tick'] = np.array(tick)
-    truth_data['event_id'] = np.array(event_id)
-    truth_data['segment_id'] = np.array(segment_id)
-    truth_data['pe_current'] = np.array(pe_current)
+    truth_data = np.empty(num_idx, dtype=truth_dtype)
+
+    # Careful with all the indices
+    for x, (i, j, k, l) in enumerate(zip(idx0, idx1, idx2, idx3)):
+        this_trig = i #idx0
+        i_trig = i_trig + i #FIXME currently idx0 is always 0. probably further change is needed for multiple light triggers in one trueevent
+        i_op_channel = j #idx1
+        i_sample = k  #idx2
+        i_content = l #idx3
+        truth_data[x] = (i_trig, op_channel[i_op_channel], i_sample, i_evt,
+                         waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content],
+                         waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
+
     return truth_data
 
 def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1, compression=None):
@@ -763,7 +793,7 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression)
     export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod, compression)
 
-def merge_module_light_wvfm_same_trigger(output_filename):
+def merge_module_light_wvfm_same_trigger(output_filename, compression=None):
     """
     Merge light waveforms for each module if the modular variation is activated
     """
