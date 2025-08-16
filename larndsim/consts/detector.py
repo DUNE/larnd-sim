@@ -56,11 +56,13 @@ RESPONSE_SAMPLING = 0.05
 RESPONSE_BIN_SIZE = 0.04434
 #: The longest cathode charge response in time :math:`\mu s`
 RESPONSE_MAX_TIME = 0.0
+#: The maximum radius to consider the neighbouring charge response
+MAX_RADIUS = 4
 #: The step size to chop up segments :math:`cm`
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
 #: and the bin size in t is 50 ns, which is roughly 0.007 cm
-MIN_STEP_SIZE = 0.0064 # cm, previously we were using 0.001 cm
+MIN_STEP_SIZE = 0.001 # allow per response bin to have a "reasonable" diffusion distribution
 #: Default value for pixel_plane, to indicate out-of-bounds edep
 DEFAULT_PLANE_INDEX = 0x0000BEEF
 #: Total number of pixels
@@ -131,6 +133,13 @@ DISCRIMINATOR_NOISE = 650 # e
 EVENT_RATE = 100000 # 10Hz
 #: Offset of the non-beam event time in microseconds
 NON_BEAM_EVENT_GAP = 0 # us
+#: T0 delay cut 
+#: The assumption is the late signals are small, and if they don't overlap with the main, they are not considered
+SIGNAL_OVERLAP_CUT = 30 # us
+#: Pad the signal range to allow N sigmas of diffusion
+DIFF_N_SIGMAS = 5
+#: Distances of the neighboring pixels to the center pixel
+NEIGHBORING_PIX_DIST = []
 
 def electron_mobility(efield, temperature):
     """
@@ -230,6 +239,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global TPC_TO_MODULE
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
+    global MAX_RADIUS
     global MIN_STEP_SIZE
     global TPC_OFFSETS
     global MOD_IDS
@@ -253,6 +263,9 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global DISCRIMINATOR_NOISE
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
+    global SIGNAL_OVERLAP_CUT
+    global DIFF_N_SIGMAS
+    global NEIGHBORING_PIX_DIST
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -264,35 +277,6 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     TPC_OFFSETS = np.array(detprop['tpc_offsets'])
     # Inverting x and z axes
     TPC_OFFSETS[:, [2, 0]] = TPC_OFFSETS[:, [0, 2]]
-
-    if not geo_only:
-        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
-
-        e_field_bucket = detprop.get('e_field', E_FIELD)
-        E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
-        V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
-
-        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
-        ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
-
-        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
-        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
-
-        # Get response sampling and bin size
-        if response_file is not None:
-            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
-            if isinstance(response_file, list):
-                if i_module < 0:
-                    response_file = response_file[0]
-                else:
-                    response_file = response_file[i_module-1]
-            response = cp.load(response_file)
-            RESPONSE_SAMPLING = float(response['time_tick'])
-            RESPONSE_BIN_SIZE = float(response['bin_size'])
-            MIN_STEP_SIZE = min(RESPONSE_BIN_SIZE, RESPONSE_SAMPLING*V_DRIFT)
-        else:
-            warnings.warn(f'Charge response not set!')
-
 
     # if module variation for pixel layout file exist, "pixel_file" is a list of pixel layout file with the length of module number
     if isinstance(pixel_file, list):
@@ -373,7 +357,25 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     MODULE_TO_TPCS = detprop['module_to_tpcs']
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
+    SIGNAL_OVERLAP_CUT = detprop.get('signal_overlap_cut', SIGNAL_OVERLAP_CUT)
+    DIFF_N_SIGMAS = detprop.get('signal_overlap_cut', DIFF_N_SIGMAS)
+
     if not geo_only:
+         # Get response sampling and bin size
+        if response_file is not None:
+            # if module variation for response file exist, "response_file" is a list of response file with the length of module number
+            if isinstance(response_file, list):
+                if i_module < 0:
+                    response_file = response_file[0]
+                else:
+                    response_file = response_file[i_module-1]
+            response = cp.load(response_file)
+            RESPONSE_SAMPLING = float(response['time_tick'])
+            RESPONSE_BIN_SIZE = float(response['bin_size'])
+            MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
+        else:
+            warnings.warn(f'Charge response not set!')
+
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
         DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
         ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
@@ -395,6 +397,28 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
+
+        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+
+        e_field_bucket = detprop.get('e_field', E_FIELD)
+        E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
+        V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
+
+        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
+        ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
+
+        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
+        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
+
+        MAX_RADIUS = int(detprop.get('max_radius', MAX_RADIUS))
+
+        # Prepare neighbouring pixel distance for backtracking
+        # Currently backtracking range is used to convert from segment base to pixel base
+        NEIGHBORING_PIX_DIST = []
+        for i in range(MAX_RADIUS + 1):
+            for j in range(MAX_RADIUS + 1):
+                NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
+        NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME
