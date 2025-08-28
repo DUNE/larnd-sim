@@ -1238,7 +1238,7 @@ def run_simulation(input_filename,
 
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
-                                                  cp.array(selected_tracks['t0']),
+                                                  cp.array(selected_tracks['t0']/detector.TIME_SAMPLING, dtype = int),
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,
