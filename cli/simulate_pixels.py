@@ -1223,7 +1223,7 @@ def run_simulation(input_filename,
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
                 # pixels_tracks_signals is a jagged array of conceptual dimension
-                # (#unique_pix, #ticks, backtracked_segments)
+                # (#ticks, #unique_pix, backtracked_segments)
                 # where the final axis (over segments) is jagged.
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
