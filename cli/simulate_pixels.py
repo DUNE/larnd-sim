@@ -1191,6 +1191,9 @@ def run_simulation(input_filename,
                 
                 # Now directly map neighboring_pixels to pixel indices using lookup
                 pixel_index_map = pix_lookup[neighboring_pixels]
+                # Some elements of neighboring_pixels can have values of -1.
+                # We want to make sure these pixels are also removed in pixel_index_map.`
+                pixel_index_map[neighboring_pixels==-1] = -1
                 RangePop()
 
                 RangePush("track_pixel_map")
