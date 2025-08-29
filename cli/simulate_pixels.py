@@ -306,6 +306,8 @@ def run_simulation(input_filename,
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
+    
+    
 
     if not os.path.exists(input_filename):
         raise Exception(f'Input file {input_filename} does not exist.')
@@ -591,6 +593,20 @@ def run_simulation(input_filename,
             tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
+        # Filter out neutrons and gammas, which will not directly create visible charge or light
+        # (excluding these segments here results in a modest ~10% improvement to memory usage later on,
+        # since this reduces the size of the arrays CUDA must inialize for pixel current calculations)
+        neutrals_mask = (tracks['pdg_id'] != 2112) & (tracks['pdg_id'] != 22)
+        if sum(~neutrals_mask) > 0: print("Rejected ",sum(~neutrals_mask), "track segments from neutral particles")
+        tracks = tracks[neutrals_mask]
+
+        # Filter out highly-delayed segments
+        t0_delay_mask = (tracks['t0'] < sim.MAX_SEGMENT_T0)
+        if sum(~t0_delay_mask) > 0:
+          print("Rejected ",sum(~t0_delay_mask)," highly-delayed segments with T0 > ",sim.MAX_SEGMENT_T0," us: ")
+          for val in tracks[~t0_delay_mask]: print(' t0 = ',val['t0'])
+        tracks = tracks[t0_delay_mask] 
+
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
             trajectory_ids = tracks['file_traj_id']
@@ -757,15 +773,7 @@ def run_simulation(input_filename,
     active_tracks = all_mod_tracks[active_tracks_mask]
     active_segment_ids = all_mod_segment_ids[active_tracks_mask]
     active_trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
-
-    t0_delay_mask = (active_tracks['t0'] < detector.SIGNAL_OVERLAP_CUT)
-    tracks = active_tracks[t0_delay_mask]
-    segment_ids = active_segment_ids[t0_delay_mask]
-    trajectory_ids = active_trajectory_ids[t0_delay_mask]
-    end_mask = time()
-    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut. \
-            In addition, {np.count_nonzero(~t0_delay_mask)} segments are removed due to the t0 delay cut.")
-    print(f" {end_mask-start_mask:.2f} s")
+    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut.")
 
     # We need to make cupy arrays of these and pass them to the kernels;
     # otherwise numba will try to use the GPU's "global constant" memory

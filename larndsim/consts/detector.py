@@ -135,7 +135,7 @@ EVENT_RATE = 100000 # 10Hz
 NON_BEAM_EVENT_GAP = 0 # us
 #: T0 delay cut 
 #: The assumption is the late signals are small, and if they don't overlap with the main, they are not considered
-SIGNAL_OVERLAP_CUT = 30 # us
+SIGNAL_OVERLAP_CUT = 30 # us --> NOTE: this is now controlled by sim.MAX_SEGMENT_T0
 #: Pad the signal range to allow N sigmas of diffusion
 DIFF_N_SIGMAS = 5
 #: Distances of the neighboring pixels to the center pixel
