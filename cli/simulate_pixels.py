@@ -306,8 +306,6 @@ def run_simulation(input_filename,
 
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
-    
-    
 
     if not os.path.exists(input_filename):
         raise Exception(f'Input file {input_filename} does not exist.')
