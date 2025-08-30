@@ -358,7 +358,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     TPC_TO_MODULE = dict([(tpc, mod) for mod,tpcs in MODULE_TO_TPCS.items() for tpc in tpcs])
 
     SIGNAL_OVERLAP_CUT = detprop.get('signal_overlap_cut', SIGNAL_OVERLAP_CUT)
-    DIFF_N_SIGMAS = detprop.get('signal_overlap_cut', DIFF_N_SIGMAS)
+    DIFF_N_SIGMAS = detprop.get('diff_n_sigmas', DIFF_N_SIGMAS)
 
     if not geo_only:
          # Get response sampling and bin size
