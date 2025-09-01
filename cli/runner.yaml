@@ -16,3 +16,6 @@ ncu:
   kernels: ["calc_light_detector_response"]
   output_dir: "test/ncu"
   output_file: "larnd-sim.profile"
+
+compare:
+  reference: "larnd-sim-reference.hdf5"

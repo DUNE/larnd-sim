@@ -53,7 +53,7 @@ setuptools.setup(
     'bin/*.npy',
     'bin/*.npz',
     ]},
-    scripts=["cli/simulate_pixels.py", "cli/dumpTree.py", "cli/list_config_keys.py"],
+    scripts=["cli/simulate_pixels.py", "cli/dumpTree.py", "cli/list_config_keys.py", "cli/diff_files.py", "cli/lar_runner.py"],
     install_requires=reqs,
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",

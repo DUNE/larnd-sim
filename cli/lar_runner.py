@@ -20,7 +20,7 @@ def setup_logging(verbose: bool = False) -> None:
 
 def load_defaults(config_name: str, verbose: bool = False) -> dict:
     #Checking if config_name is None
-    config_name = config_name if config_name else 'config.yaml'
+    config_name = config_name if config_name else 'runner.yaml'
 
     print(f"Opening {config_name}")
     with open(config_name, 'r') as file:
@@ -64,7 +64,7 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     output_file = args.output if args.output else larnd_config['output_file']
     logger.info(f"Output filename: {output_file}")
 
-    default_seed = larnd_config.get('rng_seed', 321)
+    default_seed = args.rand_seed if args.rand_seed else larnd_config.get('rng_seed', 321)
     compression = larnd_config.get('compression', None)
 
     cmd = f"simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_file}"
@@ -124,6 +124,7 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
     cmd += build_larnd_cmd(larnd_config)
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
+        return 0
     else:
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
@@ -169,6 +170,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     cmd += build_larnd_cmd(larnd_config)
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
+        return 0
     else:
         print(f"Complete command:\n {cmd}")
         tmp = subprocess.run('dcgmi profile --pause', shell=True)
@@ -179,12 +181,28 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
 def cmd_compare(args: argparse.Namespace, config: dict) -> int:
     """Handle the 'compare' subcommand for comparing larnd-sim output."""
     logger = logging.getLogger(__name__)
-    logger.info(f"Comparing files: {args.files}")
+    compare_config = config['compare']
 
-    # TODO: Implement comparison logic here
+    ref_file = args.reference if args.reference else compare_config['reference']
+    sim_file = args.file
 
-    return 0
+    logger.info(f"Reference file: {ref_file}")
+    logger.info(f"Target file: {sim_file}")
+    cmd = f"diff_files.py --ref_file {ref_file} --sim_file {sim_file}"
 
+    if args.strict:
+        cmd += " --strict"
+
+    if args.verbose:
+        cmd += "--verbose"
+
+    if args.dry_run:
+        print(f"DRY RUN -- complete command to run:\n {cmd}")
+        return 0
+    else:
+        print(f"Complete command:\n {cmd}")
+        ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
+        return ret.returncode
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
@@ -243,6 +261,11 @@ def create_parser() -> argparse.ArgumentParser:
         '-n', '--nevents',
         type=int,
         help='Number of events to process'
+    )
+    parser_run.add_argument(
+        '-s', '--rand_seed'
+        type=int,
+        help='Random number seed'
     )
     parser_run.add_argument(
         '--args',
@@ -312,6 +335,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser_compare.add_argument(
         '--strict',
+        action='store_true',
         help='Enable strict comparisons between files'
     )
 
