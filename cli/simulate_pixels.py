@@ -1191,6 +1191,9 @@ def run_simulation(input_filename,
                 
                 # Now directly map neighboring_pixels to pixel indices using lookup
                 pixel_index_map = pix_lookup[neighboring_pixels]
+                # Some elements of neighboring_pixels can have values of -1.
+                # We want to make sure these pixels are also removed in pixel_index_map.`
+                pixel_index_map[neighboring_pixels==-1] = -1
                 RangePop()
 
                 RangePush("track_pixel_map")
@@ -1223,7 +1226,7 @@ def run_simulation(input_filename,
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
                 # pixels_tracks_signals is a jagged array of conceptual dimension
-                # (#unique_pix, #ticks, backtracked_segments)
+                # (#ticks, #unique_pix, backtracked_segments)
                 # where the final axis (over segments) is jagged.
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
@@ -1238,7 +1241,7 @@ def run_simulation(input_filename,
 
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
-                                                  cp.array(selected_tracks['t0']),
+                                                  cp.array(selected_tracks['t0']/detector.TIME_SAMPLING, dtype = int),
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,
