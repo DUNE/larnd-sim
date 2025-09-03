@@ -22,17 +22,6 @@ if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
     # Disable memory pool for pinned memory (CPU):
     cp.cuda.set_pinned_memory_allocator(None)
 
-# Perlmutter GPU driver corresponds to CUDA 12.2
-if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
-    try:
-        cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
-        cuda_ver = float(cuda_dir)
-        if cuda_ver >= 12.3:
-            import pynvjitlink.patch
-            pynvjitlink.patch.patch_numba_linker()
-    except:
-        pass
-
 import fire
 import h5py
 

@@ -42,13 +42,6 @@ if 'cupy' in dependencies:
                 dependencies.remove('cupy')
                 dependencies.append(f'cupy-cuda{cuda_major_ver}x')
 
-if os.environ['LMOD_SYSTEM_NAME'] == 'perlmutter':
-    # Revisit this after Perlmutter driver update (currently 525.105.17)
-    if cuda_ver >= 12.3 and 'SKIP_PYNVJITLINK_INSTALL' not in os.environ:
-        print(f"Installing pynvjitlink-cu12")
-        os.environ['PIP_EXTRA_INDEX_URL'] = 'https://pypi.nvidia.com'
-        dependencies.append('pynvjitlink-cu12')
-
 setup(
     install_requires=dependencies,
 )
