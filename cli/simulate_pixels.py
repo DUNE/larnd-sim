@@ -304,6 +304,7 @@ def run_simulation(input_filename,
                                                     compression)
     ###########################################################################################
 
+    RangePush("load_config")
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
 
@@ -453,6 +454,7 @@ def run_simulation(input_filename,
             if pixel_layout_id != response_id:
                 warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
 
+    RangePop() # load_config
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -554,7 +556,7 @@ def run_simulation(input_filename,
 
     RangePop()                  # load_properties
 
-    RangePush("load_hd5_file")
+    RangePush("load_hdf5_file")
     print("Loading track segments...")
     start_load = time()
     # First of all we load the edep-sim output
@@ -831,6 +833,7 @@ def run_simulation(input_filename,
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
 
+        RangePush("quench_electrons")
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
@@ -842,7 +845,9 @@ def run_simulation(input_filename,
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')
         print(f" {end_quenching-start_quenching:.2f} s")
+        RangePop() # quench_electrons
 
+        RangePush("drift_electrons")
         print("Drifting electrons...", end="")
         start_drifting = time()
         logger.start()
@@ -852,9 +857,11 @@ def run_simulation(input_filename,
         logger.take_snapshot()
         logger.archive(f'drifting_mod{i_mod}')
         print(f" {end_drifting-start_drifting:.2f} s")
+        RangePop() # drift_electrons
 
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
+            RangePush("load_light_info")
             n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
 #            if light.LIGHT_TRIG_MODE == 0:
 #                light_sim_dat = np.zeros([len(tracks), n_light_channel],
@@ -910,6 +917,7 @@ def run_simulation(input_filename,
                     light_noise = light_noise[:n_light_channel]
                     warnings.warn(f"Light noise file {light_det_noise_filename} does not span all modules. " +
                                   f"Using noise from first {n_light_channel} channels for all modules.")
+            RangePop() # load_light_info
 
             RangePush('calculate_light_incidence')
             TPB = 256

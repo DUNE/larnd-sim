@@ -263,7 +263,7 @@ def create_parser() -> argparse.ArgumentParser:
         help='Number of events to process'
     )
     parser_run.add_argument(
-        '-s', '--rand_seed'
+        '-s', '--rand_seed',
         type=int,
         help='Random number seed'
     )
