@@ -225,7 +225,7 @@ def run_simulation(input_filename,
                 light_trigger_modules = np.ones(len(uniq_events))
                 light_trigger_times = np.zeros_like(uniq_event_times)
                 light_trigger_event_ids = uniq_events
-
+            
             fee.export_to_hdf5(results['event_id'],
                                results['adc_tot'],
                                results['adc_tot_ticks'],
@@ -792,13 +792,19 @@ def run_simulation(input_filename,
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
 
+        if sim.RECOMB_MODE == physics.NEST_ER:
+            NEST_ER = np.load('../larndsim/bin/LArNEST_ER_recombination_values.npz')
+            recomb_energies, recomb_values = NEST_ER['E'], NEST_ER['R']
+        else:
+            recomb_energies, recomb_values = np.zeros((0,)), np.zeros((0,))
+        print(f"{sim.RECOMB_MODE=}")
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
         logger.start()
         logger.take_snapshot()
         start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+        quenching.quench[BPG,TPB](tracks, sim.RECOMB_MODE, recomb_energies, recomb_values)
         end_quenching = time()
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')

@@ -3,13 +3,73 @@ Module to implement the quenching of the ionized electrons
 through the detector
 """
 
-from math import log, isnan
+from math import log, isnan, sqrt
 from numba import cuda
 
 from .consts import detector, physics, light
 
 @cuda.jit
-def quench(tracks, mode):
+def BOX(dEdx):
+    """
+    Box recombination model. Baller, 2013 JINST 8 P08005
+    
+    Args:
+        dEdx (float): Segment dE/dx in MeV/cm
+    """
+    csi = physics.BOX_BETA * dEdx / (detector.E_FIELD * detector.LAR_DENSITY)
+    return max(0, log(physics.BOX_ALPHA + csi)/csi)
+
+@cuda.jit
+def BIRKS(dEdx):
+    """
+    Birks recombination model. Amoruso, et al NIM A 523 (2004) 275
+    
+    Args:
+        dEdx (float): Segment dE/dx in MeV/cm
+    """
+    return physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+
+@cuda.jit
+def NEST_ER(E, er_energies, er_recomb_factors):
+    """
+    LArNEST electron recoil (ER) recombination model used for low-energy electrons. https://github.com/NESTCollaboration/larnestpy
+    
+    Args:
+        E (float): Starting energy in MeV of the trajectory corresponding to the current segment.
+        er_energies (:obj:`numpy.ndarray`): ER energies from LArNEST.
+        er_recomb_factors (:obj:`numpy.ndarray`): ER recombination factors from LArNEST.
+    """
+    recomb = linear_interpolation(E, er_energies, er_recomb_factors, er_recomb_factors[-1])
+    return recomb
+
+@cuda.jit
+def NEST_ALPHA():
+    """
+    LArNEST alpha recombination model. https://github.com/NESTCollaboration/larnestpy
+    
+    """
+    ALPHA_R_FACTOR = 0.01848
+    return ALPHA_R_FACTOR
+
+@cuda.jit
+def linear_interpolation(x, x_data, y_data, default_value):
+    """
+    Linearly interpolation function.
+    
+    Args:
+        x (float): value to evaluate interpolation at.
+        x_data (:obj:`numpy.ndarray`): x data 
+        y_data (:obj:`numpy.ndarray`): y data
+        default_value (float): value to return if x is out of range.
+    """
+    for i in range(x_data.shape[0] - 1):
+        if x_data[i] <= x <= x_data[i + 1]:
+            t = (x - x_data[i]) / (x_data[i + 1] - x_data[i])
+            return (1 - t) * y_data[i] + t * y_data[i + 1]
+    return default_value  
+    
+@cuda.jit
+def quench(tracks, mode, recomb_energies=None, recomb_values=None):
     """
     This CUDA kernel takes as input an array of track segments and calculates
     the number of electrons and photons that reach the anode plane after recombination.
@@ -43,8 +103,15 @@ def quench(tracks, mode):
             elif mode == physics.BIRKS:
                 # Amoruso, et al NIM A 523 (2004) 275
                 recomb = physics.BIRKS_Ab / (1 + physics.BIRKS_kb * dEdx / (detector.E_FIELD * detector.LAR_DENSITY))
+            elif mode == physics.NEST_ER:
+                # Starting energy needed for NEST  electron recoil recombination calculation
+                p_start = tracks[itrk]['p_mag_traj_start']
+                energy = sqrt(0.511*0.511 + p_start*p_start) - 0.511
+                recomb = NEST_ER(energy, recomb_energies, recomb_values)
+            elif mode == physics.NEST_ALPHA:
+                recomb = NEST_ALPHA()
             else:
-                raise ValueError("Invalid recombination mode: must be 'physics.BOX' or 'physics.BIRKS'")
+                raise ValueError("Invalid recombination mode: must be 'physics.BOX', 'physics.BIRKS', 'physics.NEST_ER', or 'physics.NEST_ALPHA'")
 
             if isnan(recomb):
                 raise RuntimeError("Invalid recombination value")

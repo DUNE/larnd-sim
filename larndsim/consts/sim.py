@@ -35,6 +35,9 @@ MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
 #: Threshold for propogating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
+# 1->Box, 2->Birks, 3->NEST ER
+RECOMB_MODE=2
+
 def set_simulation_properties(simprop_file):
     """
     The function loads the detector properties and
@@ -64,6 +67,8 @@ def set_simulation_properties(simprop_file):
     global MAX_MC_TRUTH_IDS
     global MC_TRUTH_THRESHOLD
 
+    global RECOMB_MODE
+    
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
 
@@ -84,5 +89,8 @@ def set_simulation_properties(simprop_file):
 
         MAX_MC_TRUTH_IDS = simprop.get('max_light_truth_ids', MAX_MC_TRUTH_IDS)
         MC_TRUTH_THRESHOLD = simprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
+
+        RECOMB_MODE = simprop.get('recomb_mode', RECOMB_MODE)
+        
     except:
         print("Check if all the necessary simulation properties are set. Taking some default values")
