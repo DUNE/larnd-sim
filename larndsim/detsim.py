@@ -61,15 +61,24 @@ def overlapping_segment(x, y, start, end, radius):
     The projected positions of the new start and end on the pixel plane has distances of one "radius" away from the pixel center.
     The new start and end of the segment is along the original segment.
     """
+    skip = False
     dxy = x - start[0], y - start[1]
     v = end[0] - start[0], end[1] - start[1]
     l = sqrt(v[0]**2 + v[1]**2)
+    if l == 0: # vertical to the anode
+        dist = sqrt((x-start[0])**2 + (y-start[1])**2)
+        if dist > radius:
+            skip = True
+            return start, end, skip
+        else:
+            return start, end, skip
     v = v[0]/l, v[1]/l
     s = (dxy[0] * v[0] + dxy[1] * v[1])/l # position of point of closest approach
 
     r = sqrt((dxy[0] - v[0] * s * l)**2 + (dxy[1] - v[1] * s * l)**2)
     if r > radius:
-        return start, start # no overlap
+        skip = True
+        return start, start, skip # no overlap
 
     s_plus = s + sqrt(radius**2 - r**2) / l
     s_minus = s - sqrt(radius**2 - r**2) / l
@@ -90,7 +99,7 @@ def overlapping_segment(x, y, start, end, radius):
                start[1] * (1 - s_plus) + end[1] * s_plus,
                start[2] * (1 - s_plus) + end[2] * s_plus)
 
-    return new_start, new_end
+    return new_start, new_end, skip
 
 # @cuda.jit
 @cuda.jit(max_registers=128,  fastmath=True)
@@ -116,6 +125,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+        if pID < 0 : return
         pID_x, pID_y, pID_plane = id2pixel(pID)
 
         if pID_x >= 0 and pID_y >= 0:
@@ -141,7 +151,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             # In order to conservatively include more time ticks
             # we use the longest response time, and shortest distance to the cathode from the segments
             # the distance is converted to time using nominal drift velocity
-            if (this_time - t['t0']) > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT):
+            # pad with 5 times of longitudinal diffusion
+            if this_time > (detector.RESPONSE_MAX_TIME - dist_cathode / detector.V_DRIFT) + t['long_diff'] / detector.V_DRIFT * detector.DIFF_N_SIGMAS:
                 return
 
             segment = (end[0]-start[0], end[1]-start[1], end[2]-start[2])
@@ -150,10 +161,13 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             direction = (segment[0]/length, segment[1]/length, segment[2]/length)
             sigmas = (t["tran_diff"], t["tran_diff"], t["long_diff"])
 
+            # full response range and 5 sigmas of transverse diffusion
             impact_factor = sqrt(response.shape[0]**2 +
-                                     response.shape[1]**2) * detector.RESPONSE_BIN_SIZE
+                                     response.shape[1]**2) * detector.RESPONSE_BIN_SIZE + t['tran_diff'] * detector.DIFF_N_SIGMAS
 
-            subsegment_start, subsegment_end = overlapping_segment(x_p, y_p, start, end, impact_factor)
+            subsegment_start, subsegment_end, skip = overlapping_segment(x_p, y_p, start, end, impact_factor)
+            if skip:
+                return
             subsegment = (subsegment_end[0]-subsegment_start[0],
                           subsegment_end[1]-subsegment_start[1],
                           subsegment_end[2]-subsegment_start[2])
@@ -188,17 +202,18 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                     continue
                 if y_dist > detector.RESPONSE_BIN_SIZE * response.shape[1]:
                     continue
-                if (this_time - t['t0'] + shift_t_collect) < 0 or (this_time - t['t0'] + shift_t_collect) > detector.RESPONSE_MAX_TIME:
+                if (this_time + shift_t_collect) < 0 or (this_time + shift_t_collect) > detector.RESPONSE_MAX_TIME:
                     continue
 
-                # (this_time - t['t0']) is the drift/readout time
+                # this_time is the drift/readout time
+                # t0 is considered in a later stage
                 # (shift_t_collect) shifts the readout to the corresponding position 
-                total_current += charge * get_closest_waveform(x_dist, y_dist, this_time - t['t0'] + shift_t_collect, response)
+                total_current += charge * get_closest_waveform(x_dist, y_dist, this_time + shift_t_collect, response)
 
             signals[itrk,ipix,it] = total_current
 
 @cuda.jit
-def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map, pixels_tracks_signals,
+def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_pixel_map, pixels_tracks_signals,
                       num_backtrack, offset_backtrack, overflow_flag):
     """
     This function sums the induced current signals on the same pixel.
@@ -217,7 +232,7 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
             the track index and the pixel ID index.
         track_pixel_map (:obj:`numpy.ndarray`): 2D array containing the association between
             the unique pixels array and the array containing the pixels for each track.
-        pixels_tracks_signals (:obj:`numpy.ndarray`): 3D array that will contain the waveforms
+        pixels_tracks_signals (:obj:`numpy.ndarray`): 1D jagged array that collapse the information of (#unique_pix, #ticks, backtracked_segments) for backtracking info per pixel per time tick.
             for each pixel and each track that induced current on the pixel.
         overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
             MAX_TRACKS_PER_PIXEL is insufficient
@@ -240,7 +255,8 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
 
         pixel_index = pixel_index_map[itrk][ipix]
         # index into the jagged pixels_tracks_signals array for this pixel and tick
-        base_idx = total_backtracks * itick + offset_backtrack[pixel_index]
+        # account track t0 in the backtracking
+        base_idx = total_backtracks * (itick + track_t0[itrk]) + offset_backtrack[pixel_index]
 
         if pixel_index >= 0:
             counter = -99
@@ -251,8 +267,9 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
                     counter = track_idx
                     if counter >= 0 and itick < signals.shape[2]:
                         if itick < pixels_signals.shape[1] and itick > -1:
+                            # account track t0 here
                             cuda.atomic.add(pixels_signals,
-                                            (pixel_index, itick),
+                                            (pixel_index, itick + track_t0[itrk]),
                                             signals[itrk][ipix][itick])
                             cuda.atomic.add(pixels_tracks_signals,
                                             base_idx + counter,
@@ -260,6 +277,7 @@ def sum_pixel_signals(pixels_signals, signals, pixel_index_map, track_pixel_map,
                     break
 
             if counter < 0:
+                # The overflow_flag is for both overflow (too many segments for backtracking) and underflow (no backtracking the pixel is considered too far from the segments)
                 overflow_flag[pixel_index] = 1
 
 @cuda.jit
@@ -299,17 +317,13 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
                     track_pixel_map[index][imap] = itrk
 
 @cuda.jit
-def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_distance):
+def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
     """
     This kernel fills a 2D array which contains, for each unique pixel,
     an array with the track indeces associated to that pixel.
-
-    Args:
-        track_pixel_map_col (:obj:`numpy.ndarray`): 2D array that will contain the
-            association between the unique pixels array and the track indeces
-        unique_pix (:obj:`numpy.ndarray`): 1D array containing the unique pixels
-        pixels (:obj:`numpy.ndarray`): 2D array containing the pixels for each
-            track.
+    Summary of the different get_track_pixel_map
+    get_track_pixel_map, fills track_pixel_map without distance ranking
+    get_track_pixel_map3, fills track_pixel_map ranked by distances of unit pixel pitch
     """
     # index of unique_pix array
     index = cuda.grid(1)
@@ -317,8 +331,8 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
         return
     upix = unique_pix[index]
 
-    for target_dist in range(max_distance):
-    
+    for target_dist in detector.NEIGHBORING_PIX_DIST:
+
         for itrk in range(pixels.shape[0]):
 
             for ipix in range(pixels.shape[1]):
@@ -326,8 +340,7 @@ def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances, max_dis
                 dist = distances[itrk][ipix]
 
                 if (upix == pID):
-                    if (dist == target_dist): 
-
+                    if abs(dist - target_dist) < 1E-6:
                         imap = 0
                         #while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
                         while imap < track_pixel_map.shape[1]:

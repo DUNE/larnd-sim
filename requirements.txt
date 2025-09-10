@@ -1,8 +1,0 @@
-numpy
-pytest~=6.2
-numba
-sphinx-rtd-theme~=0.5
-tqdm
-fire
-larpix-control
-larpix-geometry

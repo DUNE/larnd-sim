@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "larndsim"
+version = "0.4.2"
+description = "Simulation framework for the DUNE LArND"
+authors = [
+    { name = "DUNE collaboration" }
+]
+maintainers = [
+    { name = "Jaafar Chakrani" },
+    { name = "Yifan Chen" },
+    { name = "Matt Kramer" },
+    { name = "Kevin Wood" },
+]
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "Apache-2.0" }
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+
+dynamic = ["dependencies", "optional-dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/DUNE/larnd-sim"
+Repository = "https://github.com/DUNE/larnd-sim"
+
+[tool.setuptools]
+packages = ["larndsim"]
+include-package-data = true
+script-files = ["cli/simulate_pixels.py", "cli/dumpTree.py", "cli/list_config_keys.py"]
+
+[tool.setuptools.package-data]
+larndsim = [
+    "config/*.yaml",
+    "simulation_properties/*.yaml",
+    "pixel_layouts/*.yaml",
+    "detector_properties/*.yaml",
+    "detector_properties/*.json",
+    "bin/*.npy",
+    "bin/*.npz",
+]

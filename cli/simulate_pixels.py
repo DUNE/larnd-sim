@@ -22,20 +22,10 @@ if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
     # Disable memory pool for pinned memory (CPU):
     cp.cuda.set_pinned_memory_allocator(None)
 
-# Perlmutter GPU driver corresponds to CUDA 12.2
-if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
-    try:
-        cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
-        cuda_ver = float(cuda_dir)
-        if cuda_ver >= 12.3:
-            import pynvjitlink.patch
-            pynvjitlink.patch.patch_numba_linker()
-    except:
-        pass
-
 import fire
 import h5py
 
+import numba as nb
 from numba.cuda import device_array, to_device
 from numba.cuda.random import create_xoroshiro128p_states
 from numba.core.errors import NumbaPerformanceWarning
@@ -120,6 +110,42 @@ def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
             cfg_files = module_files
 
     return cfg_files
+
+###################################
+# Kazu 2024-07-01 Useful if we modify the output to store all contributions
+###################################
+@nb.njit
+def _invert_array_map_inner(in_map, pix_id2idx, curr_idx, out_map):
+    for seg_idx in range(in_map.shape[0]):
+        ass = in_map[seg_idx]
+        for pixid in ass:
+            if pixid<0: break
+            pix_idx = pix_id2idx[pixid.item()]
+            out_map[pix_idx][curr_idx[pix_idx]]=seg_idx
+            curr_idx[pix_idx] += 1
+
+def invert_array_map(in_map,pix_set):
+    '''
+    Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
+    pixel index => a set of segment indexes (not IDs).
+
+    Args:
+        in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
+        pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
+    Returns:
+        ndarray: 2D array where pixel index => list of segment index
+    '''
+    pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
+
+    pix_id2idx = nb.typed.Dict.empty(key_type=nb.types.int64,
+                                     value_type=nb.types.int64)
+    for i, val in enumerate(pix_set.get()):
+        pix_id2idx[val] = i
+
+    mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
+    curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
+    _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
+    return cp.array(mymap)
 
 def run_simulation(input_filename,
                    output_filename,
@@ -553,14 +579,20 @@ def run_simulation(input_filename,
             tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
-            # filter out highly delayed segments (neutron decay, etc)
-            t0_cutoff = 300
-            tracks_reject = tracks[tracks['t0'] >= t0_cutoff]
-            tracks = tracks[tracks['t0'] < t0_cutoff]
-            if tracks_reject.size > 0:
-              print("Rejecting ",tracks_reject.size," delayed truth segments with t0 > ",t0_cutoff," microseconds:")
-              for val in tracks_reject:
-                print(' t0 = ',val['t0'])
+
+        # Filter out neutrons and gammas, which will not directly create visible charge or light
+        # (excluding these segments here results in a modest ~10% improvement to memory usage later on,
+        # since this reduces the size of the arrays CUDA must inialize for pixel current calculations)
+        neutrals_mask = (tracks['pdg_id'] != 2112) & (tracks['pdg_id'] != 22)
+        if sum(~neutrals_mask) > 0: print("Rejected ",sum(~neutrals_mask), "track segments from neutral particles")
+        tracks = tracks[neutrals_mask]
+
+        # Filter out highly-delayed segments
+        t0_delay_mask = (tracks['t0'] < sim.MAX_SEGMENT_T0)
+        if sum(~t0_delay_mask) > 0:
+          print("Rejected ",sum(~t0_delay_mask)," highly-delayed segments with T0 > ",sim.MAX_SEGMENT_T0," us: ")
+          for val in tracks[~t0_delay_mask]: print(' t0 = ',val['t0'])
+        tracks = tracks[t0_delay_mask] 
 
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
@@ -718,15 +750,17 @@ def run_simulation(input_filename,
         consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
         from larndsim.consts import detector
 
-    # Sub-select only segments in active volumes
+    # Sub-select segments in active volumes and that's not too "late"
+    # TODO it seems the late signals are all very small, so it's current NOT simulated
+    # However, to correctly include this part, one needs to append it to pixels_signals and run get adc_values on it
+    # In that case it's possible to have multiple entries for the same pixel
     print("Skipping non-active volumes..." , end="")
     start_mask = time()
-    active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS)
-    tracks = all_mod_tracks = all_mod_tracks[active_tracks_mask]
-    segment_ids = all_mod_segment_ids = all_mod_segment_ids[active_tracks_mask]
-    trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
-    end_mask = time()
-    print(f" {end_mask-start_mask:.2f} s")
+    active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS) # return indices of selected segments
+    active_tracks = all_mod_tracks[active_tracks_mask]
+    active_segment_ids = all_mod_segment_ids[active_tracks_mask]
+    active_trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
+    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut.")
 
     # We need to make cupy arrays of these and pass them to the kernels;
     # otherwise numba will try to use the GPU's "global constant" memory
@@ -989,109 +1023,130 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
                 continue
-            for itrk in tqdm(range(0, evt_tracks.shape[0], sim.BATCH_SIZE),
+
+            RangePush("event_id_map")
+            event_ids = track_subset[sim.EVENT_SEPARATOR]
+            unique_eventIDs = np.unique(event_ids)
+            RangePop()
+
+            all_selected_tracks = track_subset
+
+            # We find the pixels intersected by the projection of the tracks on
+            # the anode plane using the Bresenham's algorithm. We also take into
+            # account the neighboring pixels, due to the transverse diffusion of the charges.
+            RangePush("max_pixels")
+            TPB = 128
+            BPG = max(ceil(all_selected_tracks.shape[0] / TPB),1)
+            all_max_pixels = np.array([0])
+            pixels_from_track.max_pixels[BPG,TPB](all_selected_tracks, all_max_pixels)
+            RangePop()
+
+            # This formula tries to estimate the maximum number of pixels which can have
+            # a current induced on them.
+            all_max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*all_max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
+            all_max_neighboring_pixels = np.clip([all_max_neighboring_pixels], all_max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the all_max_neighboring_pixels by the total number of pixels in a TPC
+
+            all_active_pixels = cp.full((all_selected_tracks.shape[0], all_max_pixels[0]), -1, dtype=np.int32)
+            all_neighboring_pixels = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
+            all_neighboring_radius = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
+            all_n_pixels_list = cp.zeros(shape=(all_selected_tracks.shape[0]))
+
+            if not all_active_pixels.shape[1] or not all_neighboring_pixels.shape[1]:
+                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
+                    i_trig += 1 # add to the trigger counter n_max_pixels
+                    del null_light_results_acc['light_event_id']
+                continue
+
+            RangePush("get_pixels")
+            pixels_from_track.get_pixels[BPG,TPB](all_selected_tracks,
+                                                  all_active_pixels,
+                                                  all_neighboring_pixels,
+                                                  all_neighboring_radius,
+                                                  all_n_pixels_list)
+            RangePop()
+
+            RangePush("unique_pix")
+            shapes = all_neighboring_pixels.shape
+            joined = all_neighboring_pixels.reshape(shapes[0] * shapes[1])
+            all_unique_pix = cp.unique(joined)
+            all_unique_pix = all_unique_pix[(all_unique_pix != -1)]
+            RangePop()
+
+            if not all_unique_pix.shape[0]:
+                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
+                    i_trig += 1 # add to the trigger counter
+                    del null_light_results_acc['light_event_id']
+                continue
+
+            # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
+            assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
+
+            for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
-                if itrk > 0:
-                    warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider increasing batch_size (currently {sim.BATCH_SIZE}) in the simulation_properties file.")
+                selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
 
-                selected_tracks = evt_tracks[itrk:itrk+sim.BATCH_SIZE]
-
-                RangePush("event_id_map")
-                event_ids = selected_tracks[sim.EVENT_SEPARATOR]
-                unique_eventIDs = np.unique(event_ids)
-                RangePop()
+                selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
+                selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
+                if selected_track_idcs.size == 0:
+                    continue
+                selected_track_idcs = to_device(selected_track_idcs)
+                selected_tracks = all_selected_tracks[selected_track_idcs]
 
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
                 # account the neighboring pixels, due to the transverse diffusion of the charges.
                 RangePush("max_pixels")
-                max_radius = ceil(max(selected_tracks["tran_diff"])*5/detector.PIXEL_PITCH)
-
                 TPB = 128
                 BPG = max(ceil(selected_tracks.shape[0] / TPB),1)
                 max_pixels = np.array([0])
                 pixels_from_track.max_pixels[BPG,TPB](selected_tracks, max_pixels)
                 RangePop()
-
                 # This formula tries to estimate the maximum number of pixels which can have
                 # a current induced on them.
-                max_neighboring_pixels = (2*max_radius+1)*max_pixels[0]+(1+2*max_radius)*max_radius*2
+                max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
+                max_neighboring_pixels = np.clip([max_neighboring_pixels], max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the max_neighboring_pixels by the total number of pixels in a TPC
 
                 active_pixels = cp.full((selected_tracks.shape[0], max_pixels[0]), -1, dtype=np.int32)
                 neighboring_pixels = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
-                neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.int32)
+                neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.float32)
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
-
-                if not active_pixels.shape[1] or not neighboring_pixels.shape[1]:
-                    if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                        null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
-                        i_trig += 1 # add to the trigger counter n_max_pixels
-                        del null_light_results_acc['light_event_id']
-                    continue
 
                 RangePush("get_pixels")
                 pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
                                                       active_pixels,
                                                       neighboring_pixels,
                                                       neighboring_radius,
-                                                      n_pixels_list,
-                                                      max_radius)
+                                                      n_pixels_list)
                 RangePop()
 
-                RangePush("unique_pix")
-                shapes = neighboring_pixels.shape
-                joined = neighboring_pixels.reshape(shapes[0] * shapes[1])
-                unique_pix = cp.unique(joined)
-                unique_pix = unique_pix[(unique_pix != -1)]
-                RangePop()
+                unique_pix = selected_pix
 
-                ###################################
-                # Kazu 2024-07-01 Useful if we modify the output to store all contributions
-                ###################################
-                #def invert_array_map(in_map,pix_set):
-                #    '''
-                #    Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
-                #    pixel index => a set of segment IDs.
+                # Above, in get_pixels, the pixels returned in active_pixels may be
+                # a superset of the pixels in selected_pix. The next few lines filter out
+                # pixels that are not found in selected_pix (equivalent to unique_pix).
+                # Even if we don't remove the superfluous pixels here, the code seems to
+                # do it on its own later, but we don't want to rely on that...
+                active_pixels_isin_unique_pix = np.isin(active_pixels, unique_pix)
+                active_pixels[~active_pixels_isin_unique_pix] = -1
 
-                #    Args:
-                #        in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
-                #        pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
-                #    Returns:
-                #        ndarray: 2D array where pixel index => list of segment index
-                #    '''
-                #    pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
-                #    
-                #    pix_id2idx = {val.item():i for i,val in enumerate(pix_set)}
-                #    
-                #    mymap=cp.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
-                #    curr_idx=cp.zeros(shape=(len(pix_id2idx),),dtype=int)
-                #    for seg_idx in range(in_map.shape[0]):
-                #        ass = in_map[seg_idx]
-                #        for pixid in ass:
-                #            if pixid<0: break
-                #            pix_idx = pix_id2idx[pixid.item()]
-                #            mymap[pix_idx][curr_idx[pix_idx]]=seg_idx
-                #            curr_idx[pix_idx] += 1
-                #    return mymap
-                #
-                #assmap_pix2seg = invert_array_map(active_pixels,unique_pix)
+                isin_unique_pix = np.isin(neighboring_pixels, unique_pix)
+                neighboring_pixels[~isin_unique_pix] = -1
+                neighboring_radius[~isin_unique_pix] = -1
 
-                if not unique_pix.shape[0]:
-                    if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                        null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                        save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
-                        i_trig += 1 # add to the trigger counter
-                        del null_light_results_acc['light_event_id']
-                    continue
+                n_pixels_list = isin_unique_pix.sum(axis = -1)
 
                 RangePush("tracks_current")
                 # Here we find the longest signal in time
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
+                # remove t0 and account it later
                 if detector.RESPONSE_MAX_TIME > detector.DRIFT_MAX_TIME:
-                    max_signal_time = selected_tracks['t_end'].max() + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() / detector.V_DRIFT * detector.DIFF_N_SIGMAS + detector.RESPONSE_MAX_TIME - detector.DRIFT_MAX_TIME
                 else:
-                    max_signal_time = selected_tracks['t_end'].max()
+                    max_signal_time = (selected_tracks['t_end'] - selected_tracks['t0']).max() + selected_tracks['long_diff'].max() / detector.V_DRIFT * detector.DIFF_N_SIGMAS
                 signals_ticks = ceil(max_signal_time / detector.TIME_SAMPLING)  # signal span in time ticks
 
                 # Here we calculate the induced current on each pixel
@@ -1130,11 +1185,16 @@ def run_simulation(input_filename,
 
                 RangePush("pixel_index_map")
                 # Here we create a map between tracks and index in the unique pixel array
-                pixel_index_map = cp.full((selected_tracks.shape[0], neighboring_pixels.shape[1]), -1)
-                for i_ in range(selected_tracks.shape[0]):
-                    compare = neighboring_pixels[i_, ..., cp.newaxis] == unique_pix
-                    indices = cp.where(compare)
-                    pixel_index_map[i_, indices[0]] = indices[1]
+                # First, create a lookup table for unique_pix values to their indices
+                max_pix_val = int(cp.max(unique_pix)) + 1
+                pix_lookup = cp.full((max_pix_val,), -1, dtype=cp.int32)
+                pix_lookup[unique_pix] = cp.arange(unique_pix.shape[0], dtype=cp.int32)
+                
+                # Now directly map neighboring_pixels to pixel indices using lookup
+                pixel_index_map = pix_lookup[neighboring_pixels]
+                # Some elements of neighboring_pixels can have values of -1.
+                # We want to make sure these pixels are also removed in pixel_index_map.`
+                pixel_index_map[neighboring_pixels==-1] = -1
                 RangePop()
 
                 RangePush("track_pixel_map")
@@ -1147,10 +1207,8 @@ def run_simulation(input_filename,
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
                 detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
                     unique_pix,
-                    #active_pixels,
                     neighboring_pixels,
                     neighboring_radius,
-                    neighboring_radius.max().item()+1,
                     )
                 RangePop()
 
@@ -1161,17 +1219,20 @@ def run_simulation(input_filename,
                 BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
                 BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
                 BPG = (BPG_X, BPG_Y, BPG_Z)
-                pixels_signals = cp.zeros((len(unique_pix), signals_ticks))
+                # Here inflate the signal_ticks by the track t0
+                # All the late segments have been removed in the loading stage
+                signals_ticks_t0 = signals_ticks + ceil(selected_tracks['t0'].max() / detector.TIME_SAMPLING)
+                pixels_signals = cp.zeros((len(unique_pix), signals_ticks_t0))
                 # Note, track_pixel_map has shape (#unique pix, max tracks per pixel)
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
                 # pixels_tracks_signals is a jagged array of conceptual dimension
-                # (#unique_pix, #ticks, backtracked_segments)
+                # (#ticks, #unique_pix, backtracked_segments)
                 # where the final axis (over segments) is jagged.
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
                 # by the segment index (whose size depends on the pixel). See sum_pixel_signals.
-                pixels_tracks_signals = cp.zeros(signals_ticks * int(num_backtrack.sum()))
+                pixels_tracks_signals = cp.zeros(signals_ticks_t0 * int(num_backtrack.sum()))
                 # offset_backtrack[ipix] is the total number of pixel<->segment
                 # pairs summed over pixels [0, 1, ..., ipix-1]. The kernel uses
                 # it to jump to the pixel's storage in pixels_tracks_signals.
@@ -1181,6 +1242,7 @@ def run_simulation(input_filename,
 
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
+                                                  cp.array(selected_tracks['t0']/detector.TIME_SAMPLING, dtype = int),
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,
@@ -1188,8 +1250,8 @@ def run_simulation(input_filename,
                                                   offset_backtrack,
                                                   overflow_flag)
                 if cp.any(overflow_flag):
-                    warnings.warn("More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, "
-                                  + f"{sim.MAX_TRACKS_PER_PIXEL}")
+                    warnings.warn(f"More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, {sim.MAX_TRACKS_PER_PIXEL}, "
+                                    f"or no segments contributed to some pixels.")
 
                 RangePop()
 
@@ -1249,98 +1311,102 @@ def run_simulation(input_filename,
                 results_acc['current_fractions'].append(current_fractions)
                 traj_pixel_map = cp.full(track_pixel_map.shape,-1)
                 traj_pixel_map[:] = track_pixel_map
-                traj_pixel_map[traj_pixel_map != -1] = trajectory_ids_arr[batch_mask][traj_pixel_map[traj_pixel_map != -1] + itrk]
-                track_pixel_map[track_pixel_map != -1] = segment_ids_arr[batch_mask][track_pixel_map[track_pixel_map != -1] + itrk]
+                traj_pixel_map[traj_pixel_map != -1] = selected_tracks['traj_id'][traj_pixel_map[traj_pixel_map != -1].get()]
+                track_pixel_map[track_pixel_map != -1] = selected_tracks['segment_id'][track_pixel_map[track_pixel_map != -1].get()]
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
-                # ~~~ Light detector response simulation ~~~
-                if light.LIGHT_SIMULATED:
-                    RangePush("sum_light_signals")
-                    light_inc = light_sim_dat[batch_mask][itrk:itrk+sim.BATCH_SIZE]
-                    selected_track_id = segment_ids_arr[batch_mask][itrk:itrk+sim.BATCH_SIZE]#cp.array(selected_tracks["segment_id"])
-                    n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
-                    n_light_ticks = min(n_light_ticks,int(5E4))
-                    # at least the optical channels from a whole module are activated together
+             # ~~~ Light detector response simulation ~~~
+            if light.LIGHT_SIMULATED:
+                RangePush("sum_light_signals")
+                light_inc = light_sim_dat[batch_mask]
+                selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
+                n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
+                n_light_ticks = min(n_light_ticks,int(5E4))
+                # at least the optical channels from a whole module are activated together
 
-                    # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
-                    # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
-                    # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
-                    op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
-                    op_channel = cp.array(op_channel)
-                    #op_channel = light_sim.get_active_op_channel(light_inc)
-                    n_light_det = op_channel.shape[0]
-                    light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                    light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                    light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+                # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
+                # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
+                # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
+                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                op_channel = cp.array(op_channel)
+                #op_channel = light_sim.get_active_op_channel(light_inc)
+                n_light_det = op_channel.shape[0]
+                light_sample_inc = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+                light_sample_inc_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+                light_sample_inc_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
 
-                    ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
-                    ### FIXME: this is a temporary fix to avoid memory issues ###
-                    sorted_indices = np.zeros((n_light_det, selected_tracks.shape[0]), dtype=np.int32)
+                ### TAKE LIMITED SEGMENTS FOR LIGHT TRUTH ###
+                ### FIXME: this is a temporary fix to avoid memory issues ###
+                sorted_indices = np.zeros((n_light_det, all_selected_tracks.shape[0]), dtype=np.int32)
 
-                    for idet in range(n_light_det):
-                        sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
-                    ### END OF TEMPORARY FIX ###
+                for idet in range(n_light_det):
+                    sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
+                ### END OF TEMPORARY FIX ###
 
-                    TPB = (1,64)
-                    BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
-                           max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                    light_sim.sum_light_signals[BPG, TPB](
-                        selected_tracks, track_light_voxel[batch_mask][itrk:itrk+sim.BATCH_SIZE], selected_track_id,
-                        light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                        light_sample_inc_true_photons, sorted_indices, t0_profile_length)
-                    RangePop()
-                    if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
-                        warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
+                TPB = (1,64)
+                BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
+                        max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
+                light_sim.sum_light_signals[BPG, TPB](
+                    all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
+                    light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
+                    light_sample_inc_true_photons, sorted_indices, t0_profile_length)
+                RangePop()
+                if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
+                    warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
-                    RangePush("sim_scintillation")
-                    light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                    light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                    light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                    light_sim.calc_scintillation_effect[BPG, TPB](
-                        light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                        light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons)
+                RangePush("sim_scintillation")
+                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
+                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                scint_model = np.zeros(n_light_ticks, dtype=np.float32)
+                light_sim.scintillation_array(scint_model)
+                light_sim.calc_scintillation_effect[BPG, TPB](
+                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
+                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model)
 
-                    light_sample_inc_disc = cp.zeros_like(light_sample_inc)
-                    rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
-                                                         seed=rand_seed, rng_states=rng_states)
-                    light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
-                    RangePop()
+                light_sample_inc_disc = cp.zeros_like(light_sample_inc)
+                rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
+                                                        seed=rand_seed, rng_states=rng_states)
+                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                RangePop()
 
-                    RangePush("sim_light_det_response")
-                    light_response = cp.zeros_like(light_sample_inc)
-                    light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                    light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                    light_sim.calc_light_detector_response[BPG, TPB](
-                        light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
-                        light_response, light_response_true_track_id, light_response_true_photons, light_gain)
-                    #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-                    RangePop()
+                RangePush("sim_light_det_response")
+                light_response = cp.zeros_like(light_sample_inc)
+                light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
+                light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
+                sipm_response = np.zeros(n_light_ticks, dtype=np.float32)
+                light_sim.sipm_response_array(sipm_response) #precalculate the sipm_response
+                light_sim.calc_light_detector_response[BPG, TPB](
+                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                    light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response)
+                #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+                RangePop()
 
-                    RangePush("sim_light_triggers")
-                    light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
-                    light_threshold = light_threshold.ravel()[op_channel.get()].copy()
-                    light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
-                    trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, itrk)
-                    digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
-                    TPB = (1,1,64)
-                    BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
-                           max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
-                           max(ceil(digit_samples / TPB[2]),1))
+                RangePush("sim_light_triggers")
+                light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
+                light_threshold = light_threshold.ravel()[op_channel.get()].copy()
+                light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
+                trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
+                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                TPB = (1,1,64)
+                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+                        max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
+                        max(ceil(digit_samples / TPB[2]),1))
 
-                    light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                        BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-                        digit_samples, light_noise)
-                    RangePop()
+                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+                    digit_samples, light_noise)
+                RangePop()
 
-                    results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
-                    results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-                    results_acc['light_trigger_idx'].append(trigger_idx)
-                    results_acc['trigger_type'].append(trigger_type)
-                    results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-                    results_acc['light_waveforms'].append(light_digit_signal)
-                    results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                    results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+                results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], unique_eventIDs[0])) # FIXME: only works if looping on a single event
+                results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+                results_acc['light_trigger_idx'].append(trigger_idx)
+                results_acc['trigger_type'].append(trigger_type)
+                results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+                results_acc['light_waveforms'].append(light_digit_signal)
+                results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+                results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
