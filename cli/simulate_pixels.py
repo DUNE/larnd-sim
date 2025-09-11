@@ -993,6 +993,7 @@ def run_simulation(input_filename,
         # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
         for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
+            RangePush("setup_event_batch")
             i_batch = i_batch+1
             # Grab segments from the current batch
             # If there are no segments in the batch, we still check if we need to generate null light signals
@@ -1029,7 +1030,9 @@ def run_simulation(input_filename,
                     i_trig += 1 # add to the trigger counter
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
+                RangePop() # setup_event_batch
                 continue
+            RangePop() # setup_event_batch
 
             RangePush("event_id_map")
             event_ids = track_subset[sim.EVENT_SEPARATOR]
@@ -1089,11 +1092,14 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 continue
 
+            RangePush("invert_array_map")
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
+            RangePop() # invert_array_map
 
             for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+                RangePush("setup_pixel_batch")
                 selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
 
                 selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
@@ -1102,6 +1108,7 @@ def run_simulation(input_filename,
                     continue
                 selected_track_idcs = to_device(selected_track_idcs)
                 selected_tracks = all_selected_tracks[selected_track_idcs]
+                RangePop() # setup_pixel_batch
 
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
@@ -1412,6 +1419,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
+            RangePush('save_results')
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
@@ -1420,11 +1428,12 @@ def run_simulation(input_filename,
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
                 results_acc = defaultdict(list) # reinitialize after each save_results
+            RangePop() # save_results
 
             logger.take_snapshot([len(logger.log)])
         RangePop()                  # run_simulation
 
-        RangePush('save_results')
+        RangePush('save_results_final')
         # Always save results after last iteration
         if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
@@ -1433,7 +1442,7 @@ def run_simulation(input_filename,
             save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
         results_acc = defaultdict(list) # reinitialize after each save_results
-        RangePop()
+        RangePop() # save_results_final
 
         # Collect updated true segments
         if i_mod <= 1: # i_mod counts from 1 for module to module variation, otherwise i_mod is set to -1
