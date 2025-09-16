@@ -6,9 +6,12 @@ Command line tool template with subcommands: run, nsys, ncu, compare
 import argparse
 import logging
 import os, sys
+import pandas as pd
 import subprocess
 import yaml
 from typing import List, Optional
+
+pd.options.display.float_format = '{:.3f}'.format
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure logging based on verbosity level."""
@@ -108,7 +111,7 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
     cmd += " --cuda-memory-usage=true --python-backtrace=cuda --python-sampling=true"
 
     if args.force:
-        cmd += " --force-overwrite"
+        cmd += " --force-overwrite=true"
 
     output_dir = nsys_config.get('output_dir', '.')
     output_file = args.output if args.output else nsys_config.get('output_file', None)
@@ -126,6 +129,12 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
     else:
+        if args.force:
+            lar_output = larnd_config['output_file']
+            if os.path.exists(lar_output):
+                print(f"Deleting existing {lar_output}")
+                os.remove(lar_output)
+
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
         return ret.returncode
@@ -154,7 +163,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     cmd += f' --kernel-id "::regex:{kernels}:{num_invoc}"'
 
     if args.force:
-        cmd += " --force-overwrite"
+        cmd += " --force-overwrite=true"
 
     output_dir = ncu_config.get('output_dir', '.')
     output_file = args.output if args.output else ncu_config.get('output_file', None)
@@ -203,6 +212,45 @@ def cmd_compare(args: argparse.Namespace, config: dict) -> int:
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
         return ret.returncode
+
+def cmd_report(args: argparse.Namespace, config: dict) -> int:
+    logger = logging.getLogger(__name__)
+    nsys_config = config['nsys']
+    report_config = config['report']
+
+    nsys = nsys_config['exec']
+    nsys_file = args.file
+    nsys_report = args.report if args.report else report_config['report']
+    nsys_format = report_config.get('format', 'csv')
+    nsys_timeunit = report_config.get('timeunit', 'ms')
+    nsys_dir = os.path.dirname(nsys_file)
+    nsys_stats_file = os.path.splitext(nsys_file)[0] + f"_{nsys_report}.{nsys_format}"
+
+    logger.info(f"Nsys report file: {nsys_file}")
+    # logger.info(f"Output file: {args.output}")
+
+    cmd = f"{nsys} stats --report {nsys_report} --format {nsys_format} --timeunit {nsys_timeunit}"
+    if args.force:
+        cmd += " --force-export=true --force-overwrite=true"
+    cmd += " --output . {nsys_file}"
+
+    if args.dry_run:
+        print(f"DRY RUN -- complete command to run:\n {cmd}")
+        return 0
+    else:
+        print(f"Complete command:\n {cmd}")
+        ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
+
+    if nsys_report == "nvtx_sum":
+        df = pd.read_csv(nsys_stats_file)
+        rel_time = df.iloc[:, 1] / df.iloc[0, 1] * 100
+        df.insert(loc=1, column='Rel. Time (%)', value=rel_time)
+        df.drop(columns=['Time (%)', 'Style'], inplace=True)
+        df = df.round(3)
+        print(df)
+        df.to_csv(os.path.splitext(nsys_stats_file)[0] + "_edit.csv", index=False)
+
+    return 0
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
@@ -339,6 +387,24 @@ def create_parser() -> argparse.ArgumentParser:
         help='Enable strict comparisons between files'
     )
 
+    parser_report = subparsers.add_parser(
+        'report',
+        help='Generate nsys profile summary',
+        description='Generate summary of larnd-sim performance from nsys'
+    )
+    parser_report.add_argument(
+        'file',
+        help='Input nsys report file'
+    )
+    parser_report.add_argument(
+        '-r', '--report',
+        help='Nsys report to generate'
+    )
+    parser_report.add_argument(
+        '-o', '--output',
+        help='Output file for summary'
+    )
+
     return parser
 
 
@@ -360,6 +426,8 @@ def main() -> int:
         return cmd_ncu(args, config_opts)
     elif args.command == 'compare':
         return cmd_compare(args, config_opts)
+    elif args.command == 'report':
+        return cmd_report(args, config_opts)
     else:
         parser.print_help()
         return 1

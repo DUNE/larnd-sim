@@ -776,7 +776,7 @@ def run_simulation(input_filename,
     op_channel_to_tpc = cp.array(light.OP_CHANNEL_TO_TPC)
     light_gain = cp.array(light.LIGHT_GAIN)
 
-    RangePop()                  # prep_simulation
+    RangePop()  # prep_simulation
 
     # Convention module counting start from 1
     # Loop over all modules
@@ -1069,7 +1069,7 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 continue
 
-            RangePush("get_pixels")
+            RangePush("get_pixels", 7)
             pixels_from_track.get_pixels[BPG,TPB](all_selected_tracks,
                                                   all_active_pixels,
                                                   all_neighboring_pixels,
@@ -1129,7 +1129,7 @@ def run_simulation(input_filename,
                 neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.float32)
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
 
-                RangePush("get_pixels")
+                RangePush("get_pixels", 7)
                 pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
                                                       active_pixels,
                                                       neighboring_pixels,
@@ -1153,7 +1153,7 @@ def run_simulation(input_filename,
 
                 n_pixels_list = isin_unique_pix.sum(axis = -1)
 
-                RangePush("tracks_current")
+                RangePush("tracks_current", 2)
                 # Here we find the longest signal in time
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
                 # remove t0 and account it later
@@ -1223,7 +1223,7 @@ def run_simulation(input_filename,
                     )
                 RangePop()
 
-                RangePush("sum_pixels_signals")
+                RangePush("sum_pixels_signals", 7)
                 # Here we combine the induced current on the same pixels by different tracks
                 TPB = (1,1,64)
                 BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
@@ -1266,7 +1266,7 @@ def run_simulation(input_filename,
 
                 RangePop()
 
-                RangePush("get_adc_values")
+                RangePush("get_adc_values", 3)
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
                 integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
@@ -1329,7 +1329,7 @@ def run_simulation(input_filename,
 
              # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
-                RangePush("sum_light_signals")
+                RangePush("sum_light_signals", 4)
                 light_inc = light_sim_dat[batch_mask]
                 selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
@@ -1366,7 +1366,7 @@ def run_simulation(input_filename,
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                     warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
-                RangePush("sim_scintillation")
+                RangePush("sim_scintillation", 4)
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
                 light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
@@ -1382,7 +1382,7 @@ def run_simulation(input_filename,
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
-                RangePush("sim_light_det_response")
+                RangePush("sim_light_det_response", 4)
                 light_response = cp.zeros_like(light_sample_inc)
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
@@ -1394,7 +1394,7 @@ def run_simulation(input_filename,
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()
 
-                RangePush("sim_light_triggers")
+                RangePush("sim_light_triggers", 4)
                 light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
@@ -1419,7 +1419,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-            RangePush('save_results')
+            RangePush('save_results', 1)
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
@@ -1526,4 +1526,6 @@ def run_simulation(input_filename,
     logger.store(save_memory)
 
 if __name__ == "__main__":
+    RangePush("simulate_pixels")
     fire.Fire(run_simulation)
+    RangePop()

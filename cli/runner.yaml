@@ -4,7 +4,7 @@ larnd-sim:
   output_file: "test.hdf5"
   rng_seed: 321
   compression: 'lzf'
-  n_events: 25
+  n_events: 50
 
 nsys:
   exec: "/global/common/software/dune/mkramer/misc_software/nsight-systems-2023.4.1/bin/nsys"
@@ -19,3 +19,8 @@ ncu:
 
 compare:
   reference: "larnd-sim-reference.hdf5"
+
+report:
+  report: "nvtx_sum"
+  timeunit: "ms"
+  format: "csv"
