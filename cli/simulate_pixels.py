@@ -22,17 +22,6 @@ if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
     # Disable memory pool for pinned memory (CPU):
     cp.cuda.set_pinned_memory_allocator(None)
 
-# Perlmutter GPU driver corresponds to CUDA 12.2
-if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
-    try:
-        cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
-        cuda_ver = float(cuda_dir)
-        if cuda_ver >= 12.3:
-            import pynvjitlink.patch
-            pynvjitlink.patch.patch_numba_linker()
-    except:
-        pass
-
 import fire
 import h5py
 
@@ -593,6 +582,20 @@ def run_simulation(input_filename,
             tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
             tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
 
+        # Filter out neutrons and gammas, which will not directly create visible charge or light
+        # (excluding these segments here results in a modest ~10% improvement to memory usage later on,
+        # since this reduces the size of the arrays CUDA must inialize for pixel current calculations)
+        neutrals_mask = (tracks['pdg_id'] != 2112) & (tracks['pdg_id'] != 22)
+        if sum(~neutrals_mask) > 0: print("Rejected ",sum(~neutrals_mask), "track segments from neutral particles")
+        tracks = tracks[neutrals_mask]
+
+        # Filter out highly-delayed segments
+        t0_delay_mask = (tracks['t0'] < sim.MAX_SEGMENT_T0)
+        if sum(~t0_delay_mask) > 0:
+          print("Rejected ",sum(~t0_delay_mask)," highly-delayed segments with T0 > ",sim.MAX_SEGMENT_T0," us: ")
+          for val in tracks[~t0_delay_mask]: print(' t0 = ',val['t0'])
+        tracks = tracks[t0_delay_mask] 
+
         if 'segment_id' in tracks.dtype.names:
             segment_ids = tracks['segment_id']
             trajectory_ids = tracks['file_traj_id']
@@ -759,15 +762,7 @@ def run_simulation(input_filename,
     active_tracks = all_mod_tracks[active_tracks_mask]
     active_segment_ids = all_mod_segment_ids[active_tracks_mask]
     active_trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
-
-    t0_delay_mask = (active_tracks['t0'] < detector.SIGNAL_OVERLAP_CUT)
-    tracks = active_tracks[t0_delay_mask]
-    segment_ids = active_segment_ids[t0_delay_mask]
-    trajectory_ids = active_trajectory_ids[t0_delay_mask]
-    end_mask = time()
-    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut. \
-            In addition, {np.count_nonzero(~t0_delay_mask)} segments are removed due to the t0 delay cut.")
-    print(f" {end_mask-start_mask:.2f} s")
+    print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut.")
 
     # We need to make cupy arrays of these and pass them to the kernels;
     # otherwise numba will try to use the GPU's "global constant" memory
@@ -1206,6 +1201,9 @@ def run_simulation(input_filename,
                 
                 # Now directly map neighboring_pixels to pixel indices using lookup
                 pixel_index_map = pix_lookup[neighboring_pixels]
+                # Some elements of neighboring_pixels can have values of -1.
+                # We want to make sure these pixels are also removed in pixel_index_map.`
+                pixel_index_map[neighboring_pixels==-1] = -1
                 RangePop()
 
                 RangePush("track_pixel_map")
@@ -1238,7 +1236,7 @@ def run_simulation(input_filename,
                 # num_backtrack[ipix] is the number of segments contributing to the pixel
                 num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
                 # pixels_tracks_signals is a jagged array of conceptual dimension
-                # (#unique_pix, #ticks, backtracked_segments)
+                # (#ticks, #unique_pix, backtracked_segments)
                 # where the final axis (over segments) is jagged.
                 # Physically it's represented as a 1D array where the time index
                 # increments the slowest, followed by the pixel index, followed
@@ -1253,7 +1251,7 @@ def run_simulation(input_filename,
 
                 detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
                                                   signals,
-                                                  cp.array(selected_tracks['t0']),
+                                                  cp.array(selected_tracks['t0']/detector.TIME_SAMPLING, dtype = int),
                                                   pixel_index_map,
                                                   track_pixel_map,
                                                   pixels_tracks_signals,

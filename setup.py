@@ -1,8 +1,21 @@
-#!/usr/bin/env python
+from setuptools import setup
+import os
 
-VER = "0.3.1"
+dependencies = [
+    "numpy",
+    "pytest",
+    "numba>=0.52",
+    "larpix-control",
+    "larpix-geometry",
+    "tqdm",
+    "fire",
+    "nvidia-ml-py",
+]
 
-reqs = ["numpy", "pytest", "numba>=0.52", "larpix-control", "larpix-geometry", "tqdm", "fire", "nvidia-ml-py"]
+optional_dep = {
+    "linting" : ["MonkeyType", "mypy", "ruff"],
+    "runner" : ["pandas", "rich"]
+}
 
 try:
     import cupy
@@ -15,57 +28,26 @@ try:
     '''
     print(msg % (str(cupy.__version__),str(cupy.__file__)))
 except ImportError:
-    reqs.append('cupy')
+    dependencies.append('cupy')
 
-import os
 try:
     cuda_dir = os.path.basename(os.environ['CUDA_HOME'])
     cuda_ver = float(cuda_dir)
     cuda_major_ver = int(cuda_ver)
+    print(f"larnd-sim -- Found CUDA version: {cuda_ver}")
 except:
     cuda_ver = cuda_major_ver = -1
 
-if 'cupy' in reqs:
+if 'cupy' in dependencies:
     if 'SKIP_CUPY_INSTALL' in os.environ:
-        reqs.remove('cupy')
+        dependencies.remove('cupy')
     else:
         if 'ALWAYS_COMPILE_CUPY' not in os.environ:
             if cuda_major_ver in [11, 12]:
-                reqs.remove('cupy')
-                reqs.append(f'cupy-cuda{cuda_major_ver}x')
+                dependencies.remove('cupy')
+                dependencies.append(f'cupy-cuda{cuda_major_ver}x')
 
-import setuptools
-
-setuptools.setup(
-    name="larndsim",
-    version=VER,
-    author="DUNE collaboration",
-    author_email="roberto@lbl.gov",
-    description="Simulation framework for the DUNE LArND",
-    url="https://github.com/DUNE/larnd-sim",
-    packages=setuptools.find_packages(),
-    include_package_data=True,
-    package_data={'larndsim': ['config/*.yaml',
-    'simulation_properties/*.yaml',
-    'pixel_layouts/*.yaml',
-    'detector_properties/*.yaml',
-    'detector_properties/*.json',
-    'bin/*.npy',
-    'bin/*.npz',
-    ]},
-    scripts=["cli/simulate_pixels.py", "cli/dumpTree.py", "cli/list_config_keys.py", "cli/diff_files.py", "cli/lar_runner.py"],
-    install_requires=reqs,
-    classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
-        "Intended Audience :: by End-User Class :: Developers",
-        "Operating System :: Grouping and Descriptive Categories :: OS Independent (Written in an interpreted language)",
-        "Programming Language :: Python",
-        "Topic :: Scientific/Engineering :: Physics"
-    ],
-    python_requires='>=3.7',
+setup(
+    install_requires=dependencies,
+    extras_require=optional_dep,
 )
-
-if os.getenv('LMOD_SYSTEM_NAME') == 'perlmutter':
-    # Revisit this after Perlmutter driver update (currently 525.105.17)
-    if cuda_ver >= 12.3 and 'SKIP_PYNVJITLINK_INSTALL' not in os.environ:
-        os.system('pip install --extra-index-url https://pypi.nvidia.com pynvjitlink-cu12')

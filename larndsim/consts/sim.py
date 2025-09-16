@@ -14,6 +14,9 @@ EVENT_BATCH_SIZE = 1  # units = N tpcs
 WRITE_BATCH_SIZE = 1  # units = N batches
 EVENT_SEPARATOR = 'event_id'  # 'spillID' or 'vertexID'
 
+# Filter out highly-delayed track segments
+MAX_SEGMENT_T0 = 30 # microseconds
+
 IS_SPILL_SIM = True
 SPILL_PERIOD = 1.2e6  # units = microseconds
 TRACKS_DSET_NAME = 'segments'
@@ -50,6 +53,7 @@ def set_simulation_properties(simprop_file):
     global EVENT_BATCH_SIZE
     global WRITE_BATCH_SIZE
     global EVENT_SEPARATOR
+    global MAX_SEGMENT_T0
     global IS_SPILL_SIM
     global SPILL_PERIOD
     global MAX_EVENTS_PER_FILE
@@ -72,6 +76,7 @@ def set_simulation_properties(simprop_file):
         EVENT_BATCH_SIZE = simprop.get('event_batch_size', EVENT_BATCH_SIZE)
         WRITE_BATCH_SIZE = simprop.get('write_batch_size', WRITE_BATCH_SIZE)
         EVENT_SEPARATOR = simprop.get('event_separator', EVENT_SEPARATOR)
+        MAX_SEGMENT_T0 = simprop.get('max_segment_t0', MAX_SEGMENT_T0)
         IS_SPILL_SIM = bool(simprop.get('is_spill_sim', IS_SPILL_SIM))
         SPILL_PERIOD = float(simprop.get('spill_period', SPILL_PERIOD))
         MAX_EVENTS_PER_FILE = simprop.get('max_events_per_file', MAX_EVENTS_PER_FILE)

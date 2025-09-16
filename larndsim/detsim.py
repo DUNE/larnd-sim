@@ -125,6 +125,7 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
     if itrk < signals.shape[0] and ipix < signals.shape[1] and it < signals.shape[2]:
         t = tracks[itrk]
         pID = pixels[itrk][ipix]
+        if pID < 0 : return
         pID_x, pID_y, pID_plane = id2pixel(pID)
 
         if pID_x >= 0 and pID_y >= 0:
