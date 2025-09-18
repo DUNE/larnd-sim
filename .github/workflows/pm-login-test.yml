@@ -1,0 +1,13 @@
+name: pm-login
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: Run something in the Perlmutter login node
+        run: |
+          mkdir runner; cd runner
+          echo "Running larnd-sim!" > sim-output.txt
