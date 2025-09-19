@@ -828,7 +828,7 @@ def run_simulation(input_filename,
 
         if sim.RECOMB_MODE == physics.NEST_ER:
             NEST_ER = np.load('../larndsim/bin/LArNEST_ER_recombination_values.npz')
-            recomb_energies, recomb_values = NEST_ER['E'], NEST_ER['R']
+            recomb_energies, recomb_values = NEST_ER['E']*1e-3, NEST_ER['R']
         else:
             recomb_energies, recomb_values = np.zeros((0,)), np.zeros((0,))
         print(f"{sim.RECOMB_MODE=}")
