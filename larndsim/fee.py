@@ -373,7 +373,7 @@ def export_to_hdf5(event_id_list,
 
     return packets, packets_mc_ds
 
-def export_sync_to_hdf5(filename, sync_times, i_mod=-1, compression=None):
+def export_sync_to_hdf5(filename, sync_times, i_mod, compression=None):
     """
     Saves sync packets in the LArPix HDF5 format.
     Args:
@@ -438,7 +438,7 @@ def export_sync_to_hdf5(filename, sync_times, i_mod=-1, compression=None):
 
     return packets, packets_mc_ds
 
-def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod=-1, compression=None):
+def export_timestamp_trigger_to_hdf5(filename, event_start_times, i_mod, compression=None):
     """
     Saves timestamp and trigger packets in the LArPix HDF5 format.
     Args:
