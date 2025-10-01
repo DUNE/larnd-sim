@@ -41,7 +41,7 @@ from larndsim.config import get_config
 
 SEED = int(time())
 
-LOGO = """
+LOGO = r"""
   _                      _            _
  | |                    | |          (_)
  | | __ _ _ __ _ __   __| |______ ___ _ _ __ ___
