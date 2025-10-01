@@ -281,7 +281,7 @@ def run_simulation(input_filename,
                                          results['light_waveforms_true_photons'],
                                          i_trig,
                                          i_mod,
-                                         compression)
+                                         compression=compression)
             elif light.LIGHT_TRIG_MODE == 1:
                 light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
                                                     results['light_waveforms'],
@@ -290,7 +290,7 @@ def run_simulation(input_filename,
                                                     results['light_waveforms_true_photons'],
                                                     i_trig,
                                                     i_mod,
-                                                    compression)
+                                                    compression=compression)
     ###########################################################################################
 
     print(LOGO)
@@ -1001,11 +1001,11 @@ def run_simulation(input_filename,
                     #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
                     sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                     if len(sync_times) > 0:
-                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod, compression)
+                        fee.export_sync_to_hdf5(output_filename, sync_times_export, i_mod, compression=compression)
                         sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
                 # beam trigger is only forwarded to one specific pacman (defined in fee)
                 if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod, compression)
+                    fee.export_timestamp_trigger_to_hdf5(output_filename, this_event_time, i_mod, compression=compression)
 
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
@@ -1454,7 +1454,7 @@ def run_simulation(input_filename,
         light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
         light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
 
-        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression)
+        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression=compression)
         #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
 
     # FIXME
@@ -1464,7 +1464,7 @@ def run_simulation(input_filename,
     # merge light waveforms per module
     # correspond to light_sim.export_light_wvfm_to_hdf5
     if light.LIGHT_SIMULATED and mod2mod_variation:
-        light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression)
+        light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression=compression)
 
     # prep output file with truth datasets
     with h5py.File(output_filename, 'a') as output_file:
