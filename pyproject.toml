@@ -17,8 +17,7 @@ maintainers = [
 ]
 readme = "README.md"
 requires-python = ">=3.7"
-license = { text = "Apache-2.0" }
-
+license = "Apache-2.0"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -34,9 +33,12 @@ Homepage = "https://github.com/DUNE/larnd-sim"
 Repository = "https://github.com/DUNE/larnd-sim"
 
 [tool.setuptools]
-packages = ["larndsim"]
 include-package-data = true
-script-files = ["cli/simulate_pixels.py", "cli/dumpTree.py", "cli/list_config_keys.py"]
+script-files = ["cli/diff_files.py", "cli/lar_runner.py", "cli/simulate_pixels.py",
+                "cli/dumpTree.py", "cli/list_config_keys.py"]
+
+[tool.setuptools.packages]
+find = {} # Auto discovers/finds all the packages within larnd-sim
 
 [tool.setuptools.package-data]
 larndsim = [
@@ -48,3 +50,26 @@ larndsim = [
     "bin/*.npy",
     "bin/*.npz",
 ]
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
+ignore = ["E501"]
+
+[tool.mypy]
+disable_error_code = ["import-untyped"]
