@@ -19,6 +19,7 @@ module_to_tpcs: {1: [0, 1]}
 discrimination_threshold: 5.0e3 # e-
 v_cm: 478 # mV
 v_ref: 1568 # mV
+larpix_gain: 2.46e-3 # preliminary measurement by Stephen: https://indico.fnal.gov/event/71610
 
 ## Light geometry parameters
 n_op_channel: 240
