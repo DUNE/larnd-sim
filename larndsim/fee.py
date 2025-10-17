@@ -9,7 +9,7 @@ import yaml
 import warnings
 
 from numba import cuda
-from numba.cuda.random import xoroshiro128p_normal_float32
+from numba.cuda.random import xoroshiro128p_normal_float32, xoroshiro128p_uniform_float32
 from math import exp, floor
 
 from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
@@ -545,7 +545,8 @@ def get_adc_values(pixels_signals,
                    time_padding,
                    rng_states,
                    current_fractions,
-                   pixel_thresholds):
+                   pixel_thresholds,
+                   true_qs, qs):
     """
     Implementation of self-trigger logic
 
@@ -589,9 +590,12 @@ def get_adc_values(pixels_signals,
         iadc = 0
         adc_busy = 0
         last_reset = 0
+        last_periodic_reset = 0
         true_q = 0
+        periodic_reset_phase = int(xoroshiro128p_uniform_float32(rng_states, ip) * (detector.PERIODIC_RESET_CYCLES + 1))
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
 
+                
         while ic < curre.shape[0] or adc_busy > 0:
 
             if iadc >= sim.MAX_ADC_VALUES:
@@ -599,6 +603,18 @@ def get_adc_values(pixels_signals,
                 break
 
             q = 0
+
+            if ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
+                true_q = 0
+                qs[ip][ic] = q_sum
+                true_qs[ip][ic] = true_q
+                last_periodic_reset = ic
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip][iadc][itrk] = 0
+                ic += 1
+                continue
+            
             if detector.BUFFER_RISETIME > 0:
                 conv_start = max(last_reset, floor(ic - 10*detector.BUFFER_RISETIME/detector.TIME_SAMPLING))
                 for jc in range(conv_start, min(ic+1, curre.shape[0])):
@@ -617,7 +633,9 @@ def get_adc_values(pixels_signals,
 
             q_sum += q
             true_q += q
-
+            qs[ip][ic] = q_sum
+            true_qs[ip][ic] = true_q
+            
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
             disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE * e
 
@@ -633,6 +651,17 @@ def get_adc_values(pixels_signals,
                 while ic <= integrate_end:
                     q = 0
 
+                    if ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
+                        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
+                        true_q = 0
+                        qs[ip][ic] = q_sum
+                        true_qs[ip][ic] = true_q
+                        last_periodic_reset = ic
+                        for itrk in range(current_fractions.shape[2]):
+                            current_fractions[ip][iadc][itrk] = 0
+                        ic += 1
+                        continue
+                        
                     if detector.BUFFER_RISETIME > 0:
                         conv_start = max(last_reset, floor(ic - 10*detector.BUFFER_RISETIME/detector.TIME_SAMPLING))
                         for jc in range(conv_start, min(ic+1, curre.shape[0])):
@@ -649,8 +678,11 @@ def get_adc_values(pixels_signals,
                             idx = total_backtracks * ic + offset_backtrack[ip] + itrk
                             current_fractions[ip][iadc][itrk] += pixels_signals_tracks[idx] * detector.TIME_SAMPLING
 
+
                     q_sum += q
                     true_q += q
+                    qs[ip][ic] = q_sum
+                    true_qs[ip][ic] = true_q
                     ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
@@ -660,6 +692,8 @@ def get_adc_values(pixels_signals,
                     ic += round(detector.RESET_CYCLES * detector.CLOCK_CYCLE / detector.TIME_SAMPLING)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                     true_q = 0
+                    qs[ip][ic] = q_sum
+                    true_qs[ip][ic] = true_q
 
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0
