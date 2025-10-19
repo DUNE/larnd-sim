@@ -9,9 +9,9 @@ from collections import defaultdict
 
 from .units import mm, cm, V, kV
 
-PIXEL_BATCH_SIZE = 2000     # units = pixels
-EVENT_BATCH_SIZE = 1  # units = N tpcs
-WRITE_BATCH_SIZE = 1  # units = N batches
+SEGMENT_BATCH_SIZE = 10000    # units = track segments
+EVENT_BATCH_SIZE = 1          # units = N tpcs
+WRITE_BATCH_SIZE = 1          # units = N batches
 EVENT_SEPARATOR = 'event_id'  # 'spillID' or 'vertexID'
 
 # Filter out highly-delayed track segments
@@ -49,7 +49,7 @@ def set_simulation_properties(simprop_file):
             filename
         pixel_file (str): pixel layout YAML filename
     """
-    global PIXEL_BATCH_SIZE
+    global SEGMENT_BATCH_SIZE
     global EVENT_BATCH_SIZE
     global WRITE_BATCH_SIZE
     global EVENT_SEPARATOR
@@ -72,7 +72,7 @@ def set_simulation_properties(simprop_file):
         simprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
-        PIXEL_BATCH_SIZE = simprop.get('pixel_batch_size', PIXEL_BATCH_SIZE)
+        SEGMENT_BATCH_SIZE = simprop.get('segment_batch_size', SEGMENT_BATCH_SIZE)
         EVENT_BATCH_SIZE = simprop.get('event_batch_size', EVENT_BATCH_SIZE)
         WRITE_BATCH_SIZE = simprop.get('write_batch_size', WRITE_BATCH_SIZE)
         EVENT_SEPARATOR = simprop.get('event_separator', EVENT_SEPARATOR)

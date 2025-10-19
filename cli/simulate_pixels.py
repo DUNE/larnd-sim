@@ -1091,12 +1091,17 @@ def run_simulation(input_filename,
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
             RangePop() # invert_array_map
 
-            for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
-                             delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
-                RangePush("setup_pixel_batch")
-                selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
+            pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
+                                                          sim.SEGMENT_BATCH_SIZE)
 
-                selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
+            for start_pix, stop_pix in \
+                    tqdm(pixel_ranges, delay=1,
+                         desc='  Simulating event %i batches...' % ievd,
+                         leave=False, ncols=80):
+                RangePush("setup_pixel_batch")
+                selected_pix = all_unique_pix[start_pix:stop_pix]
+
+                selected_track_idcs = np.unique(assmap_pix2seg[start_pix:stop_pix])
                 selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
                 if selected_track_idcs.size == 0:
                     continue
