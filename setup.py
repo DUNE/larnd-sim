@@ -12,6 +12,11 @@ dependencies = [
     "nvidia-ml-py",
 ]
 
+optional_dep = {
+    "linting" : ["MonkeyType", "mypy", "ruff"],
+    "runner" : ["pandas", "rich"]
+}
+
 try:
     import cupy
     msg = '''
@@ -44,4 +49,5 @@ if 'cupy' in dependencies:
 
 setup(
     install_requires=dependencies,
+    extras_require=optional_dep,
 )

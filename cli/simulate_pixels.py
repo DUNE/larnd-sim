@@ -293,6 +293,7 @@ def run_simulation(input_filename,
                                                     compression=compression)
     ###########################################################################################
 
+    RangePush("load_config")
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
 
@@ -442,6 +443,7 @@ def run_simulation(input_filename,
             if pixel_layout_id != response_id:
                 warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
 
+    RangePop() # load_config
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -543,7 +545,7 @@ def run_simulation(input_filename,
 
     RangePop()                  # load_properties
 
-    RangePush("load_hd5_file")
+    RangePush("load_hdf5_file")
     print("Loading track segments...")
     start_load = time()
     # First of all we load the edep-sim output
@@ -769,7 +771,7 @@ def run_simulation(input_filename,
     op_channel_to_tpc = cp.array(light.OP_CHANNEL_TO_TPC)
     light_gain = cp.array(light.LIGHT_GAIN)
 
-    RangePop()                  # prep_simulation
+    RangePop()  # prep_simulation
 
     # Convention module counting start from 1
     # Loop over all modules
@@ -826,6 +828,7 @@ def run_simulation(input_filename,
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
 
+        RangePush("quench_electrons")
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
@@ -837,7 +840,9 @@ def run_simulation(input_filename,
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')
         print(f" {end_quenching-start_quenching:.2f} s")
+        RangePop() # quench_electrons
 
+        RangePush("drift_electrons")
         print("Drifting electrons...", end="")
         start_drifting = time()
         logger.start()
@@ -847,9 +852,11 @@ def run_simulation(input_filename,
         logger.take_snapshot()
         logger.archive(f'drifting_mod{i_mod}')
         print(f" {end_drifting-start_drifting:.2f} s")
+        RangePop() # drift_electrons
 
         # Set up light simulation data objects and calculate the optical responses
         if light.LIGHT_SIMULATED:
+            RangePush("load_light_info")
             n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
 #            if light.LIGHT_TRIG_MODE == 0:
 #                light_sim_dat = np.zeros([len(tracks), n_light_channel],
@@ -870,9 +877,8 @@ def run_simulation(input_filename,
 
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
 
-            if (i_mod == 1
-                or (mod2mod_variation
-                    and light_lut != light_lut_filename[i_mod-2])):
+            if (i_mod == -1 or
+               (mod2mod_variation and (i_mod == 1 or light_lut != light_lut_filename[i_mod-2]))):
 
                 lut = np.load(light_lut)['arr']
 
@@ -905,6 +911,7 @@ def run_simulation(input_filename,
                     light_noise = light_noise[:n_light_channel]
                     warnings.warn(f"Light noise file {light_det_noise_filename} does not span all modules. " +
                                   f"Using noise from first {n_light_channel} channels for all modules.")
+            RangePop() # load_light_info
 
             RangePush('calculate_light_incidence')
             TPB = 256
@@ -926,7 +933,7 @@ def run_simulation(input_filename,
                 op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                 op_channel = cp.array(op_channel)
                 trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
 
                 n_light_det = op_channel.shape[0]
                 n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
@@ -980,6 +987,7 @@ def run_simulation(input_filename,
         # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
         for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
+            RangePush("setup_event_batch")
             i_batch = i_batch+1
             # Grab segments from the current batch
             # If there are no segments in the batch, we still check if we need to generate null light signals
@@ -1016,7 +1024,9 @@ def run_simulation(input_filename,
                     i_trig += 1 # add to the trigger counter
                     del null_light_results_acc['light_event_id']
                 # Nothing to simulate for charge readout?
+                RangePop() # setup_event_batch
                 continue
+            RangePop() # setup_event_batch
 
             RangePush("event_id_map")
             event_ids = track_subset[sim.EVENT_SEPARATOR]
@@ -1053,7 +1063,7 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 continue
 
-            RangePush("get_pixels")
+            RangePush("get_pixels", 7)
             pixels_from_track.get_pixels[BPG,TPB](all_selected_tracks,
                                                   all_active_pixels,
                                                   all_neighboring_pixels,
@@ -1076,11 +1086,14 @@ def run_simulation(input_filename,
                     del null_light_results_acc['light_event_id']
                 continue
 
+            RangePush("invert_array_map")
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
+            RangePop() # invert_array_map
 
             for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
                              delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
+                RangePush("setup_pixel_batch")
                 selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
 
                 selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
@@ -1089,6 +1102,7 @@ def run_simulation(input_filename,
                     continue
                 selected_track_idcs = to_device(selected_track_idcs)
                 selected_tracks = all_selected_tracks[selected_track_idcs]
+                RangePop() # setup_pixel_batch
 
                 # We find the pixels intersected by the projection of the tracks on
                 # the anode plane using the Bresenham's algorithm. We also take into
@@ -1109,7 +1123,7 @@ def run_simulation(input_filename,
                 neighboring_radius = cp.full((selected_tracks.shape[0], max_neighboring_pixels), -1, dtype=np.float32)
                 n_pixels_list = cp.zeros(shape=(selected_tracks.shape[0]))
 
-                RangePush("get_pixels")
+                RangePush("get_pixels", 7)
                 pixels_from_track.get_pixels[BPG,TPB](selected_tracks,
                                                       active_pixels,
                                                       neighboring_pixels,
@@ -1133,7 +1147,7 @@ def run_simulation(input_filename,
 
                 n_pixels_list = isin_unique_pix.sum(axis = -1)
 
-                RangePush("tracks_current")
+                RangePush("tracks_current", 2)
                 # Here we find the longest signal in time
                 # Pad if RESPONSE_MAX_TIME is longer than DRIFT_MAX_TIME
                 # remove t0 and account it later
@@ -1206,7 +1220,7 @@ def run_simulation(input_filename,
                     )
                 RangePop()
 
-                RangePush("sum_pixels_signals")
+                RangePush("sum_pixels_signals", 7)
                 # Here we combine the induced current on the same pixels by different tracks
                 TPB = (1,1,64)
                 BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
@@ -1249,7 +1263,7 @@ def run_simulation(input_filename,
 
                 RangePop()
 
-                RangePush("get_adc_values")
+                RangePush("get_adc_values", 3)
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
                 integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
@@ -1317,7 +1331,7 @@ def run_simulation(input_filename,
 
              # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
-                RangePush("sum_light_signals")
+                RangePush("sum_light_signals", 4)
                 light_inc = light_sim_dat[batch_mask]
                 selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
@@ -1354,7 +1368,7 @@ def run_simulation(input_filename,
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                     warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
-                RangePush("sim_scintillation")
+                RangePush("sim_scintillation", 4)
                 light_sample_inc_scint = cp.zeros_like(light_sample_inc)
                 light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
@@ -1370,7 +1384,7 @@ def run_simulation(input_filename,
                 light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
                 RangePop()
 
-                RangePush("sim_light_det_response")
+                RangePush("sim_light_det_response", 4)
                 light_response = cp.zeros_like(light_sample_inc)
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
@@ -1382,12 +1396,12 @@ def run_simulation(input_filename,
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()
 
-                RangePush("sim_light_triggers")
+                RangePush("sim_light_triggers", 4)
                 light_threshold = cp.repeat(cp.array(light.LIGHT_TRIG_THRESHOLD)[...,np.newaxis], light.OP_CHANNEL_PER_TRIG, axis=-1)
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
                 trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
                         max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
@@ -1407,6 +1421,7 @@ def run_simulation(input_filename,
                 results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
                 results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
+            RangePush('save_results', 1)
             if len(results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                 if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
@@ -1415,11 +1430,12 @@ def run_simulation(input_filename,
                     save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
                 results_acc = defaultdict(list) # reinitialize after each save_results
+            RangePop() # save_results
 
             logger.take_snapshot([len(logger.log)])
         RangePop()                  # run_simulation
 
-        RangePush('save_results')
+        RangePush('save_results_final')
         # Always save results after last iteration
         if len(results_acc['event_id']) > 0 and len(np.concatenate(results_acc['event_id'], axis=0)) > 0:
             save_results(event_times, results_acc, i_trig, i_mod, light_only=False)
@@ -1428,7 +1444,7 @@ def run_simulation(input_filename,
             save_results(event_times, results_acc, i_trig, i_mod, light_only=True)
             i_trig += 1 # add to the trigger counter
         results_acc = defaultdict(list) # reinitialize after each save_results
-        RangePop()
+        RangePop() # save_results_final
 
         # Collect updated true segments
         if i_mod <= 1: # i_mod counts from 1 for module to module variation, otherwise i_mod is set to -1
@@ -1512,4 +1528,6 @@ def run_simulation(input_filename,
     logger.store(save_memory)
 
 if __name__ == "__main__":
+    RangePush("simulate_pixels")
     fire.Fire(run_simulation)
+    RangePop()

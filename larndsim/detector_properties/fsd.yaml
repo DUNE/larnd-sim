@@ -19,6 +19,7 @@ module_to_tpcs: {1: [0, 1]}
 discrimination_threshold: 5.0e3 # e-
 v_cm: 478 # mV
 v_ref: 1568 # mV
+larpix_gain: 2.46e-3 # preliminary measurement by Stephen: https://indico.fnal.gov/event/71610
 
 ## Light geometry parameters
 n_op_channel: 240
@@ -32,11 +33,12 @@ tau_t: 1.530 # us
 enable_lut_smearing: True # sample from the time profile for photon arrival time (True) or use average photon arrival time (False)
 op_channel_efficiency: 1
 light_gain: -7.0
+light_tick_size: 0.016 # us
 light_det_noise_sample_spacing: 0.016 # us
 light_trig_threshold: [-2000, -4500] # [LCM, ACL]
-light_trig_mode: 1
-light_window: [0, 16] # us
-light_trig_window: [1.6, 14.4] # us
+light_trig_mode: 0
+light_window: [0.00, 8.64] # us
+light_trig_window: [0.96, 8.64] # us
 light_digit_sample_spacing: 0.016 # us
 light_nbit: 14
 sipm_response_model: 1 # 0: RLC model; 1: measured
