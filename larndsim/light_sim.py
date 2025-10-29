@@ -668,25 +668,19 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
-    # Get total number of non-default entries
-    mask = waveforms_true_track_id != -1
-    num_idx = np.prod(waveforms_true_track_id[mask].shape)
     # Get indices of those valid entires and destructure the tuple
     idx0, idx1, idx2, idx3 = np.nonzero(waveforms_true_track_id != -1)
+    num_idx = len(idx0) # Total number of non-default entries
 
     truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
     truth_data = np.empty(num_idx, dtype=truth_dtype)
 
-    # Careful with all the indices
-    for x, (i, j, k, l) in enumerate(zip(idx0, idx1, idx2, idx3)):
-        this_trig = i #idx0
-        i_trig = i_trig + i #FIXME currently idx0 is always 0. probably further change is needed for multiple light triggers in one trueevent
-        i_op_channel = j #idx1
-        i_sample = k  #idx2
-        i_content = l #idx3
-        truth_data[x] = (i_trig, op_channel[i_op_channel], i_sample, i_evt,
-                         waveforms_true_track_id[this_trig][i_op_channel][i_sample][i_content],
-                         waveforms_true_photons[this_trig][i_op_channel][i_sample][i_content])
+    truth_data['trigger_id'] = i_trig + idx0
+    truth_data['op_channel_id'] = op_channel[idx1]
+    truth_data['tick'] = idx2
+    truth_data['event_id'] = i_evt
+    truth_data['segment_id'] = waveforms_true_track_id[idx0, idx1, idx2, idx3]
+    truth_data['pe_current'] = waveforms_true_photons[idx0, idx1, idx2, idx3]
 
     return truth_data
 
