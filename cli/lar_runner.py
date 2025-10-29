@@ -18,7 +18,7 @@ def setup_logging(verbose: bool = False) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'
     )
 
 def load_defaults(config_name: str, verbose: bool = False) -> dict:
@@ -106,7 +106,7 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
     larnd_config = config['larnd-sim']
     nsys_config = config['nsys']
 
-    nsys=nsys_config['exec']
+    nsys = nsys_config['exec']
     cmd = f"{nsys} profile"
     cmd += " --cuda-memory-usage=true --python-backtrace=cuda --python-sampling=true"
 
@@ -153,12 +153,13 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     cmd += f" --set {metrics}"
 
     kernels = args.kernels if args.kernels else ncu_config['kernels']
-    #Extract string from list, joining multiple kernels to form a regex pattern
+    # Extract string from list, joining multiple kernels to form a regex pattern
     if len(kernels) > 1 and isinstance(kernels, list):
         kernels = "|".join(kernels)
     else:
         kernels = kernels[0]
 
+    # Which invocation of the kernel to profile
     num_invoc = ncu_config.get('invocation', 5)
     cmd += f' --kernel-id "::regex:{kernels}:{num_invoc}"'
 
@@ -203,7 +204,7 @@ def cmd_compare(args: argparse.Namespace, config: dict) -> int:
         cmd += " --strict"
 
     if args.verbose:
-        cmd += "--verbose"
+        cmd += " --verbose"
 
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
@@ -232,7 +233,7 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
     cmd = f"{nsys} stats --report {nsys_report} --format {nsys_format} --timeunit {nsys_timeunit}"
     if args.force:
         cmd += " --force-export=true --force-overwrite=true"
-    cmd += " --output . {nsys_file}"
+    cmd += f" --output . {nsys_file}"
 
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
@@ -387,6 +388,7 @@ def create_parser() -> argparse.ArgumentParser:
         help='Enable strict comparisons between files'
     )
 
+    # 'report' subcommand
     parser_report = subparsers.add_parser(
         'report',
         help='Generate nsys profile summary',
