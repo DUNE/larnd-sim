@@ -1,0 +1,52 @@
+name: perlmutter-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Linux, gpu, perlmutter]
+    steps:
+      - name: Validate running job
+        id: validate_job
+        run: |
+          PAYLOAD_RUN_ID=$(jq -r '.workflow_job.run_id' $PAYLOAD_FILE)
+          RUNNER_RUN_ID=${{ github.run_id }}
+
+          echo "Payload RUN ID: $PAYLOAD_RUN_ID"
+          echo "Runner RUN ID : $RUNNER_RUN_ID"
+
+          # Compare job IDs and set output
+          if [ "$PAYLOAD_RUN_ID" == "$RUNNER_RUN_ID" ]; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository and run larnd-sim
+        id: checkout_run
+        if: steps.validate_job.outputs.valid == 'true'
+        run: |
+          echo $PWD
+          echo "Starting job"
+          mkdir runner; cd runner
+          module load python/3.11
+          echo $PWD
+          echo "Checking out larnd-sim"
+          git clone -b develop --depth 1 https://github.com/DUNE/larnd-sim.git
+          python3 -m venv env
+          source ./env/bin/activate
+          cd larnd-sim
+          echo "Installing larnd-sim"
+          pip install --upgrade pip setuptools
+          pip install .[runner]
+          echo $PWD
+          cd ..
+          mkdir -p test/nsys
+          echo $PWD
+          echo "Running larnd-sim"
+          lar_runner.py -y larnd-sim/cli/runner.yaml nsys -o test_ci &> run.log
+          echo "Finished"
