@@ -89,7 +89,7 @@ ndlar_light:
 
 fsd:
     SIM_PROPERTIES:  cosmic_sim.yaml
-    PIXEL_LAYOUT:    multi_tile_layout-3.0.40_NDLArModule_v3.yaml
+    PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsd_v3.yaml
     DET_PROPERTIES:  fsd.yaml
     RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
     PIXEL_THRESHOLDS_FILE: thresholds_fsd.npz
