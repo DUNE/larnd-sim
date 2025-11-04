@@ -34,12 +34,18 @@ def load_defaults(config_name: str, verbose: bool = False) -> dict:
 
     return yaml_doc
 
-def build_larnd_cmd(larnd_config: dict) -> str:
+def build_larnd_cmd(larnd_config: dict, output_name: str = None) -> str:
     """Bild larnd-sim command for ncu and nsys."""
+    logger = logging.getLogger(__name__)
     config = larnd_config['config']
     rng_seed = larnd_config['rng_seed']
     input_file = larnd_config['input_file']
-    output_file = larnd_config['output_file']
+    output_file = output_name if output_name else larnd_config['output_file']
+
+    # Add hdf5 extension if not present
+    base, ext = os.path.splitext(output_file)
+    if ext != ".hdf5":
+        output_file += ".hdf5"
 
     larnd_sim_cmd = f" simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_file}"
     larnd_sim_cmd += f" --rand_seed {rng_seed}"
@@ -50,6 +56,9 @@ def build_larnd_cmd(larnd_config: dict) -> str:
     compression = larnd_config.get('compression', 'lzf')
     larnd_sim_cmd += f" --compression {compression}"
 
+    logger.info(f"Running larnd-sim with config: {config}")
+    logger.info(f"Input edep-sim hdf5: {input_file}")
+    logger.info(f"Output larnd-sim filename: {output_file}")
     return larnd_sim_cmd
 
 def cmd_run(args: argparse.Namespace, config: str) -> int:
@@ -65,6 +74,9 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     logger.info(f"Input edep-sim hdf5: {input_file}")
 
     output_file = args.output if args.output else larnd_config['output_file']
+    base, ext = os.path.splitext(output_file) # Add hdf5 extension if not present
+    if ext != ".hdf5":
+        output_file += ".hdf5"
     logger.info(f"Output filename: {output_file}")
 
     default_seed = args.rand_seed if args.rand_seed else larnd_config.get('rng_seed', 321)
@@ -111,12 +123,13 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
     cmd += " --cuda-memory-usage=true --python-backtrace=cuda --python-sampling=true"
 
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-overwrite=true"
 
     output_dir = nsys_config.get('output_dir', '.')
     output_file = args.output if args.output else nsys_config.get('output_file', None)
     if output_file:
-        logger.info(f"Profile output: {output_file}")
+        logger.info(f"Nsys Profile output: {output_file}")
         output_path = os.path.join(output_dir, output_file)
         cmd += f" -o {output_path}"
 
@@ -124,7 +137,7 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config)
+    cmd += build_larnd_cmd(larnd_config, output_name=output_file)
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
@@ -169,7 +182,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     output_dir = ncu_config.get('output_dir', '.')
     output_file = args.output if args.output else ncu_config.get('output_file', None)
     if output_file:
-        logger.info(f"Profile output: {output_file}")
+        logger.info(f"NCU Profile output: {output_file}")
         output_path = os.path.join(output_dir, output_file)
         cmd += f" -o {output_path}"
 
@@ -177,7 +190,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config)
+    cmd += build_larnd_cmd(larnd_config, output_name=output_file)
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0

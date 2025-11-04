@@ -2,6 +2,11 @@ name: perlmutter-test
 
 on:
   workflow_dispatch:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - 'develop'
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ jobs:
           RUNNER_RUN_ID=${{ github.run_id }}
 
           echo "Payload RUN ID: $PAYLOAD_RUN_ID"
-          echo "Runner RUN ID : $RUNNER_RUN_ID"
+          echo "Runner  RUN ID: $RUNNER_RUN_ID"
 
           # Compare job IDs and set output
           if [ "$PAYLOAD_RUN_ID" == "$RUNNER_RUN_ID" ]; then
@@ -33,8 +38,8 @@ jobs:
           echo $PWD
           echo "Starting job"
           mkdir runner; cd runner
+          # Assume we are running on Perlmutter
           module load python/3.11
-          echo $PWD
           echo "Checking out larnd-sim"
           git clone -b develop --depth 1 https://github.com/DUNE/larnd-sim.git
           python3 -m venv env
@@ -43,10 +48,15 @@ jobs:
           echo "Installing larnd-sim"
           pip install --upgrade pip setuptools
           pip install .[runner]
-          echo $PWD
           cd ..
           mkdir -p test/nsys
-          echo $PWD
-          echo "Running larnd-sim"
-          lar_runner.py -y larnd-sim/cli/runner.yaml nsys -o test_ci &> run.log
+          # Extract branch name (sanitize it for filename use)
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g')
+          # Get short commit SHA (first 7 characters)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # Get current time for documenation and unique filename
+          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+          FILENAME="larndsim_${BRANCH_NAME}_${SHORT_SHA}_${TIMESTAMP}"
+          echo "Running larnd-sim. Writing to ${FILENAME}"
+          lar_runner.py -y larnd-sim/cli/runner.yaml nsys -o "$FILENAME" &> "${FILENAME}.log"
           echo "Finished"
