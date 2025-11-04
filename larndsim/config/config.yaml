@@ -93,6 +93,8 @@ fsd:
     DET_PROPERTIES:  fsd.yaml
     RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
     PIXEL_THRESHOLDS_FILE: thresholds_fsd.npz
+    PIXEL_PEDESTALS_FILE: [pedestals_fsd.npz]
+    PIXEL_PEDESTALS_ID: [0]
     #LIGHT_LUT:       /sdf/data/neutrino/2x2/light_lut/lightLUT_FSD_250123_time_norm.npz
     LIGHT_LUT:       /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm.npz
     LIGHT_DET_NOISE: FSD_v01_bin06_larndsim_noise.npy
