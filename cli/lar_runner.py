@@ -25,7 +25,8 @@ def load_defaults(config_name: str, verbose: bool = False) -> dict:
     #Checking if config_name is None
     config_name = config_name if config_name else 'runner.yaml'
 
-    print(f"Opening {config_name}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Opening {config_name}")
     with open(config_name, 'r') as file:
         yaml_doc = yaml.load(file, Loader=yaml.SafeLoader)
 
@@ -177,6 +178,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     cmd += f' --kernel-id "::regex:{kernels}:{num_invoc}"'
 
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-overwrite=true"
 
     output_dir = ncu_config.get('output_dir', '.')
@@ -245,6 +247,7 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
 
     cmd = f"{nsys} stats --report {nsys_report} --format {nsys_format} --timeunit {nsys_timeunit}"
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-export=true --force-overwrite=true"
     cmd += f" --output . {nsys_file}"
 
@@ -256,13 +259,23 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
 
     if nsys_report == "nvtx_sum":
+        # Add correct relative time
         df = pd.read_csv(nsys_stats_file)
         rel_time = df.iloc[:, 1] / df.iloc[0, 1] * 100
         df.insert(loc=1, column='Rel. Time (%)', value=rel_time)
         df.drop(columns=['Time (%)', 'Style'], inplace=True)
+
+        # Insert row to account for time outside of 'run_simulation'
+        rel_time_diff = df.iloc[0, 0] - df.iloc[1, 0]
+        total_time_diff = df.iloc[0, 1] - df.iloc[1, 1]
+        other_row = [rel_time_diff, total_time_diff, 1, total_time_diff, total_time_diff, total_time_diff, total_time_diff, 0, "outside_run_sim"]
+        df.loc[len(df)] = other_row
+
+        # Sort rows and round values for display
+        df = df.sort_values(by='Rel. Time (%)', ascending=False)
         df = df.round(3)
         print(df)
-        df.to_csv(os.path.splitext(nsys_stats_file)[0] + "_edit.csv", index=False)
+        df.to_csv(os.path.splitext(nsys_stats_file)[0] + ".csv", index=False)
 
     return 0
 
