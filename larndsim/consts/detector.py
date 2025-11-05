@@ -95,9 +95,9 @@ DISCRIMINATION_THRESHOLD = 5e3 # e-
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
-PERIODIC_RESET_CYCLES = -1
-#: ADC busy delay in clock cycles
 ADC_BUSY_DELAY = 9
+#: periodic reset cycles in clock cycles
+PERIODIC_RESET_CYCLES = -1
 #: Reset time in clock cycles
 RESET_CYCLES = 1
 #: Clock cycle time in :math:`\mu s`
