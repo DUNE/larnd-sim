@@ -95,6 +95,8 @@ DISCRIMINATION_THRESHOLD = 5e3 # e-
 #: ADC hold delay in clock cycles
 ADC_HOLD_DELAY = 15
 #: ADC busy delay in clock cycles
+PERIODIC_RESET_CYCLES = -1
+#: ADC busy delay in clock cycles
 ADC_BUSY_DELAY = 9
 #: Reset time in clock cycles
 RESET_CYCLES = 1
@@ -242,6 +244,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global MOD_IDS
     global DISCRIMINATION_THRESHOLD
     global ADC_HOLD_DELAY
+    global PERIODIC_RESET_CYCLES
     global ADC_BUSY_DELAY
     global RESET_CYCLES
     global CLOCK_CYCLE
@@ -373,6 +376,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
 
         dis_threshold_bucket = detprop.get('discrimination_threshold', DISCRIMINATION_THRESHOLD)
         DISCRIMINATION_THRESHOLD = set_multi_properties(dis_threshold_bucket, n_mod, i_module, message="larpix discrimination threshold")
+        PERIODIC_RESET_CYCLES = detprop.get('periodic_reset_cycles', PERIODIC_RESET_CYCLES)
         ADC_HOLD_DELAY = detprop.get('adc_hold_delay', ADC_HOLD_DELAY)
         ADC_BUSY_DELAY = detprop.get('adc_busy_delay', ADC_BUSY_DELAY)
         RESET_CYCLES = detprop.get('reset_cycles', RESET_CYCLES)

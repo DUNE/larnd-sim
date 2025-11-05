@@ -592,7 +592,8 @@ def get_adc_values(pixels_signals,
         last_reset = 0
         last_periodic_reset = 0
         true_q = 0
-        periodic_reset_phase = int(xoroshiro128p_uniform_float32(rng_states, ip) * (detector.PERIODIC_RESET_CYCLES + 1))
+        apply_periodic_reset = detector.PERIODIC_RESET_CYCLES > 0
+        periodic_reset_phase = int(xoroshiro128p_uniform_float32(rng_states, ip) * (detector.PERIODIC_RESET_CYCLES + 1)) if apply_periodic_reset else 0
         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
 
                 
@@ -604,7 +605,7 @@ def get_adc_values(pixels_signals,
 
             q = 0
 
-            if ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
+            if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                 true_q = 0
                 qs[ip][ic] = q_sum
@@ -651,7 +652,7 @@ def get_adc_values(pixels_signals,
                 while ic <= integrate_end:
                     q = 0
 
-                    if ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
+                    if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
                         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                         true_q = 0
                         qs[ip][ic] = q_sum
