@@ -545,8 +545,7 @@ def get_adc_values(pixels_signals,
                    time_padding,
                    rng_states,
                    current_fractions,
-                   pixel_thresholds,
-                   true_qs, qs):
+                   pixel_thresholds):
     """
     Implementation of self-trigger logic
 
@@ -608,8 +607,6 @@ def get_adc_values(pixels_signals,
             if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
                 q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                 true_q = 0
-                qs[ip][ic] = q_sum
-                true_qs[ip][ic] = true_q
                 last_periodic_reset = ic
                 for itrk in range(current_fractions.shape[2]):
                     current_fractions[ip][iadc][itrk] = 0
@@ -634,8 +631,6 @@ def get_adc_values(pixels_signals,
 
             q_sum += q
             true_q += q
-            qs[ip][ic] = q_sum
-            true_qs[ip][ic] = true_q
             
             q_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
             disc_noise = xoroshiro128p_normal_float32(rng_states, ip) * detector.DISCRIMINATOR_NOISE * e
@@ -655,8 +650,6 @@ def get_adc_values(pixels_signals,
                     if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
                         q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                         true_q = 0
-                        qs[ip][ic] = q_sum
-                        true_qs[ip][ic] = true_q
                         last_periodic_reset = ic
                         for itrk in range(current_fractions.shape[2]):
                             current_fractions[ip][iadc][itrk] = 0
@@ -682,8 +675,6 @@ def get_adc_values(pixels_signals,
 
                     q_sum += q
                     true_q += q
-                    qs[ip][ic] = q_sum
-                    true_qs[ip][ic] = true_q
                     ic+=1
 
                 adc = q_sum + xoroshiro128p_normal_float32(rng_states, ip) * detector.UNCORRELATED_NOISE_CHARGE * e
@@ -693,8 +684,6 @@ def get_adc_values(pixels_signals,
                     ic += round(detector.RESET_CYCLES * detector.CLOCK_CYCLE / detector.TIME_SAMPLING)
                     q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
                     true_q = 0
-                    qs[ip][ic] = q_sum
-                    true_qs[ip][ic] = true_q
 
                     for itrk in range(current_fractions.shape[2]):
                         current_fractions[ip][iadc][itrk] = 0

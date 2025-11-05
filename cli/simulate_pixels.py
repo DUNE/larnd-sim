@@ -1269,8 +1269,6 @@ def run_simulation(input_filename,
                 integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
                 adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
                 current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES, track_pixel_map.shape[1]))
-                true_qs = cp.zeros((pixels_signals.shape[0], signals_ticks_t0))
-                qs = cp.zeros((pixels_signals.shape[0], signals_ticks_t0))
 
                 # TPB = 128
                 TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
@@ -1295,10 +1293,7 @@ def run_simulation(input_filename,
                                              0,
                                              rng_states,
                                              current_fractions,
-                                             pixel_thresholds,
-                                             true_qs, qs)
-                np.savez(f'{ievd}-{i_mod}-{ipix}.npz', pixels_signals=pixels_signals, 
-                         true_qs=true_qs, qs=qs, adc_ticks_list=adc_ticks_list, integral_list=integral_list)
+                                             pixel_thresholds)
                 # get list of adc values
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
