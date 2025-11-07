@@ -60,7 +60,7 @@ def build_larnd_cmd(larnd_config: dict, output_name: str = None) -> str:
     logger.info(f"Running larnd-sim with config: {config}")
     logger.info(f"Input edep-sim hdf5: {input_file}")
     logger.info(f"Output larnd-sim filename: {output_file}")
-    return larnd_sim_cmd
+    return larnd_sim_cmd, output_file
 
 def cmd_run(args: argparse.Namespace, config: str) -> int:
     """Handle the 'run' subcommand to run larnd-sim."""
@@ -105,7 +105,7 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     else:
         if args.force:
             if os.path.exists(output_file):
-                print(f"Deleting existing {output_file}")
+                logger.info(f"Deleting existing {output_file}")
                 os.remove(output_file)
 
         print(f"Complete command:\n {cmd}")
@@ -138,16 +138,19 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config, output_name=output_file)
+    lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
+    cmd += lar_cmd
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
     else:
-        if args.force:
-            lar_output = larnd_config['output_file']
-            if os.path.exists(lar_output):
-                print(f"Deleting existing {lar_output}")
-                os.remove(lar_output)
+        if args.force and os.path.exists(lar_output):
+            logger.info(f"Deleting existing {lar_output}")
+            os.remove(lar_output)
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Creating output dir: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True, mode=0o775)
 
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
@@ -192,11 +195,20 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config, output_name=output_file)
+    lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
+    cmd += lar_cmd
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
     else:
+        if args.force and os.path.exists(lar_output):
+            logger.info(f"Deleting existing {lar_output}")
+            os.remove(lar_output)
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Creating output dir: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True, mode=0o775)
+
         print(f"Complete command:\n {cmd}")
         tmp = subprocess.run('dcgmi profile --pause', shell=True)
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
@@ -239,12 +251,14 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
     nsys_report = args.report if args.report else report_config['report']
     nsys_format = report_config.get('format', 'csv')
     nsys_timeunit = report_config.get('timeunit', 'ms')
-    nsys_dir = os.path.dirname(nsys_file)
-    nsys_stats_file = os.path.splitext(nsys_file)[0] + f"_{nsys_report}.{nsys_format}"
 
     logger.info(f"Nsys report file: {nsys_file}")
-    # logger.info(f"Output file: {args.output}")
+    if not os.path.isfile(nsys_file):
+        logger.info(f"Not found: {nsys_file}")
+        nsys_file = os.path.join(nsys_config['output_dir'], nsys_file)
+        logger.info(f"Trying {nsys_file}")
 
+    nsys_stats_file = os.path.splitext(nsys_file)[0] + f"_{nsys_report}.{nsys_format}"
     cmd = f"{nsys} stats --report {nsys_report} --format {nsys_format} --timeunit {nsys_timeunit}"
     if args.force:
         logger.info("Overwriting existing output files.")

@@ -49,7 +49,6 @@ jobs:
           pip install --upgrade pip setuptools
           pip install .[runner]
           cd ..
-          mkdir -p test/nsys
           # Extract branch name (sanitize it for filename use)
           BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g')
           # Get short commit SHA (first 7 characters)
