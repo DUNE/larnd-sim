@@ -17,8 +17,8 @@ module_to_io_groups:
 module_to_tpcs: {1: [0, 1]}
 
 discrimination_threshold: 5.0e3 # e-
-v_cm: 478 # mV
-v_ref: 1568 # mV
+v_cm: 458.7 # mV ; based on data-taking conditions
+v_ref: 1504.2 # mV ; based on data-taking conditions
 larpix_gain: 2.46e-3 # preliminary measurement by Stephen: https://indico.fnal.gov/event/71610
 periodic_reset_cycles: 256 # nominal periodic reset cycles used in FSD run 1
 
