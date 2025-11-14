@@ -104,38 +104,38 @@ fsd: &fsdbase
 # FSD periodic reset scan at low thresholds
 # low thresholds, low periodic reset cycles
 fsd_lowthresh_prc64:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc64.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
+    <<: *fsdbase
+    DET_PROPERTIES:  fsd_prc64.yaml
+    PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
+    LIGHT_SIMULATED: False
 
 # low thresholds, nomimal periodic reset cycles
 fsd_lowthresh_prc256:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc256.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
+    <<: *fsdbase
+    PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
+    LIGHT_SIMULATED: False
 
 # low thresholds, high periodic reset cycles
 fsd_lowthresh_prc1024:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc1024.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
-  
+    <<: *fsdbase
+    DET_PROPERTIES:  fsd_prc1024.yaml
+    PIXEL_THRESHOLDS_FILE: [thresholds_fsd_m2.npz]
+    LIGHT_SIMULATED: False
+
 # FSD periodic reset scan at nominal thresholds
 # mominal thresholds, low periodic reset cycles
 fsd_nomthresh_prc64:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc64.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd.npz]
+    <<: *fsdbase
+    DET_PROPERTIES:  fsd_prc64.yaml
+    LIGHT_SIMULATED: False
 
-# nominal thresholds, nomimal periodic reset cycles (nominal, can be skipped if we already have *nominal* FSD files)
+# nominal thresholds, nomimal periodic reset cycles: SKIP IF PROD ALREADY AVAILABLE
 fsd_nomthresh_prc256:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc256.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd.npz]
+    <<: *fsdbase
+    LIGHT_SIMULATED: False
 
 # nominal thresholds, high periodic reset cycles
 fsd_nomthresh_prc1024:
-  <<: *fsdbase
-  DET_PROPERTIES:  fsd_prc1024.yaml
-  PIXEL_THRESHOLDS_FILE: [thresholds_fsd.npz]
-
+    <<: *fsdbase
+    DET_PROPERTIES:  fsd_prc1024.yaml
+    LIGHT_SIMULATED: False
