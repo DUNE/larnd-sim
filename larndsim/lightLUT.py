@@ -53,7 +53,7 @@ def get_voxel(pos, itpc, lut_vox_div):
         # rather than the xMin side as means of rotating the x component
         i = int((x_max - pos[0])/(x_max - x_min) * lut_vox_div[0])
 
-    j = int((y_max - pos[1])/(y_max - y_min) * lut_vox_div[1])
+    j = int((pos[1] - y_min)/(y_max - y_min) * lut_vox_div[1])
     k = int((pos[2] - z_min)/(z_max - z_min) * lut_vox_div[2])
 
     i = min(lut_vox_div[0] - 1, max(0, i))
