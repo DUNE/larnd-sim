@@ -1,3 +1,4 @@
+import cupy as cp
 import numpy as np
 from math import ceil
 
@@ -65,3 +66,36 @@ class TPCBatcher(TrackSegmentBatcher):
         self._simulated = self._simulated | mask
 
         return self._events[self._curr_event], mask
+
+
+def subbatch_pixel_ranges(assmap_pix2seg: cp.ndarray, seg_batch_size: int) \
+        -> cp.ndarray:
+    """
+    Returns an array of disjoint ranges (i.e. pairs of indices) of the global
+    pixel array, such that, for each range, the number of associated segments is
+    approximately the targeted seg_batch_size.
+
+    Args:
+        assmap_pix2seg(:obj:`cp.ndarray`): Array of segments associated with
+            each pixel. Shape (n_unique_pix, max_associated_segments).
+        seg_batch_size(int): Targetted number of segments associated with each
+            range of pixels. The actual number of segments will be as large as
+            possible without exceeding seg_batch_size.
+
+    Returns:
+        array: Pairs of indices into the global pixel array. Inclusive in the
+            first index, exclusive in the second, so that they can be used
+            directly for slicing.
+    """
+
+    segs_per_pix = cp.sum(assmap_pix2seg != -1, axis=-1)
+    accum_segs = cp.cumsum(segs_per_pix)
+    total_segs = accum_segs[-1]
+    seg_divisions = cp.arange(0, total_segs, seg_batch_size)
+    indices = cp.searchsorted(accum_segs, seg_divisions)
+
+    result = cp.zeros(shape=(len(indices), 2), dtype=cp.uint32)
+    result[:, 0] = indices
+    result[:-1, 1] = indices[1:]
+    result[-1, 1] = total_segs
+    return result
