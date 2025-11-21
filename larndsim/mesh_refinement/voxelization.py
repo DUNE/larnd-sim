@@ -10,7 +10,7 @@ def voxel_id_to_coordinates(voxel_indices, grid_shape, voxel_size, bounds):
     Convert flattened voxel indices to physical (x, y, z) center coordinates.
     
     Args:
-        voxel_indices: 1D NumPy array of flattened voxel indices
+        voxel_indices: 1D array of flattened voxel indices
         grid_shape: (nx, ny, nz) tuple
         voxel_size: (dx, dy, dz) tuple in cm
         bounds: ((x_min, x_max), (y_min, y_max), (z_min, z_max)) in cm
