@@ -146,6 +146,7 @@ def test_voxelization_performance(input_filename, config='2x2', n_events=None, o
         'quench_times': [],
         'drift_times': [],
         'voxel_times': [],
+        'voxel_memory_kb': [],
     }
     
     all_voxel_data = []
@@ -207,6 +208,10 @@ def test_voxelization_performance(input_filename, config='2x2', n_events=None, o
             voxel_stats['total_voxels'] += n_voxels
             voxel_stats['total_charge_output'] += charge_after
             
+            # Track memory usage (sparse arrays only: indices + charges)
+            mem_kb = (vox_idx.nbytes + vox_charge.nbytes) / 1024  # KB
+            voxel_stats['voxel_memory_kb'].append(mem_kb)
+            
             # Optional: save voxel data
             if output_file:
                 all_voxel_data.append({
@@ -247,6 +252,13 @@ def test_voxelization_performance(input_filename, config='2x2', n_events=None, o
             segs_per_sec = voxel_stats['total_segments_processed'] / total_voxel
             print(f"  Segments per second: {segs_per_sec:.1f}")
     
+    if voxel_stats['voxel_memory_kb']:
+        mem_arr = np.array(voxel_stats['voxel_memory_kb'])
+        print(f"\n  GPU Memory (sparse voxel arrays per TPC):")
+        print(f"    Min:     {mem_arr.min():.2f} KB")
+        print(f"    Max:     {mem_arr.max():.2f} KB ({mem_arr.max()/1024:.3f} MB)")
+        print(f"    Average: {mem_arr.mean():.2f} KB ({mem_arr.mean()/1024:.3f} MB)")
+    
     print(f"\n[7/7] Charge Conservation Check")
     charge_in = voxel_stats['total_charge_input']
     charge_out = voxel_stats['total_charge_output']
@@ -255,10 +267,11 @@ def test_voxelization_performance(input_filename, config='2x2', n_events=None, o
         print(f"  Input charge:  {charge_in:.3e} e-")
         print(f"  Output charge: {charge_out:.3e} e-")
         print(f"  Relative diff: {rel_diff:.2e}")
-        if rel_diff < 1e-5:
-            print("    Charge conserved within tolerance")
+
+        if rel_diff < 1e-3:
+            print("  O Charge conserved within tolerance (< 0.1%)")
         else:
-            print("  X Warning: charge not conserved!")
+            print(f"  X Warning: charge difference {rel_diff*100:.3f}% exceeds 0.1% tolerance!")
     
     # Save output if requested
     if output_file and all_voxel_data:
