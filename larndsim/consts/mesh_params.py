@@ -27,18 +27,26 @@ CHARGE_NEIGHBOR_RADIUS = 3  # pixels
 INDUCTION_CUTOFF_RADIUS = 50 # cm
 
 # Minimum induction signal threshold (electrons)
-INDUCTION_SIGNAL_THRESHOLD = 1000.0  # e-
+INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
+
+####################################
+# Induced Current Normalization
+####################################
+
+#: Global scale factor applied to induced current calculation (dimensionless)
+INDUCED_CURRENT_SCALE = 0.1
 
 
 def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None, 
                         charge_collection_radius=None, charge_neighbor_radius=None, 
-                        induction_cutoff_radius=None, induction_signal_threshold=None):
+                        induction_cutoff_radius=None, induction_signal_threshold=None,
+                        induced_current_scale=None):
     """
     To be updated to read from YAML
     """
     global COARSE_VOXEL_SIZE_X, COARSE_VOXEL_SIZE_Y, COARSE_VOXEL_SIZE_T
     global CHARGE_COLLECTION_RADIUS, CHARGE_NEIGHBOR_RADIUS
-    global INDUCTION_CUTOFF_RADIUS, INDUCTION_SIGNAL_THRESHOLD
+    global INDUCTION_CUTOFF_RADIUS, INDUCTION_SIGNAL_THRESHOLD, INDUCED_CURRENT_SCALE
     
     if voxel_size_x is not None:
         COARSE_VOXEL_SIZE_X = voxel_size_x
@@ -54,3 +62,5 @@ def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None,
         INDUCTION_CUTOFF_RADIUS = induction_cutoff_radius
     if induction_signal_threshold is not None:
         INDUCTION_SIGNAL_THRESHOLD = induction_signal_threshold
+    if induced_current_scale is not None:
+        INDUCED_CURRENT_SCALE = induced_current_scale
