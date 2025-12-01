@@ -15,7 +15,7 @@ from larndsim.consts import mesh_params
 
 
 @cuda.jit
-def calculate_far_field_dipole_signal_time_2d(
+def calculate_far_field_dipole_signal_time_kernel(
     voxel_x, voxel_y, voxel_z,   # (n_voxels,) arrays (initial positions)
     charges,                              # (n_voxels,) array (charge in each voxel)
     pixel_x, pixel_y,                     # (n_pixels,) arrays
@@ -103,7 +103,7 @@ def calculate_far_field_dipole_signal_time_2d(
     output[p_idx, t_idx] = total_current
 
 
-def launch_far_field_dipole_signal_time_3d(
+def launch_far_field_dipole_signal_calculation(
     voxel_pos, pixel_pos, voxel_charge, z_anode, z_cathode, v_drift, tick_size, n_ticks, n_terms=5, C=None,
     bx=16, by=16
 ):
@@ -135,7 +135,7 @@ def launch_far_field_dipole_signal_time_3d(
     # Use global induced current scale from mesh_params if C not provided
     C_val = mesh_params.INDUCED_CURRENT_SCALE if (C is None) else C
 
-    calculate_far_field_dipole_signal_time_2d[blockspergrid, threadsperblock](
+    calculate_far_field_dipole_signal_time_kernel[blockspergrid, threadsperblock](
         cp.asarray(voxel_pos[:,0]),
         cp.asarray(voxel_pos[:,1]),
         cp.asarray(voxel_pos[:,2]),
