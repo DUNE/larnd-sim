@@ -26,7 +26,7 @@ from larndsim import consts, quenching, drifting, fee
 from larndsim.active_volume import select_active_volume
 from larndsim.mesh_refinement.pixel_classifier import classify_pixels
 from larndsim.mesh_refinement.voxelization import gpu_voxelize, voxel_id_to_coordinates
-from larndsim.mesh_refinement.signal_calculation import launch_far_field_dipole_signal_time_3d
+from larndsim.mesh_refinement.signal_calculation import launch_far_field_dipole_signal_calculation
 from larndsim.config import get_config
 from larndsim.consts import units, sim
 from numba.cuda.random import create_xoroshiro128p_states
@@ -238,7 +238,7 @@ def test_far_field_pipeline_performance(input_filename, config='2x2', n_events=N
             n_ticks_this = int(np.ceil(max_signal_time / tick_size))
 
             t0_far = time.time()
-            induced_current = launch_far_field_dipole_signal_time_3d(
+            induced_current = launch_far_field_dipole_signal_calculation(
                 electron_pos,
                 pixel_pos,
                 cp.asarray(vox_charge, dtype=cp.float32),
