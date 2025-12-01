@@ -300,6 +300,8 @@ def classify_pixels(
             - charge_pixels: pixel IDs (global) of CHARGE_COLLECTION pixels
             - neighbor_pixels: pixel IDs (global) of CHARGE_NEIGHBOR pixels
             - induction_pixels: pixel IDs (global) of INDUCTION_ONLY pixels
+            - induction_pixels_x: x coordinates (cm) of INDUCTION_ONLY pixels
+            - induction_pixels_y: y coordinates (cm) of INDUCTION_ONLY pixels
 
     Raises:
         ValueError: If input arrays have mismatched sizes or invalid data
@@ -319,6 +321,8 @@ def classify_pixels(
             charge_pixels=cp.array([], dtype=np.int32),
             neighbor_pixels=cp.array([], dtype=np.int32),
             induction_pixels=cp.array([], dtype=np.int32),
+            induction_pixels_x=cp.array([], dtype=np.float32),
+            induction_pixels_y=cp.array([], dtype=np.float32),
         )
 
     # Move data to device memory for kernel consumption
@@ -364,14 +368,22 @@ def classify_pixels(
     neighbor_pixel_ids_h = pixel_ids[neighbor_pixels_h]
     induction_pixel_ids_h = pixel_ids[induction_pixels_h]
 
+    # Coordinates for induction-only pixels (NumPy)
+    induction_pixels_x_h = px_np[induction_pixels_h].astype(np.float32)
+    induction_pixels_y_h = py_np[induction_pixels_h].astype(np.float32)
+
     # Convert outputs to CuPy arrays for downstream GPU use
     charge_pixel_ids_gpu = cp.asarray(charge_pixel_ids_h)
     neighbor_pixel_ids_gpu = cp.asarray(neighbor_pixel_ids_h)
     induction_pixel_ids_gpu = cp.asarray(induction_pixel_ids_h)
+    induction_pixels_x_gpu = cp.asarray(induction_pixels_x_h)
+    induction_pixels_y_gpu = cp.asarray(induction_pixels_y_h)
 
-    # Return pixel IDs for the three categories
+    # Return pixel IDs and coordinates for the categories
     return PixelClassificationResult(
         charge_pixels=charge_pixel_ids_gpu,
         neighbor_pixels=neighbor_pixel_ids_gpu,
         induction_pixels=induction_pixel_ids_gpu,
+        induction_pixels_x=induction_pixels_x_gpu,
+        induction_pixels_y=induction_pixels_y_gpu,
     )
