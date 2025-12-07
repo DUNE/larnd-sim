@@ -87,6 +87,10 @@ ndlar_light:
     <<: *ndlarmain
     LIGHT_SIMULATED: True
 
+ndlar_mpvmpr:
+    <<: *ndlarmain
+    SIM_PROPERTIES: singles_sim_ndlar.yaml
+
 fsd:
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsd_v3.yaml
