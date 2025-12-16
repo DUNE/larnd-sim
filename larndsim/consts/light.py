@@ -27,12 +27,29 @@ LIGHT_TICK_SIZE = 0.001 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (1, 10) # us
 
+#: Use triple exponential scintillation model (default: False for double exponential)
+USE_TRIPLE_EXPONENTIAL = False
+
+#: Double exponential model parameters
 #: Fraction of total light emitted from singlet state
 SINGLET_FRACTION = 0.3
 #: Singlet decay time [microseconds]
 TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
 TAU_T = 1.530
+
+#: Triple exponential model parameters (used when USE_TRIPLE_EXPONENTIAL = True)
+#: Fast component fraction
+FAST_FRACTION = 0.3
+#: Fast component decay time [microseconds]
+TAU_FAST = 0.001 # us
+#: Intermediate component fraction
+INTERMEDIATE_FRACTION = 0.0
+#: Intermediate component decay time [microseconds]
+TAU_INTERMEDIATE = 0.1 # us (placeholder, needs tuning)
+#: Slow component fraction (calculated as 1 - FAST_FRACTION - INTERMEDIATE_FRACTION)
+#: Slow component decay time [microseconds]
+TAU_SLOW = 1.530 # us
 
 #: Conversion from PE/microsecond to ADC
 DEFAULT_LIGHT_GAIN = -2.30 # ADC * us/PE
@@ -83,9 +100,15 @@ def set_light_properties(detprop_file):
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
 
+    global USE_TRIPLE_EXPONENTIAL
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
+    global FAST_FRACTION
+    global TAU_FAST
+    global INTERMEDIATE_FRACTION
+    global TAU_INTERMEDIATE
+    global TAU_SLOW
 
     global LIGHT_GAIN
     global SIPM_RESPONSE_MODEL
@@ -141,9 +164,19 @@ def set_light_properties(detprop_file):
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
 
+        USE_TRIPLE_EXPONENTIAL = bool(detprop.get('use_triple_exponential', USE_TRIPLE_EXPONENTIAL))
+
+        # Double exponential model parameters
         SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
+
+        # Triple exponential model parameters
+        FAST_FRACTION = float(detprop.get('fast_fraction', FAST_FRACTION))
+        TAU_FAST = float(detprop.get('tau_fast', TAU_FAST))
+        INTERMEDIATE_FRACTION = float(detprop.get('intermediate_fraction', INTERMEDIATE_FRACTION))
+        TAU_INTERMEDIATE = float(detprop.get('tau_intermediate', TAU_INTERMEDIATE))
+        TAU_SLOW = float(detprop.get('tau_slow', TAU_SLOW))
 
         LIGHT_GAIN = np.array(detprop.get('light_gain', [DEFAULT_LIGHT_GAIN]))
         if LIGHT_GAIN.size == 1:
