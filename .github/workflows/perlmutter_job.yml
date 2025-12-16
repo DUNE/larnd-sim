@@ -1,0 +1,63 @@
+name: perlmutter-test
+
+on:
+  workflow_dispatch:
+  pull_request_target:
+    types:
+      - closed
+    branches:
+      - 'develop'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Linux, gpu, perlmutter]
+    steps:
+      - name: Validate running job
+        id: validate_job
+        run: |
+          PAYLOAD_RUN_ID=$(jq -r '.workflow_job.run_id' $PAYLOAD_FILE)
+          RUNNER_RUN_ID=${{ github.run_id }}
+
+          echo "Payload RUN ID: $PAYLOAD_RUN_ID"
+          echo "Runner  RUN ID: $RUNNER_RUN_ID"
+
+          # Compare job IDs and set output
+          if [ "$PAYLOAD_RUN_ID" == "$RUNNER_RUN_ID" ]; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository and run larnd-sim
+        id: checkout_run
+        if: steps.validate_job.outputs.valid == 'true'
+        run: |
+          echo $PWD
+          echo "Starting job"
+          mkdir runner; cd runner
+          # Assume we are running on Perlmutter
+          module load python/3.11
+          echo "Checking out larnd-sim"
+          git clone -b develop --depth 1 https://github.com/DUNE/larnd-sim.git
+          python3 -m venv env
+          source ./env/bin/activate
+          cd larnd-sim
+          echo "Installing larnd-sim"
+          pip install --upgrade pip setuptools
+          pip install .[runner]
+          cd ..
+          # Extract branch name (sanitize it for filename use)
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g')
+          # Get short commit SHA (first 7 characters)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # Get current time for documenation and unique filename
+          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+          FILENAME="larndsim_${BRANCH_NAME}_${SHORT_SHA}_${TIMESTAMP}"
+          echo "Running larnd-sim. Writing to ${FILENAME}"
+          lar_runner.py -y larnd-sim/cli/runner.yaml nsys -o "$FILENAME" &> "${FILENAME}.log"
+          echo "Creating Nsys CSV report."
+          lar_runner.py -y larnd-sim/cli/runner.yaml report "${FILENAME}.nsys-rep"
+          echo "Finished"

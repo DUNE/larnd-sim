@@ -18,14 +18,15 @@ def setup_logging(verbose: bool = False) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'
     )
 
 def load_defaults(config_name: str, verbose: bool = False) -> dict:
     #Checking if config_name is None
     config_name = config_name if config_name else 'runner.yaml'
 
-    print(f"Opening {config_name}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Opening {config_name}")
     with open(config_name, 'r') as file:
         yaml_doc = yaml.load(file, Loader=yaml.SafeLoader)
 
@@ -34,12 +35,18 @@ def load_defaults(config_name: str, verbose: bool = False) -> dict:
 
     return yaml_doc
 
-def build_larnd_cmd(larnd_config: dict) -> str:
+def build_larnd_cmd(larnd_config: dict, output_name: str = None) -> str:
     """Bild larnd-sim command for ncu and nsys."""
+    logger = logging.getLogger(__name__)
     config = larnd_config['config']
     rng_seed = larnd_config['rng_seed']
     input_file = larnd_config['input_file']
-    output_file = larnd_config['output_file']
+    output_file = output_name if output_name else larnd_config['output_file']
+
+    # Add hdf5 extension if not present
+    base, ext = os.path.splitext(output_file)
+    if ext != ".hdf5":
+        output_file += ".hdf5"
 
     larnd_sim_cmd = f" simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_file}"
     larnd_sim_cmd += f" --rand_seed {rng_seed}"
@@ -50,7 +57,10 @@ def build_larnd_cmd(larnd_config: dict) -> str:
     compression = larnd_config.get('compression', 'lzf')
     larnd_sim_cmd += f" --compression {compression}"
 
-    return larnd_sim_cmd
+    logger.info(f"Running larnd-sim with config: {config}")
+    logger.info(f"Input edep-sim hdf5: {input_file}")
+    logger.info(f"Output larnd-sim filename: {output_file}")
+    return larnd_sim_cmd, output_file
 
 def cmd_run(args: argparse.Namespace, config: str) -> int:
     """Handle the 'run' subcommand to run larnd-sim."""
@@ -65,6 +75,9 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     logger.info(f"Input edep-sim hdf5: {input_file}")
 
     output_file = args.output if args.output else larnd_config['output_file']
+    base, ext = os.path.splitext(output_file) # Add hdf5 extension if not present
+    if ext != ".hdf5":
+        output_file += ".hdf5"
     logger.info(f"Output filename: {output_file}")
 
     default_seed = args.rand_seed if args.rand_seed else larnd_config.get('rng_seed', 321)
@@ -92,7 +105,7 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     else:
         if args.force:
             if os.path.exists(output_file):
-                print(f"Deleting existing {output_file}")
+                logger.info(f"Deleting existing {output_file}")
                 os.remove(output_file)
 
         print(f"Complete command:\n {cmd}")
@@ -106,17 +119,18 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
     larnd_config = config['larnd-sim']
     nsys_config = config['nsys']
 
-    nsys=nsys_config['exec']
+    nsys = nsys_config['exec']
     cmd = f"{nsys} profile"
     cmd += " --cuda-memory-usage=true --python-backtrace=cuda --python-sampling=true"
 
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-overwrite=true"
 
     output_dir = nsys_config.get('output_dir', '.')
     output_file = args.output if args.output else nsys_config.get('output_file', None)
     if output_file:
-        logger.info(f"Profile output: {output_file}")
+        logger.info(f"Nsys Profile output: {output_file}")
         output_path = os.path.join(output_dir, output_file)
         cmd += f" -o {output_path}"
 
@@ -124,16 +138,19 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config)
+    lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
+    cmd += lar_cmd
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
     else:
-        if args.force:
-            lar_output = larnd_config['output_file']
-            if os.path.exists(lar_output):
-                print(f"Deleting existing {lar_output}")
-                os.remove(lar_output)
+        if args.force and os.path.exists(lar_output):
+            logger.info(f"Deleting existing {lar_output}")
+            os.remove(lar_output)
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Creating output dir: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True, mode=0o775)
 
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
@@ -153,22 +170,24 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     cmd += f" --set {metrics}"
 
     kernels = args.kernels if args.kernels else ncu_config['kernels']
-    #Extract string from list, joining multiple kernels to form a regex pattern
+    # Extract string from list, joining multiple kernels to form a regex pattern
     if len(kernels) > 1 and isinstance(kernels, list):
         kernels = "|".join(kernels)
     else:
         kernels = kernels[0]
 
+    # Which invocation of the kernel to profile
     num_invoc = ncu_config.get('invocation', 5)
     cmd += f' --kernel-id "::regex:{kernels}:{num_invoc}"'
 
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-overwrite=true"
 
     output_dir = ncu_config.get('output_dir', '.')
     output_file = args.output if args.output else ncu_config.get('output_file', None)
     if output_file:
-        logger.info(f"Profile output: {output_file}")
+        logger.info(f"NCU Profile output: {output_file}")
         output_path = os.path.join(output_dir, output_file)
         cmd += f" -o {output_path}"
 
@@ -176,11 +195,20 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
         logger.info(f"Adding the following arguments {args.args}")
         cmd += f" {args.args}"
 
-    cmd += build_larnd_cmd(larnd_config)
+    lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
+    cmd += lar_cmd
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
         return 0
     else:
+        if args.force and os.path.exists(lar_output):
+            logger.info(f"Deleting existing {lar_output}")
+            os.remove(lar_output)
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Creating output dir: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True, mode=0o775)
+
         print(f"Complete command:\n {cmd}")
         tmp = subprocess.run('dcgmi profile --pause', shell=True)
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
@@ -203,7 +231,7 @@ def cmd_compare(args: argparse.Namespace, config: dict) -> int:
         cmd += " --strict"
 
     if args.verbose:
-        cmd += "--verbose"
+        cmd += " --verbose"
 
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
@@ -223,16 +251,19 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
     nsys_report = args.report if args.report else report_config['report']
     nsys_format = report_config.get('format', 'csv')
     nsys_timeunit = report_config.get('timeunit', 'ms')
-    nsys_dir = os.path.dirname(nsys_file)
-    nsys_stats_file = os.path.splitext(nsys_file)[0] + f"_{nsys_report}.{nsys_format}"
 
     logger.info(f"Nsys report file: {nsys_file}")
-    # logger.info(f"Output file: {args.output}")
+    if not os.path.isfile(nsys_file):
+        logger.info(f"Not found: {nsys_file}")
+        nsys_file = os.path.join(nsys_config['output_dir'], nsys_file)
+        logger.info(f"Trying {nsys_file}")
 
+    nsys_stats_file = os.path.splitext(nsys_file)[0] + f"_{nsys_report}.{nsys_format}"
     cmd = f"{nsys} stats --report {nsys_report} --format {nsys_format} --timeunit {nsys_timeunit}"
     if args.force:
+        logger.info("Overwriting existing output files.")
         cmd += " --force-export=true --force-overwrite=true"
-    cmd += " --output . {nsys_file}"
+    cmd += f" --output . {nsys_file}"
 
     if args.dry_run:
         print(f"DRY RUN -- complete command to run:\n {cmd}")
@@ -242,13 +273,23 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int:
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
 
     if nsys_report == "nvtx_sum":
+        # Add correct relative time
         df = pd.read_csv(nsys_stats_file)
         rel_time = df.iloc[:, 1] / df.iloc[0, 1] * 100
         df.insert(loc=1, column='Rel. Time (%)', value=rel_time)
         df.drop(columns=['Time (%)', 'Style'], inplace=True)
+
+        # Insert row to account for time outside of 'run_simulation'
+        rel_time_diff = df.iloc[0, 0] - df.iloc[1, 0]
+        total_time_diff = df.iloc[0, 1] - df.iloc[1, 1]
+        other_row = [rel_time_diff, total_time_diff, 1, total_time_diff, total_time_diff, total_time_diff, total_time_diff, 0, "outside_run_sim"]
+        df.loc[len(df)] = other_row
+
+        # Sort rows and round values for display
+        df = df.sort_values(by='Rel. Time (%)', ascending=False)
         df = df.round(3)
         print(df)
-        df.to_csv(os.path.splitext(nsys_stats_file)[0] + "_edit.csv", index=False)
+        df.to_csv(os.path.splitext(nsys_stats_file)[0] + ".csv", index=False)
 
     return 0
 
@@ -387,6 +428,7 @@ def create_parser() -> argparse.ArgumentParser:
         help='Enable strict comparisons between files'
     )
 
+    # 'report' subcommand
     parser_report = subparsers.add_parser(
         'report',
         help='Generate nsys profile summary',

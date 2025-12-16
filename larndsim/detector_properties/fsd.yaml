@@ -9,16 +9,18 @@ tpc_offsets: # cm
 # as in nd-lar (also in fsd) one vertical row of tiles are connected to one pacman (one io-group)
 # while in 2x2 modules, the tile numbering follows horizontal first and then vertical in the 2x4 anode.
 tile_map:
-  - [[10,9,8,7,6,5,4,3,2,1],[20,19,18,17,16,15,14,13,12,11]]
-  - [[30,29,28,27,26,25,24,23,22,21],[40,39,38,37,36,35,34,33,32,31]]
+  - [[20,19,18,17,16,15,14,13,12,11],[10,9,8,7,6,5,4,3,2,1]]
+  - [[40,39,38,37,36,35,34,33,32,31],[30,29,28,27,26,25,24,23,22,21]]
 module_to_io_groups:
   1: [1, 2, 3, 4]
 
 module_to_tpcs: {1: [0, 1]}
 
 discrimination_threshold: 5.0e3 # e-
-v_cm: 478 # mV
-v_ref: 1568 # mV
+v_cm: 458.7 # mV ; based on data-taking conditions
+v_ref: 1504.2 # mV ; based on data-taking conditions
+larpix_gain: 2.46e-3 # preliminary measurement by Stephen: https://indico.fnal.gov/event/71610
+periodic_reset_cycles: 256 # nominal periodic reset cycles used in FSD run 1
 
 ## Light geometry parameters
 n_op_channel: 240
@@ -32,11 +34,12 @@ tau_t: 1.530 # us
 enable_lut_smearing: True # sample from the time profile for photon arrival time (True) or use average photon arrival time (False)
 op_channel_efficiency: 1
 light_gain: -7.0
+light_tick_size: 0.016 # us
 light_det_noise_sample_spacing: 0.016 # us
 light_trig_threshold: [-2000, -4500] # [LCM, ACL]
-light_trig_mode: 1
-light_window: [0, 16] # us
-light_trig_window: [1.6, 14.4] # us
+light_trig_mode: 0
+light_window: [0.00, 8.64] # us
+light_trig_window: [0.96, 8.64] # us
 light_digit_sample_spacing: 0.016 # us
 light_nbit: 14
 sipm_response_model: 1 # 0: RLC model; 1: measured

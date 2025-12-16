@@ -877,9 +877,8 @@ def run_simulation(input_filename,
 
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
 
-            if (i_mod == 1
-                or (mod2mod_variation
-                    and light_lut != light_lut_filename[i_mod-2])):
+            if (i_mod == -1 or
+               (mod2mod_variation and (i_mod == 1 or light_lut != light_lut_filename[i_mod-2]))):
 
                 lut = np.load(light_lut)['arr']
 
@@ -934,7 +933,7 @@ def run_simulation(input_filename,
                 op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                 op_channel = cp.array(op_channel)
                 trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
 
                 n_light_det = op_channel.shape[0]
                 n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
@@ -1092,12 +1091,17 @@ def run_simulation(input_filename,
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
             RangePop() # invert_array_map
 
-            for ipix in tqdm(range(0, all_unique_pix.shape[0], sim.PIXEL_BATCH_SIZE),
-                             delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
-                RangePush("setup_pixel_batch")
-                selected_pix = all_unique_pix[ipix:ipix+sim.PIXEL_BATCH_SIZE]
+            pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
+                                                          sim.SEGMENT_BATCH_SIZE)
 
-                selected_track_idcs = np.unique(assmap_pix2seg[ipix:ipix+sim.PIXEL_BATCH_SIZE])
+            for start_pix, stop_pix in \
+                    tqdm(pixel_ranges, delay=1,
+                         desc='  Simulating event %i batches...' % ievd,
+                         leave=False, ncols=80):
+                RangePush("setup_pixel_batch")
+                selected_pix = all_unique_pix[start_pix:stop_pix]
+
+                selected_track_idcs = np.unique(assmap_pix2seg[start_pix:stop_pix])
                 selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
                 if selected_track_idcs.size == 0:
                     continue
@@ -1409,7 +1413,7 @@ def run_simulation(input_filename,
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
                 trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
                         max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
