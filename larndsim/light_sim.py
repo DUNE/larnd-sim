@@ -14,22 +14,40 @@ from math import ceil, floor, exp, sqrt, sin
 import h5py
 
 #from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
-@cuda.jit
                                     if photons > sim.MC_TRUTH_THRESHOLD:
-    """
-    Sums the number of photons observed by each light detector at each time tick,
-    by convolving each segment's LUT output with the LAr scintillation pulse shape,
-    summing all segments per channel/tick. The SiPM SPE response convolution should be applied after this summing step.
-
-    Args: (same as before, but no sipm_response)
-        scint_model(array): LAr scintillation time profile
-    """
-    idet,itick = cuda.grid(2)
-
-    if idet < light_sample_inc.shape[0]:
-        if itick < light_sample_inc.shape[1]:
-            idet_lut = op_channel[idet] % lut.shape[3]
+@nb.njit
             for itrk in sorted_indices[idet]:
+    """
+    Calculates the fraction of scintillation photons emitted
+    during time interval `time_tick` to `time_tick + 1`.
+    If triple_exponential is True, includes an intermediate component.
+
+    Args:
+        time_tick(int): time tick relative to t0
+        triple_exponential (bool): If True, use triple exponential model
+        intermediate_fraction (float or None): Fraction for intermediate component (if None, uses light.INTERMEDIATE_FRACTION)
+        tau_i (float or None): Intermediate decay time (if None, uses light.TAU_I)
+
+    Returns:
+        float: fraction of scintillation photons
+    """
+    singlet = light.SINGLET_FRACTION
+    triplet = 1.0 - singlet
+    interm = 0.0
+    tau_s = light.TAU_S
+    tau_t = light.TAU_T
+    tau_i_val = light.TAU_I if tau_i is None else tau_i
+    interm_frac = light.INTERMEDIATE_FRACTION if intermediate_fraction is None else intermediate_fraction
+    if triple_exponential:
+        # Repartition fractions
+        triplet = 1.0 - singlet - interm_frac
+        interm = interm_frac
+    t = time_tick * light.LIGHT_TICK_SIZE
+    dt = light.LIGHT_TICK_SIZE
+    p1 = singlet * exp(-t / tau_s) * (1 - exp(-dt / tau_s))
+    p2 = interm * exp(-t / tau_i_val) * (1 - exp(-dt / tau_i_val)) if triple_exponential else 0.0
+    p3 = triplet * exp(-t / tau_t) * (1 - exp(-dt / tau_t))
+    return (p1 + p2 + p3) * (t >= 0)
                 n_photons = light_inc[itrk,op_channel[idet]]['n_photons_det']
                 if n_photons > 0:
                     voxel = segment_voxel[itrk]
@@ -153,21 +171,23 @@ def scintillation_array(scint_model):
         p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
         scint_model[time_tick] = p1 + p3
 
-@cuda.jit
 def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
+@nb.njit
+            conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
     """
-    Applies a smearing effect due to the liquid argon scintillation time profile using
-    a two decay component scintillation model.
+    Calculates the fraction of scintillation photons emitted
+    during time interval `time_tick` to `time_tick + 1` for
+    the entire input array.
+    If triple_exponential is True, includes an intermediate component.
 
     Args:
-        light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
-        light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
+        scint_model: array to store result
+        triple_exponential (bool): If True, use triple exponential model
+        intermediate_fraction (float or None): Fraction for intermediate component
+        tau_i (float or None): Intermediate decay time
     """
-    idet,itick = cuda.grid(2)
-
-    if idet < light_sample_inc.shape[0]:
-        if itick < light_sample_inc.shape[1]:
-            conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
+    for time_tick in range(scint_model.shape[0]):
+        scint_model[time_tick] = scintillation_model(time_tick, triple_exponential, intermediate_fraction, tau_i)
 
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 if light_sample_inc[idet,jtick] == 0:
@@ -290,16 +310,15 @@ def sipm_response_model(time_tick):
                         # Optionally get per-segment singlet fraction (e.g., by PDG code)
                         singlet_fraction = light.SINGLET_FRACTION
                         if variable_singlet_fraction:
-                            # Example: use segments[itrk]['pdg'] if available
                             pdg = 0
                             if 'pdg' in segments.dtype.fields:
                                 pdg = segments[itrk]['pdg']
-                            # User can define mapping here:
-                            if pdg == 11:  # electron
-                                singlet_fraction = 0.25
-                            elif pdg == 13:  # muon
-                                singlet_fraction = 0.35
-                            # else use default or add more cases
+                            # Set singlet fraction for neutrons or any nuclei (PDG > 1e9 covers all nuclei, including alphas)
+                            # Neutron: PDG 2112, nuclei: |PDG| > 1000000000
+                            if pdg == 2112 or abs(pdg) > 1000000000:
+                                singlet_fraction = 0.7
+                            else:
+                                singlet_fraction = 0.3
     Returns:
         float: response
     """
