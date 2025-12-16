@@ -13,72 +13,66 @@ from math import ceil, floor, exp, sqrt, sin
 
 import h5py
 
-from .consts import light
 #from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
-
-#from .consts.detector import TPC_BORDERS, MODULE_TO_TPCS, TPC_TO_MODULE
-from .consts import units
-from .consts import sim
-from .consts import detector
-
-def get_nticks(light_incidence):
-    """
-    Calculates the number of time ticks needed to simulate light signals of the
-    event (plus the desired pre- and post-intervals)
-
-    Args:
-        light_incidence(array): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
-
-    Returns:
-        tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
-    """
-    mask = light_incidence['n_photons_det'] > 0
-    # only use the first photon arrival time if it's threshold trigger
-    if np.any(mask) and light.LIGHT_TRIG_MODE == 0:
-        start_time = np.min(light_incidence['t0_det'][mask]) - light.LIGHT_WINDOW[0]
-        end_time = np.max(light_incidence['t0_det'][mask]) + light.LIGHT_WINDOW[1]
-        return int(np.ceil((end_time - start_time)/light.LIGHT_TICK_SIZE)), start_time
-    return int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE), 0
-
-def get_active_op_channel(light_incidence):
-    """
-    Returns an array of optical channels that need to be simulated
-
-    Args:
-        light_incidence(array): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
-
-    Returns:
-        array: shape `(ndet_active,)` op detector index of each active channel (`int`)
-    """
-    mask = light_incidence['n_photons_det'] > 0
-    if np.any(mask):
-        return cp.array(np.where(np.any(mask, axis=0))[0], dtype='i4')
-    return cp.empty((0,), dtype='i4')
-    
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length):
+                                    if photons > sim.MC_TRUTH_THRESHOLD:
     """
-    Sums the number of photons observed by each light detector at each time tick
+    Sums the number of photons observed by each light detector at each time tick,
+    by convolving each segment's LUT output with the LAr scintillation pulse shape,
+    summing all segments per channel/tick. The SiPM SPE response convolution should be applied after this summing step.
 
-    Args:
-        segments(array): shape `(ntracks,)`, edep-sim tracks to simulate
-        segment_voxel(array): shape `(ntracks, 3)`, LUT voxel for eack edep-sim track
-        segment_track_id(array): shape `(ntracks,)`, unique id for each track segment (for MC truth backtracking)
-        light_inc(array): shape `(ntracks, ndet)`, number of photons incident on each detector and voxel id
-        op_channel(array): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
-        lut(array): shape `(nx,ny,nz,ndet_tpc)`, light look up table
-        start_time(float): start time of light simulation in microseconds
-        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
-        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
-        light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
-        sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
+    Args: (same as before, but no sipm_response)
+        scint_model(array): LAr scintillation time profile
     """
     idet,itick = cuda.grid(2)
 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
-
-            start_tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+            idet_lut = op_channel[idet] % lut.shape[3]
+            for itrk in sorted_indices[idet]:
+                n_photons = light_inc[itrk,op_channel[idet]]['n_photons_det']
+                if n_photons > 0:
+                    voxel = segment_voxel[itrk]
+                    track_time = segments[itrk]['t0']
+                    # For each segment, build its time profile (LUT or average)
+                    if light.ENABLE_LUT_SMEARING:
+                        time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
+                        n_profile = time_profile.shape[0]
+                        for iprof in range(n_profile):
+                            profile_time = track_time + iprof * units.ns / units.mus
+                            for iscin in range(scint_model.shape[0]):
+                                scint_time = profile_time + iscin * light.LIGHT_TICK_SIZE
+                                scint_weight = scint_model[iscin]
+                                tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                                if abs(tick_time - scint_time) < 0.5 * light.LIGHT_TICK_SIZE:
+                                    photons = n_photons * time_profile[iprof] * scint_weight / light.LIGHT_TICK_SIZE
+                                    light_sample_inc[idet,itick] += photons
+                                    if photons > sim.MC_TRUTH_THRESHOLD:
+                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                break
+                    else:
+                        t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus
+                        for iscin in range(scint_model.shape[0]):
+                            scint_time = track_time + t0_avg + iscin * light.LIGHT_TICK_SIZE
+                            scint_weight = scint_model[iscin]
+                            tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                            if abs(tick_time - scint_time) < 0.5 * light.LIGHT_TICK_SIZE:
+                                photons = n_photons * scint_weight / light.LIGHT_TICK_SIZE
+                                light_sample_inc[idet,itick] += photons
+                                if photons > sim.MC_TRUTH_THRESHOLD:
+                                    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                        if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                            light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                            light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                            break
+                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                break
             end_tick_time = start_tick_time + light.LIGHT_TICK_SIZE
 
             # find tracks that contribute light to this time tick
@@ -131,12 +125,12 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
 @nb.njit
 def scintillation_model(time_tick):
     """
-    Calculates the fraction of scintillation photons emitted 
+    Calculates the fraction of scintillation photons emitted
     during time interval `time_tick` to `time_tick + 1`
-    
+
     Args:
         time_tick(int): time tick relative to t0
-    
+
     Returns:
         float: fraction of scintillation photons
     """
@@ -147,10 +141,10 @@ def scintillation_model(time_tick):
 @nb.njit
 def scintillation_array(scint_model):
     """
-    Calculates the fraction of scintillation photons emitted 
+    Calculates the fraction of scintillation photons emitted
     during time interval `time_tick` to `time_tick + 1` for
     the entire input array.
-    
+
     Args:
         scint_model: array to store result
     """
@@ -164,7 +158,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
     """
     Applies a smearing effect due to the liquid argon scintillation time profile using
     a two decay component scintillation model.
-    
+
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
         light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
@@ -174,7 +168,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
-            
+
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 if light_sample_inc[idet,jtick] == 0:
                     continue
@@ -185,7 +179,7 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
                     if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
                         break
-                        
+
                     if tick_weight * light_sample_inc_true_photons[idet,jtick,itrue] < sim.MC_TRUTH_THRESHOLD:
                         continue
 
@@ -200,13 +194,13 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
 @nb.njit
 def xoroshiro128p_poisson_int32(mean, states, index):
     """
-    Return poisson distributed int32 and advance `states[index]`. For efficiency, 
+    Return poisson distributed int32 and advance `states[index]`. For efficiency,
     if `mean > 30`, returns a gaussian distributed int32 with `mean == mean`
     and `std = sqrt(mean)` truncated at 0 (approximately equivalent to a poisson-
     distributed number)
 
     [DOI:10.1007/978-1-4613-8643-8_10]
-    
+
     Args:
         mean(float): mean of poisson distribution
         states(array): array of RNG states
@@ -229,13 +223,13 @@ def xoroshiro128p_poisson_int32(mean, states, index):
                 break
         return x
     return max(int(cuda.random.xoroshiro128p_normal_float32(states, index) * sqrt(mean) + mean),0)
-    
-                
+
+
 @cuda.jit
 def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
     """
     Simulates Poisson fluctuations in the number of PE per time tick.
-    
+
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, effective photocurrent on each detector
         light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stocastic fluctuations)
@@ -271,61 +265,92 @@ def interp(idx, arr, low, high):
 
     if i0 < 0:
         return low
-    if i0 > len(arr)-1:
         return high
+    @cuda.jit
     if i0 == idx:
         return arr[i0]
     if i0 > len(arr)-2:
         return high
 
     i1 = i0 + 1
-    v0 = arr[i0]
-    v1 = arr[i1]
+        Args: (same as before, but no sipm_response)
+            scint_model(array): LAr scintillation time profile (default, for fixed singlet fraction)
+            variable_singlet_fraction (bool): If True, use per-segment singlet fraction (based on PDG code or other info)
     return v0 + (v1 - v0) * (idx - i0)
 
 @nb.njit()
 def sipm_response_model(time_tick):
     """
     Calculates the SiPM response from a PE at `time_tick` relative to the PE time
-    
+
     Args:
         idet(int): SiPM index
         time_tick(int): time tick relative to t0
-    
+
+                        # Optionally get per-segment singlet fraction (e.g., by PDG code)
+                        singlet_fraction = light.SINGLET_FRACTION
+                        if variable_singlet_fraction:
+                            # Example: use segments[itrk]['pdg'] if available
+                            pdg = 0
+                            if 'pdg' in segments.dtype.fields:
+                                pdg = segments[itrk]['pdg']
+                            # User can define mapping here:
+                            if pdg == 11:  # electron
+                                singlet_fraction = 0.25
+                            elif pdg == 13:  # muon
+                                singlet_fraction = 0.35
+                            # else use default or add more cases
     Returns:
         float: response
     """
     # use RLC response model
     if light.SIPM_RESPONSE_MODEL == 0:
         t = time_tick * light.LIGHT_TICK_SIZE
-        impulse = (t>=0) * exp(-t/light.LIGHT_RESPONSE_TIME) * sin(t/light.LIGHT_OSCILLATION_PERIOD)
-        # normalize to 1
-        impulse /= light.LIGHT_OSCILLATION_PERIOD * light.LIGHT_RESPONSE_TIME**2
-        impulse *= light.LIGHT_OSCILLATION_PERIOD**2 + light.LIGHT_RESPONSE_TIME**2
-        return impulse * light.LIGHT_TICK_SIZE
-
-    # use measured response model
-    if light.SIPM_RESPONSE_MODEL == 1:
-        impulse = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
-        # normalize to 1
-        impulse /=  light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
-        return impulse
-
+                                for iscin in range(scint_model.shape[0]):
+                                    scint_time = profile_time + iscin * light.LIGHT_TICK_SIZE
+                                    # Compute per-segment scintillation weight if variable_singlet_fraction
+                                    if variable_singlet_fraction:
+                                        tau_s = light.TAU_S
+                                        tau_t = light.TAU_T
+                                        t = iscin * light.LIGHT_TICK_SIZE
+                                        p1 = singlet_fraction * exp(-t / tau_s) * (1 - exp(-light.LIGHT_TICK_SIZE / tau_s))
+                                        p3 = (1 - singlet_fraction) * exp(-t / tau_t) * (1 - exp(-light.LIGHT_TICK_SIZE / tau_t))
+                                        scint_weight = (p1 + p3) * (t >= 0)
+                                    else:
+                                        scint_weight = scint_model[iscin]
+                                    tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                                    if abs(tick_time - scint_time) < 0.5 * light.LIGHT_TICK_SIZE:
+                                        photons = n_photons * time_profile[iprof] * scint_weight / light.LIGHT_TICK_SIZE
+                                        light_sample_inc[idet,itick] += photons
+                                        if photons > sim.MC_TRUTH_THRESHOLD:
+                                            for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                                if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                    light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                    light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                    break
 @nb.njit()
 def sipm_response_array(sipm_response):
-    """
-    Calculates the SiPM response from a PE at every `time_tick` relative to the PE time
-    for the given array
-    
-    Args:
-        sipm_response: array to store response
-    """
-    if light.SIPM_RESPONSE_MODEL == 0:
-        for time_tick in range(sipm_response.shape[0]):
-            t = time_tick * light.LIGHT_TICK_SIZE
-            sipm_response[time_tick] = (t>=0) * exp(-t/light.LIGHT_RESPONSE_TIME) * sin(t/light.LIGHT_OSCILLATION_PERIOD)
-        sipm_response /= light.LIGHT_OSCILLATION_PERIOD * light.LIGHT_RESPONSE_TIME**2
-        sipm_response *= light.LIGHT_OSCILLATION_PERIOD**2 + light.LIGHT_RESPONSE_TIME**2
+                            for iscin in range(scint_model.shape[0]):
+                                scint_time = track_time + t0_avg + iscin * light.LIGHT_TICK_SIZE
+                                if variable_singlet_fraction:
+                                    tau_s = light.TAU_S
+                                    tau_t = light.TAU_T
+                                    t = iscin * light.LIGHT_TICK_SIZE
+                                    p1 = singlet_fraction * exp(-t / tau_s) * (1 - exp(-light.LIGHT_TICK_SIZE / tau_s))
+                                    p3 = (1 - singlet_fraction) * exp(-t / tau_t) * (1 - exp(-light.LIGHT_TICK_SIZE / tau_t))
+                                    scint_weight = (p1 + p3) * (t >= 0)
+                                else:
+                                    scint_weight = scint_model[iscin]
+                                tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                                if abs(tick_time - scint_time) < 0.5 * light.LIGHT_TICK_SIZE:
+                                    photons = n_photons * scint_weight / light.LIGHT_TICK_SIZE
+                                    light_sample_inc[idet,itick] += photons
+                                    if photons > sim.MC_TRUTH_THRESHOLD:
+                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                break
 
     if light.SIPM_RESPONSE_MODEL == 1:
         for time_tick in range(sipm_response.shape[0]):
@@ -336,7 +361,7 @@ def sipm_response_array(sipm_response):
 def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
     """
     Simulates the SiPM reponse and digit
-    
+
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
         light_response(array): shape `(ndet, ntick)`, ADC value at each time tick
@@ -346,16 +371,16 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
     if idet < light_sample_inc.shape[0]:
         if itick < light_sample_inc.shape[1]:
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
-            
+
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response[itick-jtick]
                 light_response[idet,itick] += light_gain[idet] * tick_weight * light_sample_inc[idet,jtick]
-                    
+
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
                     if light_sample_inc_true_track_id[idet,jtick,itrue] == -1:
                         break
-                        
+
                     if abs(tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]) < sim.MC_TRUTH_THRESHOLD:
                         continue
 
@@ -366,32 +391,32 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
                             light_response_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,itick,itrue]
                             light_response_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
                             break
-                
+
 
 def gen_light_detector_noise(shape, light_det_noise):
     """
     Generates uncorrelated noise with a defined frequency spectrum
-    
+
     Args:
         shape(tuple): desired shape of output noise, `shape[0]` must equal `light_det_noise.shape[0]`
         light_det_noise(array): FFT of noise, `light_det_noise.ndim == 2`
-        
+
     Returns:
         array: shape `(shape[0], shape[1])`, randomly generated sample noise
     """
     if not shape[0]:
         return cp.empty(shape)
-    
+
     noise_freq = cp.fft.rfftfreq((light_det_noise.shape[-1]-1)*2, d=light.LIGHT_DET_NOISE_SAMPLE_SPACING)
     desired_freq = cp.fft.rfftfreq(shape[-1], d=light.LIGHT_TICK_SIZE)
-    
+
     bin_size = cp.diff(desired_freq).mean()
     noise_spectrum = cp.zeros((shape[0], desired_freq.shape[0]))
     for idet in range(shape[0]):
         noise_spectrum[idet] = cp.interp(desired_freq, noise_freq, light_det_noise[idet], left=0, right=0)
     # rescale noise spectrum to have constant noise power with digitizer sample spacing
     noise_spectrum *= cp.sqrt(cp.diff(noise_freq, axis=-1).mean()/bin_size) * light.LIGHT_DIGIT_SAMPLE_SPACING / light.LIGHT_TICK_SIZE
-    
+
 
     # generate an FFT with the same frequency power, but with random phase
     noise = noise_spectrum * cp.exp(2j * cp.pi * cp.random.uniform(size=noise_spectrum.shape))
@@ -412,17 +437,17 @@ def gen_light_detector_noise(shape, light_det_noise):
 def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
     """
     Identifies each simulated ticks that would initiate a trigger taking into account the ADC digitization window
-    
+
     Args:
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
         group_threshold(array): shape `(ngrp,)`, threshold on group sum (requires `ndet/ngrp == OP_CHANNEL_PER_TRIG`)
         op_channel_idx(array): shape `(ndet,)`, optical channel index for each signal
         i_subbatch(int): index of the sub_batch numbering ("itrk in the batch for loop")
-        
+
     Returns:
         tuple: array of tick indices at each trigger (shape `(ntrigs,)`) and array of op channel index (shape `(ntrigs, ndet_module)`)
     """
-    
+
     shape = signal.shape
     # sum over all signals on a single detector (shape: (ndet, nticks) -> (ngrp, ndetpergrp, nticks) -> (ngrp, 1, nticks))
     signal_sum = signal.reshape(shape[0]//light.OP_CHANNEL_PER_TRIG, light.OP_CHANNEL_PER_TRIG, shape[-1]).sum(axis=1, keepdims=True)
@@ -456,7 +481,7 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
             op_channels = light.TPC_TO_OP_CHANNEL[tpc_ids].ravel()
             op_channel_mask = np.isin(op_channel_idx.get(), op_channels)
             #module_above_thresh = cp.any(sample_above_thresh[op_channels], axis=0)
-            module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)        
+            module_above_thresh = np.any(sample_above_thresh[op_channel_mask], axis=0)
 
             last_trigger = 0
             while cp.any(module_above_thresh):
@@ -479,11 +504,11 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
         # which means it is executed per event
         # keep track of trigger time (initial comment)
         trigger_idx_list.append(cp.asarray(0)) # the first trigger in the event
-        op_channel_idx_list.append(op_channel_idx) 
+        op_channel_idx_list.append(op_channel_idx)
         trigger_type_list.append(cp.asarray(1)) # beam
 
         ## would we ever get these secondary triggers? -- Not at the moment
-        ## 1. currently the internal light simulation window is the same as the light readout window, 
+        ## 1. currently the internal light simulation window is the same as the light readout window,
         ##    and 16us is large enough (for NuMI at least)
         ## 2. potentially an off-beam event if ever simulated together with the beam, will be considered as a separate event
         ##    therefore, likely will not be in the same batch
@@ -513,7 +538,7 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
 def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_channel_idx, signal_true_track_id, signal_true_photons, digit_signal, digit_signal_true_track_id, digit_signal_true_photons):
     """
     Interpolate signal to the appropriate sampling frequency
-    
+
     Args:
         signal(array): shape `(ndet, nticks)`, simulated signal on each channel
         signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
@@ -522,7 +547,7 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
         digit_signal(array): output array, shape `(ntrigs, ndet_module, nsamples)`, digitized signal
     """
     itrig,idet_module,isample = cuda.grid(3)
-    
+
     if itrig < digit_signal.shape[0]:
         if idet_module < digit_signal.shape[1]:
             if isample < digit_signal.shape[2]:
@@ -539,7 +564,7 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
 
                 itick0 = int(floor(sample_tick))
                 itick1 = int(ceil(sample_tick))
-                
+
                 itrue = 0
                 # loop over previous tick truth
                 for jtrue in range(signal_true_track_id.shape[-1]):
@@ -547,80 +572,68 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
                         break
                     if signal_true_track_id[idet_signal,itick0,jtrue] == -1:
                         break
-                            
-                    photons0, photons1 = 0, 0
 
-                    # if matches the current sample track or we have empty truth slot, add truth info
-                    if signal_true_track_id[idet_signal,itick0,jtrue] == digit_signal_true_track_id[itrig,idet_module,isample,itrue] or digit_signal_true_track_id[itrig,idet_module,isample,itrue] == -1:
-                        digit_signal_true_track_id[itrig,idet_module,isample,itrue] = signal_true_track_id[idet_signal,itick0,jtrue]
-                        itrue += 1
-                        # interpolate true photons
-                        photons0 = signal_true_photons[idet,itick0,jtrue]
-                        
-                        if abs(photons0) < sim.MC_TRUTH_THRESHOLD:
-                            continue
 
-                        # loop over next tick
-                        # first try same position (for speed-up)
-                        if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,jtrue]:
-                            photons1 = signal_true_photons[idet_signal,itick1,jtrue]
-                        else:
-                            for ktrue in range(signal_true_track_id.shape[-1]):
-                                if signal_true_track_id[idet_signal,itick0,jtrue] == signal_true_track_id[idet_signal,itick1,ktrue]:
-                                    photons1 = signal_true_photons[idet_signal,itick1,ktrue]
-                                    break
-
-                    # if a valid truth entry was found, do interpolation
-                    if digit_signal_true_track_id[itrig,idet_module,isample,itrue-1] != -1:
-                        digit_signal_true_photons[itrig,idet_module,isample,itrue-1] = interp(sample_tick-itick0, (photons0,photons1), 0, 0)
-
-def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, signal_true_photons, trigger_idx, op_channel_idx, digit_samples, light_det_noise):
-    """
-    Generates digitized waveforms at specified simulation tick indices
-    
-    Args:
-        bpg(tuple): blocks per grid used to generate digitized waveforms, `len(bpg) == 3`, `prod(bpg) * prod(tpb) >= digit_samples.size`
-        tpb(tuple): threads per grid used to generate digitized waveforms, `len(bpg) == 3`, `bpg[i] * tpb[i] >= digit_samples.shape[i]`
-        signal(array): shape `(ndet, nticks)`, simulated signal on each channel
-        signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
-        signal_true_track_id(array): shape `(ndet, nticks, ntruth)`, true segments associated with each tick
-        signal_true_photons(array): shape `(ndet, nticks, ntruth)`, true photons associated with each tick from each track
-        trigger_idx(array): shape `(ntrigs,)`, tick index for each trigger to digitize
-        op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel indices for each trigger
-        digit_samples(int): number of digitizations per waveform
-        light_det_noise(array): shape `(ndet, nnoise_bins)`, noise spectrum for each channel (only used if waveforms extend past simulated signal)
-        
-    Returns:
-        array: shape `(ntrigs, ndet_module, digit_samples)`, digitized waveform on each channel for each trigger
-    """
-    digit_signal = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples), dtype='f8')
-    digit_signal_true_track_id = cp.full((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
-    digit_signal_true_photons = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_photons.shape[-1]), dtype=signal_true_photons.dtype)
-    # exit if no triggers
-    if digit_signal.shape[0] == 0:
-        return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
-    
-    padded_trigger_idx = trigger_idx.copy()
-
-    # pad front of simulation with noise, if trigger close to start of simulation window
-    pre_digit_ticks = int(ceil(light.LIGHT_TRIG_WINDOW[0]/light.LIGHT_TICK_SIZE))
-    if trigger_idx.min() - pre_digit_ticks < 0:
-        pad_shape = (signal.shape[0], int(pre_digit_ticks - trigger_idx.min()))
-        pre_trig_readout = cp.zeros(pad_shape)
-        signal = cp.concatenate([pre_trig_readout, signal], axis=-1)
-        #signal = cp.concatenate([gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx]), signal], axis=-1)
-        signal_true_track_id = cp.concatenate([cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype), signal_true_track_id], axis=-2)
-        signal_true_photons = cp.concatenate([cp.zeros(pad_shape + signal_true_photons.shape[-1:], signal_true_photons.dtype), signal_true_photons], axis=-2)
-        padded_trigger_idx += pad_shape[1]
-    
-    # pad end of simulation with noise, if trigger close to end of simulation window
-    post_digit_ticks = int(ceil(light.LIGHT_TRIG_WINDOW[1]/light.LIGHT_TICK_SIZE))
-    if post_digit_ticks + padded_trigger_idx.max() > signal.shape[1]:
-        pad_shape = (signal.shape[0], int(post_digit_ticks + padded_trigger_idx.max() - signal.shape[1]))
-        post_trig_readout = cp.zeros(pad_shape)
-        signal = cp.concatenate([signal, post_trig_readout], axis=-1)
-        #signal = cp.concatenate([signal, gen_light_detector_noise(pad_shape, light_det_noise[signal_op_channel_idx])], axis=-1)
+                    @cuda.jit
         signal_true_track_id = cp.concatenate([signal_true_track_id, cp.full(pad_shape + signal_true_track_id.shape[-1:], -1, dtype=signal_true_track_id.dtype)], axis=-2)
+                        """
+                        Sums the number of photons observed by each light detector at each time tick,
+                        but first convolves (smears) each segment's LUT output with the SiPM pulse shape
+                        before summing. This enables per-segment pulse shape variation in the future.
+
+                        Args: (same as before, plus sipm_response)
+                            sipm_response(array): SiPM response function (impulse response)
+                        """
+                        idet,itick = cuda.grid(2)
+
+                        if idet < light_sample_inc.shape[0]:
+                            if itick < light_sample_inc.shape[1]:
+                                idet_lut = op_channel[idet] % lut.shape[3]
+                                for itrk in sorted_indices[idet]:
+                                    n_photons = light_inc[itrk,op_channel[idet]]['n_photons_det']
+                                    if n_photons > 0:
+                                        voxel = segment_voxel[itrk]
+                                        track_time = segments[itrk]['t0']
+                                        # For each segment, build its time profile (LUT or average)
+                                        if light.ENABLE_LUT_SMEARING:
+                                            time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
+                                            n_profile = time_profile.shape[0]
+                                            # Convolve segment's time profile with SiPM response
+                                            for iprof in range(n_profile):
+                                                # Time of this profile bin
+                                                profile_time = track_time + iprof * units.ns / units.mus
+                                                # For each tick in output, apply pulse shape
+                                                for iresp in range(sipm_response.shape[0]):
+                                                    # Output tick time
+                                                    tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                                                    # Time difference between tick and this photon emission
+                                                    dt = tick_time - profile_time
+                                                    # Find corresponding response bin
+                                                    resp_bin = int(dt / light.LIGHT_TICK_SIZE)
+                                                    if 0 <= resp_bin < sipm_response.shape[0]:
+                                                        photons = n_photons * time_profile[iprof] * sipm_response[resp_bin] / light.LIGHT_TICK_SIZE
+                                                        light_sample_inc[idet,itick] += photons
+                                                        if photons > sim.MC_TRUTH_THRESHOLD:
+                                                            for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                                                if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                                    light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                                    light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                                    break
+                                        else:
+                                            t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus
+                                            for iresp in range(sipm_response.shape[0]):
+                                                tick_time = itick * light.LIGHT_TICK_SIZE + start_time
+                                                dt = tick_time - (track_time + t0_avg)
+                                                resp_bin = int(dt / light.LIGHT_TICK_SIZE)
+                                                if 0 <= resp_bin < sipm_response.shape[0]:
+                                                    photons = n_photons * sipm_response[resp_bin] / light.LIGHT_TICK_SIZE
+                                                    light_sample_inc[idet,itick] += photons
+                                                    if photons > sim.MC_TRUTH_THRESHOLD:
+                                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                                break
         signal_true_photons = cp.concatenate([signal_true_photons, cp.zeros(pad_shape + signal_true_photons.shape[-1:], dtype=signal_true_photons.dtype)], axis=-2)
 
     # add noise to padded (in readout time) signal
@@ -647,7 +660,7 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
 
     # truncate to correct number of bits
     digit_signal = cp.round(digit_signal / 2**(16-light.LIGHT_NBIT)) * 2**(16-light.LIGHT_NBIT)
-    
+
     return digit_signal, digit_signal_true_track_id, digit_signal_true_photons
 
 def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons, i_evt, i_trig, i_mod=-1):
@@ -658,7 +671,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         i_evt(int): event id
         waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
         waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
-        i_evt(int): true event id 
+        i_evt(int): true event id
         i_trig(int): light trigger or light event id
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
 
@@ -693,7 +706,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
 def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_true_track_id, waveforms_true_photons, i_trig, i_mod=-1, compression=None):
     """
     Saves waveforms to output file
-    
+
     Args:
         event_id(array): shape `(ntrigs,)`, event id for each trigger
         waveforms(array): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
@@ -701,11 +714,11 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
         waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
         waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
-    
+
     """
     if event_id.shape[0] == 0:
         return
-    
+
     with h5py.File(output_filename, 'a') as f:
 
         # the final dataset will be (n_triggers, all op channels in the detector, waveform samples)
@@ -729,7 +742,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
             else:
                 f['light_wvfm'].resize(f['light_wvfm'].shape[0] + waveforms.shape[0], axis=0)
                 f['light_wvfm'][-waveforms.shape[0]:] = waveforms
-                
+
         # Store the light truth backtracking, in the same way for module variation turned on and off
         # skip creating the truth dataset if there is no truth information to store
         truth_data=None
@@ -745,7 +758,7 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
 def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression=None):
     """
     Saves light trigger to output file
-    
+
     Args:
         event_id(array): shape `(ntrigs,)`, event id for each trigger
         start_times(array): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
@@ -753,11 +766,11 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
         op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
         output_filename(str): output hdf5 file path
         event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
-    
+
     """
     if event_id.shape[0] == 0:
         return
-    
+
     unique_events, unique_events_inv = np.unique(event_id, return_inverse=True)
     event_start_times = event_times[unique_events_inv]
     event_sync_times = (event_times[unique_events_inv] / detector.CLOCK_CYCLE).astype(int) % detector.CLOCK_RESET_PERIOD
@@ -799,7 +812,7 @@ def merge_module_light_wvfm_same_trigger(output_filename, compression=None):
     """
     with h5py.File(output_filename, 'a') as f:
         for i_, i_mod in enumerate(detector.MOD_IDS):
-            if i_ == 0:  
+            if i_ == 0:
                 merged_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
             else:
                 mod_wvfm = f[f'light_wvfm/light_wvfm_mod{i_mod-1}']
