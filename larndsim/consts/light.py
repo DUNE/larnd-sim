@@ -1,3 +1,7 @@
+#: Fraction of total light emitted from intermediate state (triple exponential option)
+INTERMEDIATE_FRACTION = 0.0  # Default 0, set >0 to enable triple exp
+#: Intermediate decay time [microseconds] (triple exponential option)
+TAU_I = 0.01 # us (example value, tune as needed)
 """
 Sets ligth-related constants
 """

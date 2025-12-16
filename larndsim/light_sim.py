@@ -1,43 +1,27 @@
 """
-Module that simulates smearing effects of the light incident on each
-photodetector
+"""
+Module that simulates smearing effects of the light incident on each photodetector.
 """
 
 import numba as nb
-
 from numba import cuda
-
 import numpy as np
 import cupy as cp
 from math import ceil, floor, exp, sqrt, sin
-
 import h5py
 
-#from .consts.light import LIGHT_TICK_SIZE, LIGHT_WINDOW, SINGLET_FRACTION, TAU_S, TAU_T, LIGHT_GAIN, LIGHT_OSCILLATION_PERIOD, LIGHT_RESPONSE_TIME, LIGHT_DET_NOISE_SAMPLE_SPACING, LIGHT_TRIG_MODE, LIGHT_TRIG_THRESHOLD, LIGHT_TRIG_WINDOW, LIGHT_DIGIT_SAMPLE_SPACING, LIGHT_NBIT, OP_CHANNEL_TO_TPC, OP_CHANNEL_PER_TRIG, TPC_TO_OP_CHANNEL, SIPM_RESPONSE_MODEL, IMPULSE_TICK_SIZE, IMPULSE_MODEL, MC_TRUTH_THRESHOLD, ENABLE_LUT_SMEARING
-                                    if photons > sim.MC_TRUTH_THRESHOLD:
+# Helper functions for repeated logic
+def get_singlet_fraction(pdg, default_fraction):
+    """Return singlet fraction based on PDG code."""
+    if pdg == 2112 or abs(pdg) > 1000000000:
+        return 0.7
+    return 0.3 if pdg != 0 else default_fraction
+
 @nb.njit
-            for itrk in sorted_indices[idet]:
-    """
-    Calculates the fraction of scintillation photons emitted
-    during time interval `time_tick` to `time_tick + 1`.
-    If triple_exponential is True, includes an intermediate component.
-
-    Args:
-        time_tick(int): time tick relative to t0
-        triple_exponential (bool): If True, use triple exponential model
-        intermediate_fraction (float or None): Fraction for intermediate component (if None, uses light.INTERMEDIATE_FRACTION)
-        tau_i (float or None): Intermediate decay time (if None, uses light.TAU_I)
-
-    Returns:
-        float: fraction of scintillation photons
-    """
-    singlet = light.SINGLET_FRACTION
-    triplet = 1.0 - singlet
-    interm = 0.0
-    tau_s = light.TAU_S
-    tau_t = light.TAU_T
-    tau_i_val = light.TAU_I if tau_i is None else tau_i
-    interm_frac = light.INTERMEDIATE_FRACTION if intermediate_fraction is None else intermediate_fraction
+def compute_scint_weight(t, tau_s, tau_t, singlet_fraction, dt):
+    p1 = singlet_fraction * exp(-t / tau_s) * (1 - exp(-dt / tau_s))
+    p3 = (1 - singlet_fraction) * exp(-t / tau_t) * (1 - exp(-dt / tau_t))
+    return p1 + p3 if t >= 0 else 0.0
     if triple_exponential:
         # Repartition fractions
         triplet = 1.0 - singlet - interm_frac
@@ -54,23 +38,14 @@ import h5py
                     track_time = segments[itrk]['t0']
                     # For each segment, build its time profile (LUT or average)
                     if light.ENABLE_LUT_SMEARING:
-                        time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist']
-                        n_profile = time_profile.shape[0]
-                        for iprof in range(n_profile):
-                            profile_time = track_time + iprof * units.ns / units.mus
-                            for iscin in range(scint_model.shape[0]):
-                                scint_time = profile_time + iscin * light.LIGHT_TICK_SIZE
-                                scint_weight = scint_model[iscin]
-                                tick_time = itick * light.LIGHT_TICK_SIZE + start_time
-                                if abs(tick_time - scint_time) < 0.5 * light.LIGHT_TICK_SIZE:
-                                    photons = n_photons * time_profile[iprof] * scint_weight / light.LIGHT_TICK_SIZE
-                                    light_sample_inc[idet,itick] += photons
-                                    if photons > sim.MC_TRUTH_THRESHOLD:
-                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                                break
+def update_truth_backtracking(light_sample_inc_true_track_id, light_sample_inc_true_photons, idet, itick, segment_id, photons):
+    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+        if light_sample_inc_true_track_id[idet, itick, itrue] == -1 or light_sample_inc_true_track_id[idet, itick, itrue] == segment_id:
+            light_sample_inc_true_track_id[idet, itick, itrue] = segment_id
+            light_sample_inc_true_photons[idet, itick, itrue] += photons
+            break
+
+# ...existing code...
                     else:
                         t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus
                         for iscin in range(scint_model.shape[0]):
