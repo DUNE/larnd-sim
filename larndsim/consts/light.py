@@ -17,6 +17,14 @@ OP_CHANNEL_EFFICIENCY = np.ones(0)
 OP_CHANNEL_TO_TPC = np.zeros(0)
 TPC_TO_OP_CHANNEL = np.zeros((0,0))
 
+#: PDE correction factors (data/MC efficiency ratios) applied to LUT visibility
+#: Shape: (n_op_channel,) - one correction per optical channel
+#: Applied uniformly across all channels in the same detector unit
+#: Default value of 1.0 means no correction
+OP_CHANNEL_PDE_CORRECTION = np.ones(0)
+#: Enable PDE correction feature
+ENABLE_PDE_CORRECTION = False
+
 #: Prescale factor analogous to ScintPreScale in LArSoft FIXME
 SCINT_PRESCALE = 1
 #: Ion + excitation work function in `MeV`
@@ -95,6 +103,8 @@ def set_light_properties(detprop_file):
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
     global TPC_TO_OP_CHANNEL
+    global OP_CHANNEL_PDE_CORRECTION
+    global ENABLE_PDE_CORRECTION
 
     global ENABLE_LUT_SMEARING
     global LIGHT_TICK_SIZE
@@ -141,6 +151,32 @@ def set_light_properties(detprop_file):
         OP_CHANNEL_EFFICIENCY = np.array(detprop.get('op_channel_efficiency', OP_CHANNEL_EFFICIENCY))
         if OP_CHANNEL_EFFICIENCY.size == 1:
             OP_CHANNEL_EFFICIENCY = np.full(N_OP_CHANNEL, OP_CHANNEL_EFFICIENCY)
+
+        # Load PDE correction factors (data/MC efficiency ratios)
+        ENABLE_PDE_CORRECTION = bool(detprop.get('enable_pde_correction', ENABLE_PDE_CORRECTION))
+        pde_correction_file = str(detprop.get('pde_correction_file', ''))
+
+        if ENABLE_PDE_CORRECTION and pde_correction_file:
+            # Load from file (numpy array)
+            try:
+                # First try to load from current directory
+                OP_CHANNEL_PDE_CORRECTION = np.load(pde_correction_file)
+            except FileNotFoundError:
+                # Then try from larnd-sim base directory
+                try:
+                    OP_CHANNEL_PDE_CORRECTION = np.load(os.path.join(os.path.dirname(__file__), '../../') + pde_correction_file)
+                except FileNotFoundError:
+                    print("PDE correction file not found:", pde_correction_file, ", using default correction of 1.0")
+                    OP_CHANNEL_PDE_CORRECTION = np.ones(N_OP_CHANNEL)
+        else:
+            # Load from YAML or use default
+            OP_CHANNEL_PDE_CORRECTION = np.array(detprop.get('op_channel_pde_correction', np.ones(N_OP_CHANNEL)))
+
+        # Ensure correct shape
+        if OP_CHANNEL_PDE_CORRECTION.size == 1:
+            OP_CHANNEL_PDE_CORRECTION = np.full(N_OP_CHANNEL, OP_CHANNEL_PDE_CORRECTION)
+        elif OP_CHANNEL_PDE_CORRECTION.size != N_OP_CHANNEL:
+            raise ValueError(f"PDE correction array size ({OP_CHANNEL_PDE_CORRECTION.size}) must match N_OP_CHANNEL ({N_OP_CHANNEL})")
 
         try:
             tpc_to_op_channel = detprop['tpc_to_op_channel']

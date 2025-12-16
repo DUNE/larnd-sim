@@ -56,7 +56,7 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length, scint_model_heavy, scint_model_light):
+def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length, scint_model_heavy, scint_model_light, pde_correction):
     """
     Sums the number of photons observed by each light detector at each time tick,
     applying LAr scintillation convolution per segment with particle-dependent singlet fraction
@@ -77,6 +77,7 @@ def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_
         t0_profile_length(int): length of the LUT time profile
         scint_model_heavy(array): shape `(nticks,)`, scintillation model for heavy particles (neutrons, alphas, nuclei) with singlet_fraction=0.7
         scint_model_light(array): shape `(nticks,)`, scintillation model for light particles (electrons, muons, etc.) with singlet_fraction=0.3
+        pde_correction(array): shape `(ndet_active,)`, PDE correction factors (data/MC efficiency ratios) applied to LUT visibility before convolutions
     """
     idet,itick = cuda.grid(2)
 
@@ -123,6 +124,10 @@ def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_
                             # Base photon rate from LUT for this profile bin
                             base_photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
 
+                            # Apply PDE correction (data/MC efficiency ratio) to LUT visibility
+                            # This corrects for measured in-situ detector efficiency
+                            base_photons *= pde_correction[idet]
+
                             if base_photons <= 0:
                                 continue
 
@@ -160,6 +165,9 @@ def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_
                         if profile_tick >= 0 and profile_tick < light_sample_inc.shape[1]:
                             # Base photon rate
                             base_photons = light_inc['n_photons_det'][itrk,op_channel[idet]] / light.LIGHT_TICK_SIZE
+
+                            # Apply PDE correction (data/MC efficiency ratio) to LUT visibility
+                            base_photons *= pde_correction[idet]
 
                             if base_photons > 0:
                                 # Apply scintillation convolution
