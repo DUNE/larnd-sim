@@ -56,9 +56,11 @@ def get_active_op_channel(light_incidence):
     return cp.empty((0,), dtype='i4')
     
 @cuda.jit
-def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length):
+def sum_light_signals_with_scintillation(segments, segment_voxel, segment_track_id, light_inc, op_channel, lut, start_time, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, sorted_indices, t0_profile_length, scint_model_heavy, scint_model_light, pde_correction):
     """
-    Sums the number of photons observed by each light detector at each time tick
+    Sums the number of photons observed by each light detector at each time tick,
+    applying LAr scintillation convolution per segment with particle-dependent singlet fraction
+    before summing. This allows for variation in pulse shape based on particle type.
 
     Args:
         segments(array): shape `(ntracks,)`, edep-sim tracks to simulate
@@ -68,10 +70,14 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
         op_channel(array): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
         lut(array): shape `(nx,ny,nz,ndet_tpc)`, light look up table
         start_time(float): start time of light simulation in microseconds
-        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
-        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
+        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (after scintillation convolution per segment)
+        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick
         light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
         sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
+        t0_profile_length(int): length of the LUT time profile
+        scint_model_heavy(array): shape `(nticks,)`, scintillation model for heavy particles (neutrons, alphas, nuclei) with singlet_fraction=0.7
+        scint_model_light(array): shape `(nticks,)`, scintillation model for light particles (electrons, muons, etc.) with singlet_fraction=0.3
+        pde_correction(array): shape `(ndet_active,)`, PDE correction factors (data/MC efficiency ratios) applied to LUT visibility before convolutions
     """
     idet,itick = cuda.grid(2)
 
@@ -89,75 +95,162 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                     track_time = segments[itrk]['t0']
                     track_end_time = track_time + t0_profile_length * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
 
-                    if track_end_time < start_tick_time or track_time > end_tick_time:
-                        continue
+                    # Determine which scintillation model to use based on particle type
+                    # PDG codes: neutron=2112, alpha=1000020040
+                    # Heavy particles (neutrons, alphas, nuclei) use singlet_fraction=0.7
+                    # Light particles (everything else) use singlet_fraction=0.3
+                    pdg_id = segments[itrk]['pdg_id']
+                    use_heavy_model = False
+                    if pdg_id == 2112:  # neutron
+                        use_heavy_model = True
+                    elif pdg_id > 1000000000:  # nuclei (including alphas)
+                        use_heavy_model = True
 
                     # use LUT time smearing
                     if light.ENABLE_LUT_SMEARING:
                         time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
 
-                        # add photons to time tick
+                        # apply scintillation convolution for each profile time bin
                         for iprof in range(time_profile.shape[0]):
                             profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
-                            if profile_time < end_tick_time and profile_time > start_tick_time:
-                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
-                                light_sample_inc[idet,itick] += photons
 
-                                if photons > sim.MC_TRUTH_THRESHOLD:
-                                    # get truth information for time tick
-                                    for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                        if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                            light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                            light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                            break
+                            # Calculate which tick this profile time corresponds to (before convolution)
+                            profile_tick_float = (profile_time - start_time) / light.LIGHT_TICK_SIZE
+                            profile_tick = int(profile_tick_float)
+
+                            if profile_tick < 0 or profile_tick >= light_sample_inc.shape[1]:
+                                continue
+
+                            # Base photon rate from LUT for this profile bin
+                            base_photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
+
+                            # Apply PDE correction (data/MC efficiency ratio) to LUT visibility
+                            # This corrects for measured in-situ detector efficiency
+                            base_photons *= pde_correction[idet]
+
+                            if base_photons <= 0:
+                                continue
+
+                            # Apply scintillation convolution: this profile bin at profile_tick contributes to future ticks
+                            # The current tick (itick) receives contribution from profile bins that occurred (itick - profile_tick) ticks ago
+                            conv_offset = itick - profile_tick
+                            if conv_offset >= 0 and conv_offset < scint_model_heavy.shape[0]:
+                                if use_heavy_model:
+                                    tick_weight = scint_model_heavy[conv_offset]
+                                else:
+                                    tick_weight = scint_model_light[conv_offset]
+
+                                photons = base_photons * tick_weight
+
+                                if photons > 0:
+                                    light_sample_inc[idet,itick] += photons
+
+                                    if photons > sim.MC_TRUTH_THRESHOLD:
+                                        # get truth information for time tick
+                                        for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                            if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                break
                     # use average time only
                     else:
                         # calculate average delay time
-                        t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus # normalised averagein us
+                        t0_avg = lut[voxel[0],voxel[1],voxel[2],idet_lut]['t0_avg'] * units.ns / units.mus # normalised average in us
 
-                        # add photons to time tick
+                        # Calculate which tick this corresponds to (before convolution)
                         profile_time = track_time + t0_avg
-                        if profile_time < end_tick_time and profile_time > start_tick_time:
-                            photons = light_inc['n_photons_det'][itrk,op_channel[idet]] / light.LIGHT_TICK_SIZE
-                            light_sample_inc[idet,itick] += photons
-                            if photons > sim.MC_TRUTH_THRESHOLD:
-                                # get truth information for time tick
-                                for itrue in range(light_sample_inc_true_track_id.shape[-1]):
-                                    if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
-                                        light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
-                                        light_sample_inc_true_photons[idet,itick,itrue] += photons
-                                        break
+                        profile_tick_float = (profile_time - start_time) / light.LIGHT_TICK_SIZE
+                        profile_tick = int(profile_tick_float)
+
+                        if profile_tick >= 0 and profile_tick < light_sample_inc.shape[1]:
+                            # Base photon rate
+                            base_photons = light_inc['n_photons_det'][itrk,op_channel[idet]] / light.LIGHT_TICK_SIZE
+
+                            # Apply PDE correction (data/MC efficiency ratio) to LUT visibility
+                            base_photons *= pde_correction[idet]
+
+                            if base_photons > 0:
+                                # Apply scintillation convolution
+                                conv_offset = itick - profile_tick
+                                if conv_offset >= 0 and conv_offset < scint_model_heavy.shape[0]:
+                                    if use_heavy_model:
+                                        tick_weight = scint_model_heavy[conv_offset]
+                                    else:
+                                        tick_weight = scint_model_light[conv_offset]
+
+                                    photons = base_photons * tick_weight
+
+                                    if photons > 0:
+                                        light_sample_inc[idet,itick] += photons
+
+                                        if photons > sim.MC_TRUTH_THRESHOLD:
+                                            # get truth information for time tick
+                                            for itrue in range(light_sample_inc_true_track_id.shape[-1]):
+                                                if light_sample_inc_true_track_id[idet,itick,itrue] == -1 or light_sample_inc_true_track_id[idet,itick,itrue] == segment_track_id[itrk]:
+                                                    light_sample_inc_true_track_id[idet,itick,itrue] = segment_track_id[itrk]
+                                                    light_sample_inc_true_photons[idet,itick,itrue] += photons
+                                                    break
 
 @nb.njit
 def scintillation_model(time_tick):
     """
-    Calculates the fraction of scintillation photons emitted 
+    Calculates the fraction of scintillation photons emitted
     during time interval `time_tick` to `time_tick + 1`
-    
+    Supports both double and triple exponential models.
+
     Args:
         time_tick(int): time tick relative to t0
-    
+
     Returns:
         float: fraction of scintillation photons
     """
-    p1 = light.SINGLET_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
-    p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
-    return (p1 + p3) * (time_tick >= 0)
-
-@nb.njit
-def scintillation_array(scint_model):
-    """
-    Calculates the fraction of scintillation photons emitted 
-    during time interval `time_tick` to `time_tick + 1` for
-    the entire input array.
-    
-    Args:
-        scint_model: array to store result
-    """
-    for time_tick in range(scint_model.shape[0]):
+    if light.USE_TRIPLE_EXPONENTIAL:
+        # Triple exponential model with fast, intermediate, and slow components
+        p1 = light.FAST_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_FAST) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_FAST))
+        p2 = light.INTERMEDIATE_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_INTERMEDIATE) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_INTERMEDIATE))
+        slow_fraction = 1.0 - light.FAST_FRACTION - light.INTERMEDIATE_FRACTION
+        p3 = slow_fraction * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_SLOW) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_SLOW))
+        return (p1 + p2 + p3) * (time_tick >= 0)
+    else:
+        # Standard double exponential model (singlet and triplet)
         p1 = light.SINGLET_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
         p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
-        scint_model[time_tick] = p1 + p3
+        return (p1 + p3) * (time_tick >= 0)
+
+@nb.njit
+def scintillation_array(scint_model, singlet_fraction=None, fast_fraction=None, intermediate_fraction=None):
+    """
+    Calculates the fraction of scintillation photons emitted
+    during time interval `time_tick` to `time_tick + 1` for
+    the entire input array. Supports both double and triple exponential models.
+
+    Args:
+        scint_model: array to store result
+        singlet_fraction: optional singlet fraction for double exponential (defaults to light.SINGLET_FRACTION)
+        fast_fraction: optional fast fraction for triple exponential (defaults to light.FAST_FRACTION)
+        intermediate_fraction: optional intermediate fraction for triple exponential (defaults to light.INTERMEDIATE_FRACTION)
+    """
+    if light.USE_TRIPLE_EXPONENTIAL:
+        # Triple exponential model with fast, intermediate, and slow components
+        if fast_fraction is None:
+            fast_fraction = light.FAST_FRACTION
+        if intermediate_fraction is None:
+            intermediate_fraction = light.INTERMEDIATE_FRACTION
+        slow_fraction = 1.0 - fast_fraction - intermediate_fraction
+
+        for time_tick in range(scint_model.shape[0]):
+            p1 = fast_fraction * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_FAST) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_FAST))
+            p2 = intermediate_fraction * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_INTERMEDIATE) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_INTERMEDIATE))
+            p3 = slow_fraction * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_SLOW) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_SLOW))
+            scint_model[time_tick] = p1 + p2 + p3
+    else:
+        # Standard double exponential model (singlet and triplet)
+        if singlet_fraction is None:
+            singlet_fraction = light.SINGLET_FRACTION
+        for time_tick in range(scint_model.shape[0]):
+            p1 = singlet_fraction * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
+            p3 = (1 - singlet_fraction) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
+            scint_model[time_tick] = p1 + p3
 
 @cuda.jit
 def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):

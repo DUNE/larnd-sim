@@ -17,6 +17,21 @@ OP_CHANNEL_EFFICIENCY = np.ones(0)
 OP_CHANNEL_TO_TPC = np.zeros(0)
 TPC_TO_OP_CHANNEL = np.zeros((0,0))
 
+#: PDE correction factors (data/MC efficiency ratios) applied to LUT visibility
+#: Shape: (n_tpc, n_detectors_per_tpc) - one correction per detector unit
+#: Each correction is applied uniformly to all channels in that detector
+#: (e.g., all 6 channels in an ACL, or both channels in an LCM)
+#: Internally expanded to per-channel array for kernel use
+#: Default value of 1.0 means no correction
+PDE_CORRECTION_2D = np.ones((0,0))  # 2D array: (n_tpc, n_detectors_per_tpc)
+OP_CHANNEL_PDE_CORRECTION = np.ones(0)  # 1D expanded version for kernel (n_op_channel,)
+#: Detector to channel mapping: list of (tpc_id, detector_id, [channel_ids]) for each detector unit
+#: Used to expand 2D PDE corrections to per-channel array
+#: Format: [(tpc, det, [ch0, ch1, ...]), (tpc, det, [ch0, ..., ch5]), ...]
+DETECTOR_CHANNEL_MAP = []
+#: Enable PDE correction feature
+ENABLE_PDE_CORRECTION = False
+
 #: Prescale factor analogous to ScintPreScale in LArSoft FIXME
 SCINT_PRESCALE = 1
 #: Ion + excitation work function in `MeV`
@@ -27,12 +42,29 @@ LIGHT_TICK_SIZE = 0.001 # us
 #: Pre- and post-window for light simulation [microseconds]
 LIGHT_WINDOW = (1, 10) # us
 
+#: Use triple exponential scintillation model (default: False for double exponential)
+USE_TRIPLE_EXPONENTIAL = False
+
+#: Double exponential model parameters
 #: Fraction of total light emitted from singlet state
 SINGLET_FRACTION = 0.3
 #: Singlet decay time [microseconds]
 TAU_S = 0.001 # us
 #: Triplet decay time [microseconds]
 TAU_T = 1.530
+
+#: Triple exponential model parameters (used when USE_TRIPLE_EXPONENTIAL = True)
+#: Fast component fraction
+FAST_FRACTION = 0.3
+#: Fast component decay time [microseconds]
+TAU_FAST = 0.001 # us
+#: Intermediate component fraction
+INTERMEDIATE_FRACTION = 0.0
+#: Intermediate component decay time [microseconds]
+TAU_INTERMEDIATE = 0.1 # us (placeholder, needs tuning)
+#: Slow component fraction (calculated as 1 - FAST_FRACTION - INTERMEDIATE_FRACTION)
+#: Slow component decay time [microseconds]
+TAU_SLOW = 1.530 # us
 
 #: Conversion from PE/microsecond to ADC
 DEFAULT_LIGHT_GAIN = -2.30 # ADC * us/PE
@@ -78,14 +110,24 @@ def set_light_properties(detprop_file):
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
     global TPC_TO_OP_CHANNEL
+    global PDE_CORRECTION_2D
+    global OP_CHANNEL_PDE_CORRECTION
+    global DETECTOR_CHANNEL_MAP
+    global ENABLE_PDE_CORRECTION
 
     global ENABLE_LUT_SMEARING
     global LIGHT_TICK_SIZE
     global LIGHT_WINDOW
 
+    global USE_TRIPLE_EXPONENTIAL
     global SINGLET_FRACTION
     global TAU_S
     global TAU_T
+    global FAST_FRACTION
+    global TAU_FAST
+    global INTERMEDIATE_FRACTION
+    global TAU_INTERMEDIATE
+    global TAU_SLOW
 
     global LIGHT_GAIN
     global SIPM_RESPONSE_MODEL
@@ -119,6 +161,70 @@ def set_light_properties(detprop_file):
         if OP_CHANNEL_EFFICIENCY.size == 1:
             OP_CHANNEL_EFFICIENCY = np.full(N_OP_CHANNEL, OP_CHANNEL_EFFICIENCY)
 
+        # Load PDE correction factors (data/MC efficiency ratios)
+        # Expected shape: (n_tpc, n_detectors_per_tpc) where detectors may have varying channel counts (2 or 6)
+        ENABLE_PDE_CORRECTION = bool(detprop.get('enable_pde_correction', ENABLE_PDE_CORRECTION))
+        pde_correction_file = str(detprop.get('pde_correction_file', ''))
+
+        # Build or load detector-to-channel mapping
+        # This handles mixed detector types (e.g., 2-channel LCMs and 6-channel ACLs)
+        detector_map_config = detprop.get('detector_channel_map', None)
+
+        if detector_map_config:
+            # Load explicit mapping from YAML: [(tpc, det, [channels]), ...]
+            DETECTOR_CHANNEL_MAP = [(entry['tpc'], entry['detector'], entry['channels'])
+                                     for entry in detector_map_config]
+        else:
+            # Infer mapping assuming uniform OP_CHANNEL_PER_TRIG channels per detector
+            # This is a fallback - explicit mapping is preferred for mixed detector types
+            DETECTOR_CHANNEL_MAP = []
+            for itpc in range(n_tpc):
+                tpc_channels = TPC_TO_OP_CHANNEL[itpc]
+                n_detectors_this_tpc = len(tpc_channels) // OP_CHANNEL_PER_TRIG
+                for idet in range(n_detectors_this_tpc):
+                    det_channels = tpc_channels[idet*OP_CHANNEL_PER_TRIG:(idet+1)*OP_CHANNEL_PER_TRIG]
+                    DETECTOR_CHANNEL_MAP.append((itpc, idet, list(det_channels)))
+
+        # Determine 2D shape from detector map
+        n_detectors_per_tpc = max([det for tpc, det, _ in DETECTOR_CHANNEL_MAP]) + 1 if DETECTOR_CHANNEL_MAP else 0
+
+        if ENABLE_PDE_CORRECTION and pde_correction_file:
+            # Load from file (numpy array with shape (n_tpc, n_detectors_per_tpc))
+            try:
+                # First try to load from current directory
+                PDE_CORRECTION_2D = np.load(pde_correction_file)
+            except FileNotFoundError:
+                # Then try from larnd-sim base directory
+                try:
+                    PDE_CORRECTION_2D = np.load(os.path.join(os.path.dirname(__file__), '../../') + pde_correction_file)
+                except FileNotFoundError:
+                    print("PDE correction file not found:", pde_correction_file, ", using default correction of 1.0")
+                    PDE_CORRECTION_2D = np.ones((n_tpc, n_detectors_per_tpc))
+        else:
+            # Load from YAML or use default
+            pde_corr_yaml = detprop.get('pde_correction_2d', None)
+            if pde_corr_yaml is None:
+                PDE_CORRECTION_2D = np.ones((n_tpc, n_detectors_per_tpc))
+            else:
+                pde_corr_yaml = np.array(pde_corr_yaml)
+                if pde_corr_yaml.size == 1:
+                    # Single value: apply to all detectors
+                    PDE_CORRECTION_2D = np.full((n_tpc, n_detectors_per_tpc), pde_corr_yaml)
+                else:
+                    PDE_CORRECTION_2D = pde_corr_yaml.reshape(n_tpc, n_detectors_per_tpc)
+
+        # Validate 2D shape
+        if PDE_CORRECTION_2D.shape[0] != n_tpc:
+            raise ValueError(f"PDE correction array has {PDE_CORRECTION_2D.shape[0]} TPCs, expected {n_tpc}")
+
+        # Expand 2D array to 1D per-channel array using detector-channel mapping
+        # This correctly handles mixed detector types (2-ch and 6-ch)
+        OP_CHANNEL_PDE_CORRECTION = np.ones(N_OP_CHANNEL)
+        for tpc_id, det_id, channels in DETECTOR_CHANNEL_MAP:
+            correction = PDE_CORRECTION_2D[tpc_id, det_id]
+            for ch in channels:
+                OP_CHANNEL_PDE_CORRECTION[ch] = correction
+
         try:
             tpc_to_op_channel = detprop['tpc_to_op_channel']
             OP_CHANNEL_TO_TPC = np.zeros((N_OP_CHANNEL,), int)
@@ -141,9 +247,19 @@ def set_light_properties(detprop_file):
         LIGHT_WINDOW = tuple(detprop.get('light_window', LIGHT_WINDOW))
         assert len(LIGHT_WINDOW) == 2
 
+        USE_TRIPLE_EXPONENTIAL = bool(detprop.get('use_triple_exponential', USE_TRIPLE_EXPONENTIAL))
+
+        # Double exponential model parameters
         SINGLET_FRACTION = float(detprop.get('singlet_fraction', SINGLET_FRACTION))
         TAU_S = float(detprop.get('tau_s', TAU_S))
         TAU_T = float(detprop.get('tau_t', TAU_T))
+
+        # Triple exponential model parameters
+        FAST_FRACTION = float(detprop.get('fast_fraction', FAST_FRACTION))
+        TAU_FAST = float(detprop.get('tau_fast', TAU_FAST))
+        INTERMEDIATE_FRACTION = float(detprop.get('intermediate_fraction', INTERMEDIATE_FRACTION))
+        TAU_INTERMEDIATE = float(detprop.get('tau_intermediate', TAU_INTERMEDIATE))
+        TAU_SLOW = float(detprop.get('tau_slow', TAU_SLOW))
 
         LIGHT_GAIN = np.array(detprop.get('light_gain', [DEFAULT_LIGHT_GAIN]))
         if LIGHT_GAIN.size == 1:

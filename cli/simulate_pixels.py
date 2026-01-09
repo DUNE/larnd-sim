@@ -1358,33 +1358,52 @@ def run_simulation(input_filename,
                     sorted_indices[idet] = np.argsort(light_inc[:,idet]['n_photons_det'])[::-1] # get the order in which to loop over tracks
                 ### END OF TEMPORARY FIX ###
 
+                # Create scintillation models with different component fractions for different particle types
+                # Heavy particles (neutrons, alphas, nuclei): higher fast component fraction (0.7)
+                # Light particles (electrons, muons, etc.): lower fast component fraction (0.3)
+                scint_model_heavy = np.zeros(n_light_ticks, dtype=np.float32)
+                scint_model_light = np.zeros(n_light_ticks, dtype=np.float32)
+
+                if light.USE_TRIPLE_EXPONENTIAL:
+                    # For triple exponential, vary fast_fraction while keeping intermediate_fraction constant
+                    light_sim.scintillation_array(scint_model_heavy, fast_fraction=0.7)
+                    light_sim.scintillation_array(scint_model_light, fast_fraction=0.3)
+                else:
+                    # For double exponential, vary singlet_fraction
+                    light_sim.scintillation_array(scint_model_heavy, singlet_fraction=0.7)
+                    light_sim.scintillation_array(scint_model_light, singlet_fraction=0.3)
+
+                # Prepare PDE correction factors for active optical channels
+                # PDE correction applies data/MC efficiency ratios to LUT visibility before convolutions
+                if light.ENABLE_PDE_CORRECTION:
+                    pde_correction = cp.array(light.OP_CHANNEL_PDE_CORRECTION[op_channel.get()])
+                else:
+                    pde_correction = cp.ones(op_channel.shape[0], dtype='f4')
+
                 TPB = (1,64)
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                         max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
-                light_sim.sum_light_signals[BPG, TPB](
+
+                # Apply LAr scintillation convolution per segment with particle-dependent singlet fraction,
+                # then sum the convolved segments
+                light_sim.sum_light_signals_with_scintillation[BPG, TPB](
                     all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
-                    light_sample_inc_true_photons, sorted_indices, t0_profile_length)
+                    light_sample_inc_true_photons, sorted_indices, t0_profile_length, scint_model_heavy, scint_model_light, pde_correction)
                 RangePop()
                 if light_sample_inc_true_track_id.shape[-1] > 0 and cp.any(light_sample_inc_true_track_id[...,-1] != -1):
                     warnings.warn(f"Maximum number of true segments ({sim.MAX_MC_TRUTH_IDS}) reached in backtracking info, consider increasing MAX_MC_TRUTH_IDS (larndsim/consts/light.py)")
 
-                RangePush("sim_scintillation", 4)
-                light_sample_inc_scint = cp.zeros_like(light_sample_inc)
-                light_sample_inc_scint_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
-                light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
-                scint_model = np.zeros(n_light_ticks, dtype=np.float32)
-                light_sim.scintillation_array(scint_model)
-                light_sim.calc_scintillation_effect[BPG, TPB](
-                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
-                    light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model)
-
+                # Apply Poisson fluctuations to the summed, scintillation-convolved signal
+                RangePush("sim_poisson_fluctuations", 4)
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
                 rng_states = maybe_create_rng_states(int(np.prod(TPB) * np.prod(BPG)),
                                                         seed=rand_seed, rng_states=rng_states)
-                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc_scint, light_sample_inc_disc, rng_states)
+                light_sim.calc_stat_fluctuations[BPG, TPB](light_sample_inc, light_sample_inc_disc, rng_states)
                 RangePop()
 
+                # Apply SiPM response function to the summed signal
+                # (SPE response is invariant across particles, so it's applied after summing)
                 RangePush("sim_light_det_response", 4)
                 light_response = cp.zeros_like(light_sample_inc)
                 light_response_true_track_id = cp.full_like(light_sample_inc_true_track_id, -1)
@@ -1392,7 +1411,7 @@ def run_simulation(input_filename,
                 sipm_response = np.zeros(n_light_ticks, dtype=np.float32)
                 light_sim.sipm_response_array(sipm_response) #precalculate the sipm_response
                 light_sim.calc_light_detector_response[BPG, TPB](
-                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                    light_sample_inc_disc, light_sample_inc_true_track_id, light_sample_inc_true_photons,
                     light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response)
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()
