@@ -50,8 +50,11 @@ def gpu_voxelize(tracks, tpc_borders=None, voxel_size=None, z_padding=0.0):
     if tpc_borders is None:
         tpc_borders = detector.TPC_BORDERS
     if voxel_size is None:
-        dz = detector.V_DRIFT * mesh_params.COARSE_VOXEL_SIZE_T
-        voxel_size = (mesh_params.COARSE_VOXEL_SIZE_X, mesh_params.COARSE_VOXEL_SIZE_Y, dz)
+        voxel_size = (
+            mesh_params.COARSE_VOXEL_SIZE_X,
+            mesh_params.COARSE_VOXEL_SIZE_Y,
+            mesh_params.COARSE_VOXEL_SIZE_Z,
+        )
     x_min = float(np.min(tpc_borders[:,0,0])); x_max = float(np.max(tpc_borders[:,0,1]))
     y_min = float(np.min(tpc_borders[:,1,0])); y_max = float(np.max(tpc_borders[:,1,1]))
     if len(tracks) > 0:
