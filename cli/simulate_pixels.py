@@ -39,6 +39,8 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
+from larndsim.mesh_refinement import voxelization, signal_calculation, pixel_classifier
+from larndsim.consts import mesh_params
 
 SEED = int(time())
 
@@ -172,7 +174,8 @@ def run_simulation(input_filename,
                    pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
-                   save_memory=None):
+                   save_memory=None,
+                   farfield_enabled=False):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -1034,7 +1037,16 @@ def run_simulation(input_filename,
             unique_eventIDs = np.unique(event_ids)
             RangePop()
 
-            all_selected_tracks = track_subset
+            # Filter out tracks with invalid pixel_plane (outside TPCs)
+            valid_plane_mask = track_subset['pixel_plane'] != detector.DEFAULT_PLANE_INDEX
+            all_selected_tracks = track_subset[valid_plane_mask]
+            
+            # Create combined mask for light simulation arrays that are indexed by batch_mask
+            # We need indices into the full tracks array for light data
+            batch_indices = np.where(batch_mask)[0]
+            valid_batch_indices = batch_indices[valid_plane_mask]
+            valid_batch_mask = np.zeros_like(batch_mask, dtype=bool)
+            valid_batch_mask[valid_batch_indices] = True
 
             # We find the pixels intersected by the projection of the tracks on
             # the anode plane using the Bresenham's algorithm. We also take into
@@ -1092,8 +1104,48 @@ def run_simulation(input_filename,
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
             RangePop() # invert_array_map
 
+            # ~~~ Voxelize per-TPC once per event batch to avoid cross-TPC contamination ~~~
+            RangePush("event_voxelization")
+            voxel_cache = {}
+            classification_cache = {}
+            voxel_radius = None
+            active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32)) if farfield_enabled else []
+            if farfield_enabled:
+                voxel_radius = np.sqrt(
+                    (mesh_params.COARSE_VOXEL_SIZE_X / 2.0)**2 + 
+                    (mesh_params.COARSE_VOXEL_SIZE_Y / 2.0)**2 + 
+                    (mesh_params.COARSE_VOXEL_SIZE_Z / 2.0)**2
+                )
+                all_tracks_cpu = cp.asnumpy(all_selected_tracks)
+                for tpc_idx in active_tpc_indices_all:
+                    tpc_tracks = all_selected_tracks[all_selected_tracks['pixel_plane'] == tpc_idx]
+                    if len(tpc_tracks) == 0:
+                        voxel_cache[int(tpc_idx)] = {"x": None, "y": None, "z": None, "q": None}
+                        classification_cache[int(tpc_idx)] = None
+                        continue
+                    voxel_indices, voxel_charges, grid_shape, voxel_size, bounds = voxelization.gpu_voxelize(
+                        tpc_tracks, tpc_borders=detector.TPC_BORDERS[[tpc_idx]]
+                    )
+                    if len(voxel_indices) > 0:
+                        vx, vy, vz = voxelization.voxel_id_to_coordinates(voxel_indices, grid_shape, voxel_size, bounds)
+                        voxel_cache[int(tpc_idx)] = {
+                            "x": cp.asarray(vx, dtype=cp.float32),
+                            "y": cp.asarray(vy, dtype=cp.float32),
+                            "z": cp.asarray(vz, dtype=cp.float32),
+                            "q": cp.asarray(voxel_charges, dtype=cp.float32),
+                        }
+                    else:
+                        voxel_cache[int(tpc_idx)] = {"x": None, "y": None, "z": None, "q": None}
+
+                    # Precompute pixel classification per TPC (for induction-only masks)
+                    classification_cache[int(tpc_idx)] = pixel_classifier.classify_pixels(all_tracks_cpu, plane_id=int(tpc_idx))
+            RangePop()
+
             pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
                                                           sim.SEGMENT_BATCH_SIZE)
+
+            # Track all pixels processed in near-field batches for this event batch
+            processed_pixels_event = cp.array([], dtype=cp.int32)
 
             for start_pix, stop_pix in \
                     tqdm(pixel_ranges, delay=1,
@@ -1269,6 +1321,82 @@ def run_simulation(input_filename,
 
                 RangePop()
 
+                # ~~~ Far-field signal contribution ~~~
+                if farfield_enabled:
+                    RangePush("far_field_contribution", 3)
+                    # print("Calculating far-field contribution...", end="")
+                    if voxel_cache and any(v["x"] is not None for v in voxel_cache.values()):
+                        # Get pixel coordinates from pixel layout
+                        # unique_pix contains pixel indices; convert to (x, y) coordinates
+                        # Decode pixel IDs: px = id % N_PIXELS[0], py = (id // N_PIXELS[0]) % N_PIXELS[1]
+                        unique_pix_np = cp.asnumpy(unique_pix)
+                        px_idx = unique_pix_np % detector.N_PIXELS[0]
+                        py_idx = (unique_pix_np // detector.N_PIXELS[0]) % detector.N_PIXELS[1]
+                        plane_idx = unique_pix_np // (detector.N_PIXELS[0] * detector.N_PIXELS[1])
+                        # Get x_min and y_min for each pixel's TPC (vectorized)
+                        x_min = detector.TPC_BORDERS[plane_idx.astype(int), 0, 0]
+                        y_min = detector.TPC_BORDERS[plane_idx.astype(int), 1, 0]
+                        pixel_x = cp.asarray(x_min + (px_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
+                        pixel_y = cp.asarray(y_min + (py_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
+                        
+                        # Pixel categories: treat as neighbor/collection (exclusion radius applied uniformly)
+                        pixel_categories = cp.ones(len(unique_pix), dtype=cp.int32)
+                        
+                        # Exclusion radius for boundary weighting
+                        exclude_radius = mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+
+                        # Extract active TPCs from all_selected_tracks (event batch) not selected_tracks (pixel batch subset)
+                        # This ensures we loop over all TPCs that have voxels, not just TPCs with pixels in this batch
+                        active_tpc_indices = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
+
+                        for tpc_idx in active_tpc_indices:
+                            tpc_idx = int(tpc_idx)
+                            cache = voxel_cache.get(tpc_idx, None)
+                            if cache is None or cache["x"] is None:
+                                continue
+                            z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
+                            z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
+                            vx = cache["x"]
+                            vy = cache["y"]
+                            vz = cache["z"]
+                            vq = cache["q"]
+
+                            # Filter pixels belonging to this TPC only
+                            tpc_mask = (plane_idx == tpc_idx)
+                            if not np.any(tpc_mask):
+                                continue
+                            pix_x_tpc = pixel_x[tpc_mask]
+                            pix_y_tpc = pixel_y[tpc_mask]
+                            pix_cat_tpc = pixel_categories[tpc_mask]
+                            n_pix_tpc = pix_x_tpc.shape[0]
+
+                            # Allocate per-TPC FF signal buffer
+                            ff_signals_tpc = cp.zeros((n_pix_tpc, signals_ticks_t0), dtype=cp.float32)
+                            TPB_ff_tpc = (16, 16)
+                            BPG_ff_tpc = (ceil(n_pix_tpc / TPB_ff_tpc[0]), ceil(signals_ticks_t0 / TPB_ff_tpc[1]))
+
+                            # Calculate far-field for this TPC (writes to ff_signals_tpc)
+                            signal_calculation.calculate_far_field_dipole_signal_time_kernel[BPG_ff_tpc, TPB_ff_tpc](
+                                vx, vy, vz,
+                                vq,
+                                pix_x_tpc, pix_y_tpc,
+                                pix_cat_tpc,
+                                exclude_radius,
+                                voxel_radius,
+                                z_anode,
+                                z_cathode,
+                                detector.V_DRIFT,
+                                detector.TIME_SAMPLING,
+                                5,  # n_terms for series expansion
+                                mesh_params.INDUCED_CURRENT_SCALE,
+                                ff_signals_tpc
+                            )
+                            
+                            # Accumulate to pixels_signals (broadcast to correct rows via tpc_mask)
+                            pixels_signals[tpc_mask, :] += ff_signals_tpc
+                        
+                    RangePop()
+
                 RangePush("get_adc_values", 3)
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
@@ -1323,6 +1451,9 @@ def run_simulation(input_filename,
                 results_acc['adc_tot_ticks'].append(adc_ticks_list)
                 results_acc['unique_pix'].append(unique_pix)
                 results_acc['current_fractions'].append(current_fractions)
+
+                # Accumulate pixels processed via near-field path for this event batch
+                processed_pixels_event = cp.unique(cp.concatenate([processed_pixels_event, unique_pix]))
                 traj_pixel_map = cp.full(track_pixel_map.shape,-1)
                 traj_pixel_map[:] = track_pixel_map
                 traj_pixel_map[traj_pixel_map != -1] = selected_tracks['traj_id'][traj_pixel_map[traj_pixel_map != -1].get()]
@@ -1330,11 +1461,151 @@ def run_simulation(input_filename,
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
+            # ~~~ Far-field-only induction pixels (not processed above) ~~~
+            if farfield_enabled and voxel_cache and any(v["x"] is not None for v in voxel_cache.values()):
+                RangePush("far_field_induction_only", 2)
+                # Pixels already processed via near-field path
+                processed_pixels = processed_pixels_event
+                # Unique TPCs in this batch (use all_selected_tracks to capture full event batch)
+                active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
+                for tpc_idx in active_tpc_indices_all:
+                    cache = voxel_cache.get(int(tpc_idx), None)
+                    cls = classification_cache.get(int(tpc_idx), None)
+                    if cache is None or cache["x"] is None or cls is None or len(cls.induction_pixels) == 0:
+                        continue
+                    # Induction-only pixels for this TPC
+                    induction_pix_ids = cp.asarray(cls.induction_pixels, dtype=cp.int32)
+                    if induction_pix_ids.size == 0:
+                        continue
+                    # Drop pixels already covered by near-field processing
+                    if processed_pixels is not None and processed_pixels.size > 0:
+                        induction_pix_ids = cp.setdiff1d(induction_pix_ids, processed_pixels)
+                    if induction_pix_ids.size == 0:
+                        continue
+
+                    # Use classifier's pre-computed coordinates for induction pixels
+                    pixel_x_ff = cp.asarray(cls.induction_pixels_x, dtype=cp.float32)
+                    pixel_y_ff = cp.asarray(cls.induction_pixels_y, dtype=cp.float32)
+                    # Filter coordinates to only those not in processed_pixels
+                    if processed_pixels is not None and processed_pixels.size > 0:
+                        mask = cp.isin(cls.induction_pixels, induction_pix_ids)
+                        pixel_x_ff = pixel_x_ff[mask]
+                        pixel_y_ff = pixel_y_ff[mask]
+                    pixel_categories_ff = cp.zeros(len(induction_pix_ids), dtype=cp.int32)  # category 0 = INDUCTION
+
+                    # Use event-wide t0 max for tick extension (far-field only)
+                    t0_array = cp.asnumpy(all_selected_tracks['t0'])
+                    signals_ticks_t0_ff = signals_ticks + int(np.ceil(t0_array.max() / detector.TIME_SAMPLING))
+                    ff_signals = cp.zeros((len(induction_pix_ids), signals_ticks_t0_ff), dtype=cp.float32)
+
+                    TPB_ff = (16, 16)
+                    BPG_ff = (ceil(len(induction_pix_ids) / TPB_ff[0]), ceil(signals_ticks_t0_ff / TPB_ff[1]))
+
+                    z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
+                    z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
+
+                    vx = cache["x"]
+                    vy = cache["y"]
+                    vz = cache["z"]
+                    vq = cache["q"]
+
+                    signal_calculation.calculate_far_field_dipole_signal_time_kernel[BPG_ff, TPB_ff](
+                        vx, vy, vz,
+                        vq,
+                        pixel_x_ff, pixel_y_ff,
+                        pixel_categories_ff,
+                        mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH,
+                        voxel_radius,
+                        z_anode,
+                        z_cathode,
+                        detector.V_DRIFT,
+                        detector.TIME_SAMPLING,
+                        5,
+                        mesh_params.INDUCED_CURRENT_SCALE,
+                        ff_signals
+                    )
+
+                    # Offset FF by event's min(t0) before digitization; normalize units if needed
+                    min_t0_event = float(t0_array.min())
+                    z_span_us = abs(z_cathode - z_anode) / detector.V_DRIFT
+                    min_t0_event_used_us = min_t0_event / 1000.0 if (z_span_us > 0 and min_t0_event / max(z_span_us, 1e-9) > 500) else min_t0_event
+                    if min_t0_event_used_us != min_t0_event:
+                        warnings.warn("FF timing (induction-only): min(t0) appears in ns; converting to us for offset.")
+                    offset_ticks_ff = int(np.clip(np.ceil(min_t0_event_used_us / detector.TIME_SAMPLING), 0, signals_ticks_t0_ff))
+                    pixels_signals = cp.zeros_like(ff_signals)
+                    if offset_ticks_ff > 0:
+                        usable_ff = signals_ticks_t0_ff - offset_ticks_ff
+                        if usable_ff > 0:
+                            pixels_signals[:, offset_ticks_ff:offset_ticks_ff+usable_ff] = ff_signals[:, :usable_ff]
+                    else:
+                        pixels_signals = ff_signals
+                    num_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
+                    offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
+                    pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
+                    current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES, sim.MAX_TRACKS_PER_PIXEL))
+                    time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
+                    integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+                    adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+
+                    TPB_local = 4
+                    BPG_local = ceil(pixels_signals.shape[0] / TPB_local)
+                    rng_states = maybe_create_rng_states(int(TPB_local * BPG_local), seed=rand_seed, rng_states=rng_states)
+                    TPB_lut = 128
+                    BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)
+
+                    if pixel_thresholds_file is not None:
+                        pixel_thresholds_lut.tpb = TPB_lut
+                        pixel_thresholds_lut.bpg = BPG_lut
+                        pixel_thresholds = pixel_thresholds_lut[induction_pix_ids.get()].reshape(induction_pix_ids.shape)
+                    else:
+                        pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
+
+                    fee.get_adc_values[BPG_local, TPB_local](pixels_signals,
+                                                             pixels_tracks_signals,
+                                                             num_backtrack,
+                                                             offset_backtrack,
+                                                             time_ticks,
+                                                             integral_list,
+                                                             adc_ticks_list,
+                                                             0,
+                                                             rng_states,
+                                                             current_fractions,
+                                                             pixel_thresholds)
+
+                    # Gains/pedestals lookups
+                    if pixel_gains_file is not None:
+                        pixel_gains = cp.array(pixel_gains_lut[induction_pix_ids.get()])
+                        gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES))
+                    else:
+                        gain_list = detector.GAIN * consts.units.mV / consts.units.e
+
+                    if pixel_pedestals_file is not None:
+                        pixel_pedestals = cp.array(pixel_pedestals_lut[induction_pix_ids.get()])
+                        pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES))
+                    else:
+                        pedestal_list = detector.V_PEDESTAL
+
+                    adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
+                    adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0])
+
+                    # Append to results accumulator
+                    results_acc['event_id'].append(adc_event_ids)
+                    results_acc['adc_tot'].append(adc_list)
+                    results_acc['adc_tot_ticks'].append(adc_ticks_list)
+                    results_acc['unique_pix'].append(induction_pix_ids)
+                    results_acc['current_fractions'].append(current_fractions)
+
+                    dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
+                    results_acc['traj_pixel_map'].append(dummy_map)
+                    results_acc['track_pixel_map'].append(dummy_map)
+
+                RangePop()
+
              # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals", 4)
-                light_inc = light_sim_dat[batch_mask]
-                selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
+                light_inc = light_sim_dat[valid_batch_mask]
+                selected_track_id = segment_ids_arr[valid_batch_mask]#cp.array(selected_tracks["segment_id"])
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                 n_light_ticks = min(n_light_ticks,int(5E4))
                 # at least the optical channels from a whole module are activated together
@@ -1362,7 +1633,7 @@ def run_simulation(input_filename,
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                         max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
                 light_sim.sum_light_signals[BPG, TPB](
-                    all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
+                    all_selected_tracks, track_light_voxel[valid_batch_mask], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons, sorted_indices, t0_profile_length)
                 RangePop()
