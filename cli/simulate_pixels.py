@@ -32,6 +32,7 @@ from numba.core.errors import NumbaPerformanceWarning
 
 from tqdm import tqdm
 
+from larndsim import _version
 from larndsim import consts
 from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
 import importlib
@@ -1518,6 +1519,13 @@ def run_simulation(input_filename,
     with h5py.File(output_filename, 'a') as output_file:
         if 'configs' in output_file.keys():
             output_file['configs'].attrs['pixel_layout'] = pixel_layout
+
+        # Store Git/version information as attributes in the output file
+        output_file.attrs['VERSION'] = _version.__version__
+        output_file.attrs['GIT_COMMIT'] = _version.GIT_COMMIT[1:] # Remove the leading 'g' char to get pure commit hash
+        output_file.attrs['GIT_BRANCH'] = _version.GIT_BRANCH
+        output_file.attrs['GIT_DISTANCE'] = _version.GIT_DISTANCE
+        output_file.attrs['GIT_TAG'] = _version.GIT_TAG
 
     print("Output saved in:", output_filename)
 

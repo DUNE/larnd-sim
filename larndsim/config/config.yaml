@@ -87,7 +87,11 @@ ndlar: &ndlarmain
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: False
     MOD2MOD_VARIATION: True
-
+    
+ndlar_mpvmpr:
+    <<: *ndlarmain
+    SIM_PROPERTIES: singles_sim_ndlar.yaml
+    
 ndlar_light:
     <<: *ndlarmain
     LIGHT_SIMULATED: True
