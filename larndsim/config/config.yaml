@@ -101,7 +101,7 @@ ndlar_light_lut_fp16:
     LIGHT_LUT: /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm_fp16.npz
     LIGHT_SIMULATED: True
 
-fsd:
+fsd: &fsd
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsd_v3.yaml
     DET_PROPERTIES:  fsd.yaml
