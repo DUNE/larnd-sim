@@ -41,6 +41,40 @@ from larndsim.config import get_config
 
 SEED = int(time())
 
+def save_kernel_arrays(arrays_dict, prefix, directory="."):
+    """
+    Save arrays to a .npz file with indexed filename to avoid overwriting.
+
+    Args:
+        arrays_dict: Dictionary of array names to arrays (CuPy or NumPy)
+        prefix: Filename prefix (e.g., 'inputs' or 'outputs')
+        directory: Directory to save files in
+
+    Returns:
+        str: The filepath that was saved
+    """
+    # Find the next available index
+    idx = 1
+    while True:
+        filepath = os.path.join(directory, f"{prefix}_{idx:02d}.npz")
+        if not os.path.exists(filepath):
+            break
+        idx += 1
+
+    # Convert CuPy arrays to NumPy for saving
+    numpy_arrays = {}
+    for name, arr in arrays_dict.items():
+        if hasattr(arr, 'get'):  # CuPy array
+            numpy_arrays[name] = arr.get()
+        elif isinstance(arr, (int, float)):
+            numpy_arrays[name] = np.array(arr)
+        else:
+            numpy_arrays[name] = arr
+
+    np.savez(filepath, **numpy_arrays)
+    print(f"Saved {prefix} to: {filepath}")
+    return filepath
+
 LOGO = r"""
   _                      _            _
  | |                    | |          (_)
@@ -1288,6 +1322,39 @@ def run_simulation(input_filename,
                 else:
                     pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
 
+
+                # Save inputs before kernel execution for profiling/debugging
+                time_padding_val = 0
+                save_kernel_arrays({
+                    # Arrays (inputs)
+                    'pixels_signals': pixels_signals,
+                    'pixels_tracks_signals': pixels_tracks_signals,
+                    'num_backtrack': num_backtrack,
+                    'offset_backtrack': offset_backtrack,
+                    'time_ticks': time_ticks,
+                    'integral_list': integral_list,
+                    'adc_ticks_list': adc_ticks_list,
+                    'time_padding': time_padding_val,
+                    'rng_states': rng_states,
+                    'current_fractions': current_fractions,
+                    'pixel_thresholds': pixel_thresholds,
+                    # Constants from detector module
+                    'PERIODIC_RESET_CYCLES': detector.PERIODIC_RESET_CYCLES,
+                    'RESET_NOISE_CHARGE': detector.RESET_NOISE_CHARGE,
+                    'BUFFER_RISETIME': detector.BUFFER_RISETIME,
+                    'TIME_SAMPLING': detector.TIME_SAMPLING,
+                    'UNCORRELATED_NOISE_CHARGE': detector.UNCORRELATED_NOISE_CHARGE,
+                    'DISCRIMINATOR_NOISE': detector.DISCRIMINATOR_NOISE,
+                    'CLOCK_CYCLE': detector.CLOCK_CYCLE,
+                    'ADC_HOLD_DELAY': detector.ADC_HOLD_DELAY,
+                    'RESET_CYCLES': detector.RESET_CYCLES,
+                    'ADC_BUSY_DELAY': detector.ADC_BUSY_DELAY,
+                    # Constants from sim module
+                    'MAX_ADC_VALUES': sim.MAX_ADC_VALUES,
+                    # Unit constant
+                    'e': consts.units.e,
+                },'get_adc_values_inputs', '/pscratch/sd/e/ebrinckm/outputs/get_adc_values/')
+
                 fee.get_adc_values[BPG, TPB](pixels_signals,
                                              pixels_tracks_signals,
                                              num_backtrack,
@@ -1295,10 +1362,42 @@ def run_simulation(input_filename,
                                              time_ticks,
                                              integral_list,
                                              adc_ticks_list,
-                                             0,
+                                             time_padding_val,
                                              rng_states,
                                              current_fractions,
                                              pixel_thresholds)
+
+                # Save outputs after kernel execution for comparison
+                save_kernel_arrays({
+                    # Arrays (outputs modified in-place by kernel)
+                    'pixels_signals': pixels_signals,
+                    'pixels_tracks_signals': pixels_tracks_signals,
+                    'num_backtrack': num_backtrack,
+                    'offset_backtrack': offset_backtrack,
+                    'time_ticks': time_ticks,
+                    'integral_list': integral_list,
+                    'adc_ticks_list': adc_ticks_list,
+                    'time_padding': time_padding_val,
+                    'rng_states': rng_states,
+                    'current_fractions': current_fractions,
+                    'pixel_thresholds': pixel_thresholds,
+                    # Constants from detector module (same as inputs, included for completeness)
+                    'PERIODIC_RESET_CYCLES': detector.PERIODIC_RESET_CYCLES,
+                    'RESET_NOISE_CHARGE': detector.RESET_NOISE_CHARGE,
+                    'BUFFER_RISETIME': detector.BUFFER_RISETIME,
+                    'TIME_SAMPLING': detector.TIME_SAMPLING,
+                    'UNCORRELATED_NOISE_CHARGE': detector.UNCORRELATED_NOISE_CHARGE,
+                    'DISCRIMINATOR_NOISE': detector.DISCRIMINATOR_NOISE,
+                    'CLOCK_CYCLE': detector.CLOCK_CYCLE,
+                    'ADC_HOLD_DELAY': detector.ADC_HOLD_DELAY,
+                    'RESET_CYCLES': detector.RESET_CYCLES,
+                    'ADC_BUSY_DELAY': detector.ADC_BUSY_DELAY,
+                    # Constants from sim module
+                    'MAX_ADC_VALUES': sim.MAX_ADC_VALUES,
+                    # Unit constant
+                    'e': consts.units.e,
+                }, 'get_adc_values_outputs', '/pscratch/sd/e/ebrinckm/outputs/get_adc_values/')
+
                 # get list of adc values
                 if pixel_gains_file is not None:
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
