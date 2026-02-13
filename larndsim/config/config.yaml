@@ -64,9 +64,24 @@ module0:
     PIXEL_THRESHOLDS_ID: None
 
 # 2x2 (differnt module configuration), mpvmpr
-2x2_mpvmpr:
+2x2_mpvmpr: &2x2_mpvmpr
     <<: *2x2modvar
     SIM_PROPERTIES:  singles_sim.yaml
+    LIGHT_ENABLED: False
+
+# ------------------------------------------------------------------------------
+
+2x2_mpvmpr_far: &2x2_mpvmpr_far
+    <<: *2x2_mpvmpr
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: voxels
+
+2x2_mpvmpr_farSeg: &2x2_mpvmpr_farSeg
+    <<: *2x2_mpvmpr
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: segments
+
+# ------------------------------------------------------------------------------
 
 # nd-lar (same module configuration)
 ndlar: &ndlarmain
@@ -82,6 +97,66 @@ ndlar: &ndlarmain
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: False
     MOD2MOD_VARIATION: True
+
+ndlar_mpvmpr: &ndlar_mpvmpr
+    <<: *ndlarmain
+    SIM_PROPERTIES: singles_sim_ndlar.yaml
+
+# ------------------------------------------------------------------------------
+
+ndlar_far: &ndlar_far
+    <<: *ndlarmain
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: voxels
+
+ndlar_farSeg: &ndlar_farSeg
+    <<: *ndlarmain
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: segments
+
+ndlar_shield: &ndlar_shield
+    <<: *ndlarmain
+    RESPONSE:        [response_37_v2d_shield900V_fsd_ndlar_full.npz]
+    RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+ndlar_far_shield: &ndlar_far_shield
+    <<: *ndlar_shield
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE:   voxels
+
+ndlar_farSeg_shield: &ndlar_farSeg_shield
+    <<: *ndlar_shield
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE:   segments
+
+# ------------------------------------------------------------------------------
+
+ndlar_mpvmpr_far: &ndlar_mpvmpr_far
+    <<: *ndlar_mpvmpr
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: voxels
+
+ndlar_mpvmpr_farSeg: &ndlar_mpvmpr_farSeg
+    <<: *ndlar_mpvmpr
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE: segments
+
+ndlar_mpvmpr_shield: &ndlar_mpvmpr_shield
+    <<: *ndlar_mpvmpr
+    RESPONSE:        [response_37_v2d_shield900V_fsd_ndlar_full.npz]
+    RESPONSE_ID:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+ndlar_mpvmpr_far_shield: &ndlar_mpvmpr_far_shield
+    <<: *ndlar_mpvmpr_shield
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE:   voxels
+
+ndlar_mpvmpr_farSeg_shield: &ndlar_mpvmpr_farSeg_shield
+    <<: *ndlar_mpvmpr_shield
+    FARFIELD_ENABLED: True
+    FARFIELD_MODE:   segments
+
+# ------------------------------------------------------------------------------
 
 ndlar_light:
     <<: *ndlarmain
