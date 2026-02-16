@@ -435,10 +435,12 @@ scans integrated charge for threshold crossings, manages the busy/hold/reset cyc
 and records ADC values. This phase extracts that logic and splits it into two kernels:
 
 - **`discover_adc_windows`** (Phase 5a) — walks the tick axis per pixel, finds
-  threshold crossings, and records the start/end tick indices of each ADC window.
-- **`integrate_windows`** (Phase 5b) — given the discovered windows, sums the
-  pre-computed charge and track fractions over each window and writes the final ADC
-  and timestamp outputs.
+  threshold crossings, accumulates charge through the ADC hold window, performs the
+  second threshold check, and records the window boundaries, accumulated charge, and
+  reset state for each accepted trigger.
+- **`integrate_windows`** (Phase 5b) — given the discovered windows, accumulates
+  per-track current fractions over each window, normalizes them, and writes the final
+  ADC values, timestamps, and current fractions.
 
 ### Why Two Kernels Instead of One
 
@@ -448,18 +450,22 @@ track fractions tick-by-tick as it goes. Fusing them was necessary in the origin
 design because integrated charge was computed on the fly — there was no materialized
 `signal_charge` array to sum over after the fact.
 
-With Phase 3's materialized arrays, the two concerns decouple naturally:
+With Phase 3's materialized arrays, the two concerns partially decouple:
 
 1. **Discovery** is inherently serial per pixel (each threshold crossing depends on
    the cumulative charge from all prior ticks), so it must remain a 1D kernel over
-   pixels with a while loop.
-2. **Integration over a window** is  parallel once the window bounds are
-   known — each `(pixel, adc_index)` pair can be handled by an independent thread
-   that simply sums `signal_charge[ip, start:end+1]`.
+   pixels with a while loop. It also retains an inner while loop to walk through the
+   ADC hold window and accumulate `q_sum` for the second threshold check — but this
+   inner loop only performs cheap array reads, not convolution or track accumulation.
+2. **Track fraction accumulation** over each window is parallel once the window
+   bounds are known — each `(pixel, adc_index)` pair can be handled by an
+   independent thread that sums `signal_charge_track[ip, lr:end+1, itrk]` and
+   normalizes.
 
-Splitting them means the serial part (discovery) does the minimum possible work per
-tick — a table lookup and a comparison — while the parallel part (integration) gets
-its own 2D launch with no warp divergence.
+Splitting them means the serial part (discovery) does only charge accumulation and
+threshold logic — array lookups and arithmetic, no convolution or track indexing —
+while the parallel part (track fractions, timestamps) gets its own 2D launch with no
+warp divergence.
 
 ### Phase 5a: `discover_adc_windows`
 
@@ -496,15 +502,26 @@ The per-pixel state machine logic is:
 4. Accumulate charge: `q_sum += q`.
 5. Read `noise_uncorr[ip, ic]` and `noise_disc[ip, ic]` — array lookups replacing
    inline RNG draws.
-6. If `q_sum + q_noise >= threshold + disc_noise` and the ADC is not busy, record
-   the window `(start, end)` and the crossing tick index, advance `ic` past the
-   reset cycle, set `adc_busy`, and reset `q_sum`.
-7. After the loop, write the total number of ADC triggers to `adc_counts[ip]`.
+6. If `q_sum + q_noise >= threshold + disc_noise` and the ADC is not busy, enter an
+   inner while loop that walks `ic` through the ADC hold window
+   (`integrate_end = ic + interval`), continuing to accumulate `q_sum` from
+   `signal_charge` lookups (handling periodic resets within the window).
+7. After the inner loop, perform a second threshold check on the accumulated charge.
+   If the charge has fallen below threshold (a false trigger), reject the window:
+   advance `ic` past the reset cycle, reset `q_sum`, and continue scanning. If the
+   charge remains above threshold, accept the window: record `(start, end)`,
+   `adc_ticks_idx`, `adc_q_sum`, and `adc_last_reset`.
+8. After the outer loop exits, write the total number of accepted triggers to
+   `adc_counts[ip]`.
 
-The kernel records only the **boundaries** of each ADC window — it does not
-accumulate charge or track fractions. This keeps the per-tick work inside the while
-loop to a minimum: one read from `signal_charge`, two reads from the noise arrays,
-an addition, and a comparison.
+The kernel accumulates total charge (`q_sum`) but does **not** perform signal
+convolution or track fraction accumulation — those are handled by the upstream
+Phase 3 kernels and the downstream `integrate_windows` kernel, respectively. The
+per-tick work inside the while loop remains lightweight: one read from
+`signal_charge`, two reads from the noise arrays, an addition, and a comparison.
+The inner while loop adds charge reads over the hold window, but each read is a
+single array lookup into the pre-computed `signal_charge`, not a recomputation of
+the convolution.
 
 **Register budget.** Decorated with `max_registers=96`, down from the original's 128.
 This is possible because the kernel no longer carries signal integration state,
@@ -579,19 +596,32 @@ affects at most a handful of threads per warp.
 
 ### What Changed from the Original
 
-**The inner while loop is gone.** In the original kernel, the inner
-`while ic <= integrate_end` loop performed tick-by-tick integration with inline
-convolution, RNG draws, and periodic-reset checks, all inside the already-divergent
-outer while loop. In the rework, `discover_adc_windows` records the bounds and
-`integrate_windows` sums over pre-computed arrays — no while loop, no divergence, no
-duplicated physics.
+**The inner while loop is lighter, not gone.** The original kernel's inner
+`while ic <= integrate_end` loop did heavy work on every tick: recomputing the full
+signal convolution (the `for jc in range(conv_start, ...)` loop), accumulating
+per-track current fractions (a nested loop over `ntrks`), and drawing RNG values for
+noise. In the rework, `discover_adc_windows` retains an inner while loop over the
+ADC hold window — this turned out to be necessary for correctness (Issues 1–3, 7) —
+but the body is reduced to a single `signal_charge[ip, ic]` array read and an
+addition to `q_sum`. There is no convolution recomputation, no track indexing, and no
+RNG calls inside the inner loop.
+
+In the original monolith, the convolution loop was duplicated: it appeared identically
+in both the outer while loop (scanning for threshold crossings) and the inner while
+loop (integrating the hold window). This duplication is eliminated in the rework.
+The convolution is computed once by `integrate_signal` / `integrate_signal_tracks`
+(Phase 3) and materialized into arrays. Both the outer loop and inner loop of
+`discover_adc_windows` read from the same pre-computed `signal_charge` array, so the
+convolution work is performed exactly once regardless of how many threshold crossings
+occur or how many hold windows are walked.
 
 **Separation of serial and parallel work.** The original kernel forced all work into a
 single 1D serial-per-pixel launch. The rework isolates the irreducibly serial part
-(threshold scanning) into `discover_adc_windows` and moves the parallelizable part
-(window integration) into a separate 2D kernel with clean, uniform control flow.
+(threshold scanning and charge accumulation) into `discover_adc_windows` and moves
+the parallelizable part (track fraction accumulation and normalization) into a
+separate 2D kernel (`integrate_windows`) with clean, uniform control flow.
 
-**Simplified state machine body.** The per-tick work inside the while loop of
+**Simplified state machine body.** The per-tick work inside the while loops of
 `discover_adc_windows` is reduced to array lookups and arithmetic — no convolution
 inner loop, no track indexing, no RNG calls. This makes the state machine easier to
 reason about, debug, and profile.
@@ -617,19 +647,20 @@ surrounding simulation code — the final outputs (`adc_list`, `adc_ticks_list`,
 ## Known Issue: Output Divergence from Frozen Reference
 
 The reworked pipeline initially produced outputs that differed significantly from the
-frozen reference. A detailed comparison identified seven structural flow issues introduced during the kernel decomposition. Six of the seven
-have been resolved:
+frozen reference. A detailed comparison identified eight structural flow issues
+during the kernel decomposition. Six have been fixed, and two have been accepted as
+inherent trade-offs of the decomposed architecture:
 
 | # | Issue | Status |
 |---|-------|--------|
 | 1 | Missing second threshold check after integration | **Fixed** — `discover_adc_windows` now runs an inner while loop and performs the post-integration threshold comparison, rejecting false triggers. |
 | 2 | `adc_list` stored only window charge, not total since reset | **Fixed** — `discover_adc_windows` accumulates the full `q_sum` through the integration window and outputs it (with uncorrelated noise) as `adc_q_sum`. |
 | 3 | Tick advancement off by `interval + 1` after trigger | **Fixed** — the inner while loop in `discover_adc_windows` advances `ic` through the integration window before the reset advancement, matching the original's `ic = integrate_end + 1 + RESET_CYCLES_advance`. |
-| 4 | Convolution lower bound uses `0` instead of `last_reset` | **Acceptable?** — `last_reset` is computed by the ADC state machine (Phase 5), which runs after `integrate_signal` (Phase 3). This circular dependency cannot be resolved without reintroducing the convolution into the state machine kernel. The exponential weighting heavily attenuates the distant contributions that the original would have excluded. |
+| 4 | Convolution lower bound uses `0` instead of `last_reset` | **Accepted** — `last_reset` is computed by the ADC state machine (Phase 5), which runs after `integrate_signal` (Phase 3). This circular dependency cannot be resolved without reintroducing the convolution into the state machine kernel. The exponential weighting heavily attenuates the distant contributions that the original would have excluded. |
 | 5 | Timestamp used crossing tick instead of post-integration tick | **Fixed** — `adc_ticks_idx` now stores the post-integration `ic`, and `integrate_windows` replicates the original's `post_adc_ticks` overflow handling. |
 | 6 | Periodic reset not handled during window integration | **Fixed** — `integrate_windows` now iterates from `last_reset` to `end`, zeroing the track fraction accumulator when a periodic reset tick is encountered. |
 | 7 | Missing uncorrelated noise in ADC value | **Fixed** — absorbed into Issue 2; `adc_q_sum` includes the noise term. |
-| 8 | Vastly different `current_tracks` values | **Acceptable?** — The old kernel has trailing un-normalized charge accumulations. The new kernels flow does not have this issue. |
+| 8 | Vastly different `current_fractions` values | **Accepted** — The old kernel leaves un-normalized raw charge in `current_fractions[ip][iadc]` for the trailing (never-accepted) ADC slot of every pixel, polluting any aggregate comparison. The reworked flow only writes to accepted ADC slots (gated by `adc_counts`), producing properly normalized fractions that sum to ~1.0 per window. |
 
 ### Remaining Expected Differences
 
