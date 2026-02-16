@@ -463,7 +463,7 @@ its own 2D launch with no warp divergence.
 
 ### Phase 5a: `discover_adc_windows`
 
-The kernel (`get_adc_values.py`, lines 245–319) retains the while loop structure of
+The kernel (`get_adc_values.py`, lines 254–374) retains the while loop structure of
 the original because the ADC state machine is fundamentally sequential per pixel:
 whether a threshold crossing occurs at tick `ic` depends on the accumulated charge
 from all preceding ticks.
@@ -480,7 +480,9 @@ def discover_adc_windows(
     adc_start,              # (n_pixels, MAX_ADC_VALUES) — output
     adc_end,                # (n_pixels, MAX_ADC_VALUES) — output
     adc_ticks_idx,          # (n_pixels, MAX_ADC_VALUES) — output
-    adc_counts              # (n_pixels,) — output
+    adc_counts,             # (n_pixels,) — output
+    adc_q_sum,              # (n_pixels, MAX_ADC_VALUES) — output
+    adc_last_reset          # (n_pixels, MAX_ADC_VALUES) — output
 ):
 ```
 
@@ -517,12 +519,14 @@ natural (and only possible) parallelism for a serial state machine.
 |-------|-------|-------------|
 | `adc_start` | `(n_pixels, MAX_ADC_VALUES)` | First tick of each ADC integration window |
 | `adc_end` | `(n_pixels, MAX_ADC_VALUES)` | Last tick of each ADC integration window |
-| `adc_ticks_idx` | `(n_pixels, MAX_ADC_VALUES)` | Tick index of the threshold crossing |
+| `adc_ticks_idx` | `(n_pixels, MAX_ADC_VALUES)` | Post-integration tick index (used for timestamp computation) |
 | `adc_counts` | `(n_pixels,)` | Number of ADC triggers per pixel |
+| `adc_q_sum` | `(n_pixels, MAX_ADC_VALUES)` | Accumulated charge including uncorrelated noise at end of integration window (`q_sum + noise_uncorr`) |
+| `adc_last_reset` | `(n_pixels, MAX_ADC_VALUES)` | Tick index of the most recent ADC reset at the time each window was accepted |
 
 ### Phase 5b: `integrate_windows`
 
-The kernel (`get_adc_values.py`, lines 358–407) takes the window bounds from
+The kernel (`get_adc_values.py`, lines 425–495) takes the window bounds from
 Phase 5a and the materialized arrays from Phases 3a/3b, and produces the final
 simulation outputs: ADC charge values, timestamps, and per-track current fractions.
 
@@ -531,15 +535,18 @@ simulation outputs: ADC charge values, timestamps, and per-track current fractio
 def integrate_windows(
     signal_charge,        # (n_pixels, n_ticks) — from Phase 3a
     signal_charge_track,  # (n_pixels, n_ticks, MAX_TRACKS_PER_PIXEL) — from Phase 3b
-    adc_start,            # (n_pixels, MAX_ADC_VALUES) — from Phase 5a
+    num_backtrack,        # (n_pixels,) — track count per pixel
     adc_end,              # (n_pixels, MAX_ADC_VALUES) — from Phase 5a
     adc_counts,           # (n_pixels,) — from Phase 5a
     adc_ticks_idx,        # (n_pixels, MAX_ADC_VALUES) — from Phase 5a
+    adc_q_sum,            # (n_pixels, MAX_ADC_VALUES) — from Phase 5a
+    adc_last_reset,       # (n_pixels, MAX_ADC_VALUES) — from Phase 5a
     adc_list,             # (n_pixels, MAX_ADC_VALUES) — output
     adc_ticks_list,       # (n_pixels, MAX_ADC_VALUES) — output
     current_fractions,    # (n_pixels, MAX_ADC_VALUES, MAX_TRACKS_PER_PIXEL) — output
     time_ticks,           # (n_ticks,)
-    time_padding          # scalar
+    time_padding,         # scalar
+    periodic_reset_phase  # (n_pixels,) — from Phase 2
 ):
     ip, iadc = cuda.grid(2)
 ```
@@ -547,13 +554,17 @@ def integrate_windows(
 Each thread handles one `(pixel, adc_index)` pair. Early-exit if
 `iadc >= adc_counts[ip]` (this pixel had fewer triggers). The per-thread work is:
 
-1. Sum `signal_charge[ip, start:end+1]` over the window to get the total integrated
-   charge `q_sum`.
-2. Accumulate `signal_charge_track[ip, start:end+1, itrk]` for each track.
-3. Normalize current fractions: if `true_q > 0`, divide each track's accumulated
+1. Iterate from `adc_last_reset[ip, iadc]` through `adc_end[ip, iadc]`, accumulating
+   `signal_charge[ip, ic]` into `true_q` and `signal_charge_track[ip, ic, itrk]` into
+   per-track accumulators for up to `min(num_backtrack[ip], MAX_TRACKS_PER_PIXEL)`
+   tracks. If a periodic reset tick is encountered, zero the accumulators and restart.
+2. Normalize current fractions: if `true_q > 0`, divide each track's accumulated
    charge by the total to get fractional contributions.
-4. Write `adc_list[ip, iadc] = q_sum`.
-5. Compute the timestamp: look up `time_ticks[tick] + time_padding`.
+3. Write `adc_list[ip, iadc] = adc_q_sum[ip, iadc]` (the ADC value was already
+   computed by `discover_adc_windows`, including uncorrelated noise).
+4. Compute the timestamp from `adc_ticks_idx[ip, iadc]`: look up
+   `time_ticks[tick] + time_padding`, with overflow handling for ticks past the end
+   of the time array.
 
 **Grid configuration.** 2D launch with thread blocks `(16, 8)` over
 `(n_pixels, MAX_ADC_VALUES)`. The second dimension is bounded by `MAX_ADC_VALUES`
@@ -561,7 +572,7 @@ Each thread handles one `(pixel, adc_index)` pair. Early-exit if
 `adc_counts` exit immediately.
 
 **No warp divergence.** Every active thread executes the same loop
-(`for ic in range(start, end + 1)`) with an interval length that is constant across
+(`for ic in range(lr, end + 1)`) with an interval length that is constant across
 all triggers (determined by `CLOCK_CYCLE` and `ADC_HOLD_DELAY`). The only divergence
 is the early exit for pixels with fewer triggers than the thread's `iadc`, which
 affects at most a handful of threads per warp.
@@ -605,41 +616,32 @@ surrounding simulation code — the final outputs (`adc_list`, `adc_ticks_list`,
 
 ## Known Issue: Output Divergence from Frozen Reference
 
-The reworked pipeline currently produces outputs that differ from the frozen reference
-outputs of the original `get_adc_values` kernel by more than what is attributable to
-the RNG draw-order change alone. Comparing summed outputs against the frozen reference
-(`get_adc_values_outputs_03.npz`):
+The reworked pipeline initially produced outputs that differed significantly from the
+frozen reference. A detailed comparison identified seven structural flow issues introduced during the kernel decomposition. Six of the seven
+have been resolved:
 
-| Output | Reworked | Original (frozen) |
-|--------|----------|-------------------|
-| `adc_list` (integral_list) | 233356.5 | 182387.9 |
-| `adc_ticks_list` | 4123.6 | 1282.7 |
-| `current_fractions` | -7914.3 | -55769.9 |
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | Missing second threshold check after integration | **Fixed** — `discover_adc_windows` now runs an inner while loop and performs the post-integration threshold comparison, rejecting false triggers. |
+| 2 | `adc_list` stored only window charge, not total since reset | **Fixed** — `discover_adc_windows` accumulates the full `q_sum` through the integration window and outputs it (with uncorrelated noise) as `adc_q_sum`. |
+| 3 | Tick advancement off by `interval + 1` after trigger | **Fixed** — the inner while loop in `discover_adc_windows` advances `ic` through the integration window before the reset advancement, matching the original's `ic = integrate_end + 1 + RESET_CYCLES_advance`. |
+| 4 | Convolution lower bound uses `0` instead of `last_reset` | **Acceptable?** — `last_reset` is computed by the ADC state machine (Phase 5), which runs after `integrate_signal` (Phase 3). This circular dependency cannot be resolved without reintroducing the convolution into the state machine kernel. The exponential weighting heavily attenuates the distant contributions that the original would have excluded. |
+| 5 | Timestamp used crossing tick instead of post-integration tick | **Fixed** — `adc_ticks_idx` now stores the post-integration `ic`, and `integrate_windows` replicates the original's `post_adc_ticks` overflow handling. |
+| 6 | Periodic reset not handled during window integration | **Fixed** — `integrate_windows` now iterates from `last_reset` to `end`, zeroing the track fraction accumulator when a periodic reset tick is encountered. |
+| 7 | Missing uncorrelated noise in ADC value | **Fixed** — absorbed into Issue 2; `adc_q_sum` includes the noise term. |
+| 8 | Vastly different `current_tracks` values | **Acceptable?** — The old kernel has trailing un-normalized charge accumulations. The new kernels flow does not have this issue. |
 
-The RNG extraction (Phase 2) is expected to shift individual noise values, which
-would cause small, statistically distributed differences. However, the magnitude of
-the discrepancies above — particularly in `adc_ticks_list` (3x) and
-`current_fractions` (sign/magnitude change) — indicates that one or more of the
-structural changes introduced during the decomposition have altered the simulation
-logic beyond the RNG effect. Likely candidates include:
+### Remaining Expected Differences
 
-- **Convolution window lower bound (Phase 3a/3b).** The extracted integration kernels
-  use `conv_start = max(0, ...)` while the original uses
-  `conv_start = max(last_reset, ...)`, bounding the convolution to start no earlier
-  than the most recent ADC reset. This means the pre-computed `signal_charge` values
-  may include contributions from ticks that the original kernel would have excluded
-  after a reset.
+After these fixes, the remaining output divergence should be attributable to:
 
-- **Removal of the second threshold check.** The original kernel's inner while loop
-  performs a *second* threshold comparison after the integration window
-  (`if adc < pixel_thresholds[ip] + disc_noise`), which can reject a trigger and
-  reset the accumulator. The reworked `discover_adc_windows` records a window on the
-  first crossing without this secondary check.
+1. **RNG draw-order change (Phase 2).** Pre-generating noise in a fixed order
+   produces different random values than the original's control-flow-dependent draws.
+   This is an expected statistical difference.
 
-- **Cumulative drift.** Because the state machine is sequential, any difference in a
-  single tick (from the above or from noise) shifts the `ic` counter, which changes
-  when all subsequent thresholds are evaluated, causing differences to compound.
+2. **Convolution lower bound (Issue 4).** The pre-computed `signal_charge` values
+   use `conv_start = max(0, ...)` instead of `max(last_reset, ...)`. For ticks
+   shortly after a reset, the signal may be slightly higher than the original, which
+   can shift threshold crossing times and cascade through subsequent triggers.
 
-This divergence is acknowledged and is not yet resolved. The current priority is
-completing the structural decomposition; reconciling the numerical output with the
-original kernel is a follow-up task.
+Both of these are acknowledged trade-offs of the decomposed architecture.

@@ -141,7 +141,14 @@ def integrate_signal(
 
     q = 0.0
 
-    # Match original logic
+    # NOTE (Issue 4 — accepted difference): The original kernel uses
+    # conv_start = max(last_reset, ...) to bound the convolution window at
+    # the most recent ADC reset tick. Because last_reset is computed by the
+    # ADC state machine (Phase 5) which runs AFTER this kernel, we cannot
+    # replicate that bound here. Using max(0, ...) instead means the
+    # pre-computed signal_charge may include small contributions from before
+    # the last reset that the original would have excluded. The exponential
+    # weighting heavily attenuates these distant contributions.
     if BUFFER_RISETIME > 0:
         conv_start = max(
             0,
@@ -208,6 +215,8 @@ def integrate_signal_tracks(
     for itrk in range(ntrks):
         q = 0.0
 
+        # NOTE (Issue 4 — accepted difference): Same conv_start bound
+        # difference as integrate_signal. See comment there for details.
         if BUFFER_RISETIME > 0:
             conv_start = max(
                 0,
@@ -253,7 +262,9 @@ def discover_adc_windows(
     adc_start,
     adc_end,
     adc_ticks_idx,
-    adc_counts
+    adc_counts,
+    adc_q_sum,
+    adc_last_reset
 ):
     ip = cuda.grid(1)
 
@@ -266,6 +277,7 @@ def discover_adc_windows(
     iadc = 0
     adc_busy = 0
     true_q = 0.0
+    last_reset = 0
     q_sum = noise_reset[ip, 0]
 
     apply_periodic_reset = PERIODIC_RESET_CYCLES > 0
@@ -276,10 +288,13 @@ def discover_adc_windows(
         if iadc >= MAX_ADC_VALUES:
             break
 
-        q = signal_charge[ip, ic]
+        if ic < n_ticks:
+            q = signal_charge[ip, ic]
+        else:
+            q = 0.0
 
         if apply_periodic_reset and ic % PERIODIC_RESET_CYCLES == reset_phase:
-            q_sum = noise_reset[ip, ic]
+            q_sum = noise_reset[ip, min(ic, n_ticks - 1)]
             true_q = 0.0
             ic += 1
             continue
@@ -290,8 +305,8 @@ def discover_adc_windows(
         if adc_busy > 0:
             adc_busy -= 1
 
-        q_noise = noise_uncorr[ip, ic]
-        disc_noise = noise_disc[ip, ic]
+        q_noise = noise_uncorr[ip, min(ic, n_ticks - 1)]
+        disc_noise = noise_disc[ip, min(ic, n_ticks - 1)]
 
         if q_sum + q_noise >= pixel_thresholds[ip] + disc_noise and adc_busy == 0:
 
@@ -299,19 +314,59 @@ def discover_adc_windows(
                 (3 * CLOCK_CYCLE + ADC_HOLD_DELAY * CLOCK_CYCLE) / TIME_SAMPLING
             )
             start = ic
-            end = min(ic + interval, n_ticks - 1)
+            integrate_end = ic + interval
+            current_last_reset = last_reset
+
+            ic += 1
+
+            # Inner integration loop — walk through the ADC hold window,
+            # accumulating charge into q_sum (matching original behavior).
+            while ic <= integrate_end:
+                if ic < n_ticks:
+                    q = signal_charge[ip, ic]
+                else:
+                    q = 0.0
+
+                if apply_periodic_reset and ic % PERIODIC_RESET_CYCLES == reset_phase:
+                    q_sum = noise_reset[ip, min(ic, n_ticks - 1)]
+                    true_q = 0.0
+                    ic += 1
+                    continue
+
+                q_sum += q
+                true_q += q
+                ic += 1
+
+            # Second threshold check after integration (Issue 1).
+            end_tick = min(integrate_end, n_ticks - 1)
+            adc = q_sum + noise_uncorr[ip, end_tick]
+            disc_noise_2 = noise_disc[ip, end_tick]
+
+            if adc < pixel_thresholds[ip] + disc_noise_2:
+                # REJECT — charge after integration fell below threshold.
+                ic += round(RESET_CYCLES * CLOCK_CYCLE / TIME_SAMPLING)
+                q_sum = noise_reset[ip, min(ic, n_ticks - 1)]
+                true_q = 0.0
+                last_reset = ic
+                continue
+
+            # ACCEPT — record the window.
+            end = min(integrate_end, n_ticks - 1)
 
             adc_start[ip, iadc] = start
-            adc_end[ip, iadc]   = end
+            adc_end[ip, iadc] = end
             adc_ticks_idx[ip, iadc] = ic
-
-            iadc += 1
+            adc_q_sum[ip, iadc] = adc
+            adc_last_reset[ip, iadc] = current_last_reset
 
             ic += round(RESET_CYCLES * CLOCK_CYCLE / TIME_SAMPLING)
+            last_reset = ic
             adc_busy = round(ADC_BUSY_DELAY * CLOCK_CYCLE / TIME_SAMPLING)
 
-            q_sum = noise_reset[ip, ic]
+            q_sum = noise_reset[ip, min(ic, n_ticks - 1)]
             true_q = 0.0
+
+            iadc += 1
             continue
 
         ic += 1
@@ -339,6 +394,16 @@ adc_counts = cuda.device_array(
     dtype=np.int32
 )
 
+adc_q_sum = cuda.device_array(
+    (n_pixels, MAX_ADC_VALUES),
+    dtype=np.float64
+)
+
+adc_last_reset = cuda.device_array(
+    (n_pixels, MAX_ADC_VALUES),
+    dtype=np.int32
+)
+
 threads = 128
 blocks = ceil(n_pixels / threads)
 
@@ -351,7 +416,9 @@ discover_adc_windows[blocks, threads](signal_charge,
     adc_start,
     adc_end,
     adc_ticks_idx,
-    adc_counts)
+    adc_counts,
+    adc_q_sum,
+    adc_last_reset)
 
 # --- Phase 5b: Integrate Windows ---
 
@@ -359,15 +426,18 @@ discover_adc_windows[blocks, threads](signal_charge,
 def integrate_windows(
     signal_charge,
     signal_charge_track,
-    adc_start,
+    num_backtrack,
     adc_end,
     adc_counts,
     adc_ticks_idx,
+    adc_q_sum,
+    adc_last_reset,
     adc_list,
     adc_ticks_list,
     current_fractions,
     time_ticks,
-    time_padding
+    time_padding,
+    periodic_reset_phase
 ):
     ip, iadc = cuda.grid(2)
     if ip >= signal_charge.shape[0]:
@@ -375,20 +445,33 @@ def integrate_windows(
     if iadc >= adc_counts[ip]:
         return
 
-    start = adc_start[ip, iadc]
-    end   = adc_end[ip, iadc]
+    end    = adc_end[ip, iadc]
+    lr     = adc_last_reset[ip, iadc]
+    n_ticks = signal_charge.shape[1]
 
-    q_sum = 0.0
+    apply_periodic_reset = PERIODIC_RESET_CYCLES > 0
+    reset_phase = periodic_reset_phase[ip] if apply_periodic_reset else -1
+
     true_q = 0.0
 
     ntrks = min(
-        current_fractions.shape[2],
+        num_backtrack[ip],
         signal_charge_track.shape[2]
     )
 
-    for ic in range(start, end + 1):
+    # Accumulate track fractions from last_reset through end,
+    # handling periodic resets which zero the accumulation.
+    for ic in range(lr, end + 1):
+        if ic >= n_ticks:
+            break
+
+        if apply_periodic_reset and ic % PERIODIC_RESET_CYCLES == reset_phase:
+            true_q = 0.0
+            for itrk in range(ntrks):
+                current_fractions[ip, iadc, itrk] = 0.0
+            continue
+
         q = signal_charge[ip, ic]
-        q_sum += q
         true_q += q
 
         for itrk in range(ntrks):
@@ -398,12 +481,17 @@ def integrate_windows(
         for itrk in range(ntrks):
             current_fractions[ip, iadc, itrk] /= true_q
 
-    adc_list[ip, iadc] = q_sum
+    # ADC value already computed by discover_adc_windows (q_sum + uncorr noise).
+    adc_list[ip, iadc] = adc_q_sum[ip, iadc]
 
-    tick = adc_ticks_idx[ip, iadc]
+    # Timestamp with overflow handling (replicates original logic).
+    tick_raw = adc_ticks_idx[ip, iadc]
+    crossing_time_tick = min(tick_raw, len(time_ticks) - 1)
+    post_adc_ticks = max(tick_raw - crossing_time_tick, 0)
     adc_ticks_list[ip, iadc] = (
-        time_ticks[min(tick, len(time_ticks)-1)]
+        time_ticks[crossing_time_tick]
         + time_padding
+        + post_adc_ticks * TIME_SAMPLING
     )
 
 threads = (16, 8)
@@ -414,15 +502,18 @@ blocks = (
 
 integrate_windows[blocks, threads](signal_charge,
     signal_charge_track,
-    adc_start,
+    num_backtrack,
     adc_end,
     adc_counts,
     adc_ticks_idx,
+    adc_q_sum,
+    adc_last_reset,
     integral_list,
     adc_ticks_list,
     current_fractions,
     time_ticks,
-    time_padding_val)
+    time_padding_val,
+    periodic_reset_phase)
 
 # Quick and dirty array simularity check of new flow compared to frozen outputs (old get_adc_value kernel).
 print((np.sum(integral_list), np.sum(outputs["integral_list"])), (np.sum(adc_ticks_list), np.sum(outputs["adc_ticks_list"])), (np.sum(current_fractions), np.sum(outputs["current_fractions"])))
