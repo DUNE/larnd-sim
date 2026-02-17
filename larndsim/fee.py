@@ -603,6 +603,15 @@ def get_adc_values(pixels_signals,
                 break
 
             q = 0
+
+            if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
+                q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
+                true_q = 0
+                last_periodic_reset = ic
+                for itrk in range(current_fractions.shape[2]):
+                    current_fractions[ip][iadc][itrk] = 0
+                ic += 1
+                continue
             
             if detector.BUFFER_RISETIME > 0:
                 conv_start = max(last_reset, floor(ic - 10*detector.BUFFER_RISETIME/detector.TIME_SAMPLING))
@@ -638,15 +647,6 @@ def get_adc_values(pixels_signals,
                 while ic <= integrate_end:
                     q = 0
 
-                    if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
-                        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
-                        true_q = 0
-                        last_periodic_reset = ic
-                        for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] = 0
-                        ic += 1
-                        continue
-                        
                     if detector.BUFFER_RISETIME > 0:
                         conv_start = max(last_reset, floor(ic - 10*detector.BUFFER_RISETIME/detector.TIME_SAMPLING))
                         for jc in range(conv_start, min(ic+1, curre.shape[0])):
