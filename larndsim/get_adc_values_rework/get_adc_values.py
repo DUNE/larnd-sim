@@ -208,7 +208,6 @@ def integrate_signal_tracks(
     off   = offset_backtrack[ip]
 
     # equivalent to num_backtrack.sum()
-    # TODO: Check if this is true
     total_backtracks = offset_backtrack[-1] + num_backtrack[-1]
     #total_backtracks = num_backtrack.sum() <- numba no likey
 

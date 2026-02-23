@@ -8,6 +8,8 @@ impossible to optimize or maintain. This document describes the analysis and
 phased decomposition of the kernel into a set of smaller, well-scoped kernels that
 each do one job and can be independently profiled, tuned, and reasoned about.
 
+> NOTE: Currently I have the function [`save_kernel_arrays`](https://github.com/DUNE/larnd-sim/blob/ebrinckm/experiment/cli/simulate_pixels.py#L44) in place [before](https://github.com/DUNE/larnd-sim/blob/ebrinckm/experiment/cli/simulate_pixels.py#L1328) and [after](https://github.com/DUNE/larnd-sim/blob/ebrinckm/experiment/cli/simulate_pixels.py#L1371) the call to the monolith kernel `get_adc_values`. I recommend removing this before doing a full simulation.
+
 ### Rework Phases
 
 | Phase | Description | Status |
