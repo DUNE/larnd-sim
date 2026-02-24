@@ -5,13 +5,13 @@ from .units import cm, microsecond, e
 ###################
 
 #: Coarse voxel size in X (transverse to drift)
-COARSE_VOXEL_SIZE_X = 5.0 * cm  # cm
+COARSE_VOXEL_SIZE_X = 0.5 * cm  # cm
 
 #: Coarse voxel size in Y (transverse to drift)
-COARSE_VOXEL_SIZE_Y = 5.0 * cm  # cm
+COARSE_VOXEL_SIZE_Y = 0.5 * cm  # cm
 
-#: Coarse voxel size in drift time (can try different values)
-COARSE_VOXEL_SIZE_T = 0.1 * microsecond  # us, matches detector.TIME_SAMPLING
+#: Coarse voxel size in Z (drift direction)
+COARSE_VOXEL_SIZE_Z = 0.5 * cm  # cm, matches XY default
 
 #####################################
 # Pixel pre-classification parameters
@@ -21,20 +21,20 @@ COARSE_VOXEL_SIZE_T = 0.1 * microsecond  # us, matches detector.TIME_SAMPLING
 CHARGE_COLLECTION_RADIUS = 1  # pixels
 
 # Neighbor pixel radius
-CHARGE_NEIGHBOR_RADIUS = 3  # pixels
+CHARGE_NEIGHBOR_RADIUS = 2  # pixels
 
 # Maximum induction consideration distance
 INDUCTION_CUTOFF_RADIUS = 50 # cm
 
 # Minimum induction signal threshold (electrons)
-INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
+INDUCTION_SIGNAL_THRESHOLD = 1000.0  # e-
 
 ####################################
 # Induced Current Normalization
 ####################################
 
 #: Global scale factor applied to induced current calculation (dimensionless)
-INDUCED_CURRENT_SCALE = 0.1
+INDUCED_CURRENT_SCALE = 0.03
 
 
 def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None, 
@@ -44,7 +44,7 @@ def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None,
     """
     To be updated to read from YAML
     """
-    global COARSE_VOXEL_SIZE_X, COARSE_VOXEL_SIZE_Y, COARSE_VOXEL_SIZE_T
+    global COARSE_VOXEL_SIZE_X, COARSE_VOXEL_SIZE_Y, COARSE_VOXEL_SIZE_Z
     global CHARGE_COLLECTION_RADIUS, CHARGE_NEIGHBOR_RADIUS
     global INDUCTION_CUTOFF_RADIUS, INDUCTION_SIGNAL_THRESHOLD, INDUCED_CURRENT_SCALE
     
@@ -53,7 +53,7 @@ def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None,
     if voxel_size_y is not None:
         COARSE_VOXEL_SIZE_Y = voxel_size_y
     if voxel_size_t is not None:
-        COARSE_VOXEL_SIZE_T = voxel_size_t
+        COARSE_VOXEL_SIZE_Z = voxel_size_t
     if charge_collection_radius is not None:
         CHARGE_COLLECTION_RADIUS = charge_collection_radius
     if charge_neighbor_radius is not None:          
