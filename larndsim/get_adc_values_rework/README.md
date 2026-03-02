@@ -643,6 +643,7 @@ forming a straightforward data-flow pipeline. The original `get_adc_values` kern
 can be removed and replaced by this sequence of calls with no change to the
 surrounding simulation code — the final outputs (`adc_list`, `adc_ticks_list`,
 `current_fractions`) are identical in shape and meaning.
+> NOTE: Further investigation, testing, and analysis is needed to confirm the final outputs to be valid.
 
 ---
 

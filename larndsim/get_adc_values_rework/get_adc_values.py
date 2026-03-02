@@ -62,6 +62,24 @@ def generate_noise(
     noise_reset,
     periodic_reset_phase
 ):
+    """Pre-compute all noise values used by downstream ADC kernels.
+
+    Draws from the xoroshiro128p RNG to populate per-pixel, per-tick
+    noise arrays for uncorrelated, discriminator, and reset noise, plus
+    a per-pixel periodic reset phase offset.
+
+    Args:
+        rng_states (:obj:`numpy.ndarray`): array of per-thread RNG states.
+            Shape (TPB*BPG,).
+        noise_uncorr (:obj:`numpy.ndarray`): Output; pre-scaled uncorrelated
+            noise per pixel per tick. Shape (n_pixels, n_ticks).
+        noise_disc (:obj:`numpy.ndarray`): Output; pre-scaled discriminator
+            noise per pixel per tick. Shape (n_pixels, n_ticks).
+        noise_reset (:obj:`numpy.ndarray`): Output; pre-scaled reset noise
+            per pixel per tick. Shape (n_pixels, n_ticks).
+        periodic_reset_phase (:obj:`numpy.ndarray`): Output; integer phase
+            offset for periodic resets per pixel. Shape (n_pixels,).
+    """
     ip = cuda.grid(1)
     if ip >= noise_uncorr.shape[0]:
         return
@@ -123,13 +141,26 @@ periodic_reset_phase = cuda.device_array(
 # Populate the arrays with random numbers
 generate_noise[BPG, TPB](rng_states, noise_uncorr, noise_disc, noise_reset, periodic_reset_phase)
 
-# --- Phase 3a: Signal Etraction ---
+# --- Phase 3a: Signal Extraction ---
 
 @cuda.jit
 def integrate_signal(
     pixels_signals,
     signal_charge
 ):
+    """Convolve raw induced currents with the buffer risetime response.
+
+    Computes the integrated charge for every (pixel, tick) pair. When
+    BUFFER_RISETIME > 0, applies an exponential convolution backwards
+    over a window of 10 * BUFFER_RISETIME / TIME_SAMPLING ticks.
+    Otherwise, multiplies the raw current by TIME_SAMPLING directly.
+
+    Args:
+        pixels_signals (:obj:`numpy.ndarray`): raw induced currents for
+            each pixel. Shape (n_pixels, n_ticks).
+        signal_charge (:obj:`numpy.ndarray`): Output; integrated charge
+            per pixel per tick. Shape (n_pixels, n_ticks).
+    """
     ip, ic = cuda.grid(2)
 
     if ip >= pixels_signals.shape[0]:
@@ -162,8 +193,6 @@ def integrate_signal(
                 (1.0 - exp(-TIME_SAMPLING / BUFFER_RISETIME))
 
             q += curre[jc] * TIME_SAMPLING * w
-
-            # (optional: track-resolved version later)
     else:
         q = curre[ic] * TIME_SAMPLING
 
@@ -195,8 +224,25 @@ def integrate_signal_tracks(
     pixels_signals_tracks,
     num_backtrack,
     offset_backtrack,
-    signal_charge_track  # (n_pixels, n_ticks, MAX_TRACKS_PER_PIXEL)
+    signal_charge_track
 ):
+    """Convolve per-track induced currents with the buffer risetime response.
+
+    Applies the same convolution as integrate_signal to each track's
+    signal contribution independently. Reads from a flat/jagged layout
+    indexed by (total_backtracks * tick + offset + track).
+
+    Args:
+        pixels_signals_tracks (:obj:`numpy.ndarray`): per-track induced
+            currents in flat jagged layout. Shape (n_ticks * total_backtracks,).
+        num_backtrack (:obj:`numpy.ndarray`): number of backtracked track
+            segments per pixel. Shape (n_pixels,).
+        offset_backtrack (:obj:`numpy.ndarray`): offset into
+            pixels_signals_tracks for each pixel's data. Shape (n_pixels,).
+        signal_charge_track (:obj:`numpy.ndarray`): Output; integrated
+            charge per pixel per tick per track.
+            Shape (n_pixels, n_ticks, MAX_TRACKS_PER_PIXEL).
+    """
     ip, ic = cuda.grid(2)
 
     if ip >= num_backtrack.shape[0]:
@@ -207,7 +253,8 @@ def integrate_signal_tracks(
     ntrks = min(num_backtrack[ip], signal_charge_track.shape[2])
     off   = offset_backtrack[ip]
 
-    # equivalent to num_backtrack.sum()
+    # NOTE: The below line is the same as summing num_backtrack, but is more efficient and is preferred.
+    # An addition of two array accesses is O(1) while a sum over an array is O(n).
     total_backtracks = offset_backtrack[-1] + num_backtrack[-1]
     #total_backtracks = num_backtrack.sum() <- numba no likey
 
@@ -265,6 +312,47 @@ def discover_adc_windows(
     adc_q_sum,
     adc_last_reset
 ):
+    """Run the ADC self-trigger state machine to find trigger windows.
+
+    Walks the tick axis per pixel, accumulating pre-computed charge and
+    checking for threshold crossings. On a crossing, an inner loop
+    walks the ADC hold window accumulating charge, then a second
+    threshold check accepts or rejects the trigger. Accepted windows
+    are recorded; rejected windows are discarded and scanning resumes.
+
+    Args:
+        signal_charge (:obj:`numpy.ndarray`): integrated charge per pixel
+            per tick (from integrate_signal). Shape (n_pixels, n_ticks).
+        noise_uncorr (:obj:`numpy.ndarray`): pre-scaled uncorrelated noise
+            per pixel per tick (from generate_noise).
+            Shape (n_pixels, n_ticks).
+        noise_disc (:obj:`numpy.ndarray`): pre-scaled discriminator noise
+            per pixel per tick (from generate_noise).
+            Shape (n_pixels, n_ticks).
+        noise_reset (:obj:`numpy.ndarray`): pre-scaled reset noise per
+            pixel per tick (from generate_noise).
+            Shape (n_pixels, n_ticks).
+        periodic_reset_phase (:obj:`numpy.ndarray`): integer phase offset
+            for periodic resets per pixel (from generate_noise).
+            Shape (n_pixels,).
+        pixel_thresholds (:obj:`numpy.ndarray`): discriminator threshold
+            per pixel. Shape (n_pixels,).
+        adc_start (:obj:`numpy.ndarray`): Output; first tick of each ADC
+            integration window. Shape (n_pixels, MAX_ADC_VALUES).
+        adc_end (:obj:`numpy.ndarray`): Output; last tick of each ADC
+            integration window. Shape (n_pixels, MAX_ADC_VALUES).
+        adc_ticks_idx (:obj:`numpy.ndarray`): Output; post-integration tick
+            index for timestamp computation.
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_counts (:obj:`numpy.ndarray`): Output; number of accepted ADC
+            triggers per pixel. Shape (n_pixels,).
+        adc_q_sum (:obj:`numpy.ndarray`): Output; accumulated charge
+            including uncorrelated noise at end of integration window.
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_last_reset (:obj:`numpy.ndarray`): Output; tick index of the
+            most recent ADC reset at the time each window was accepted.
+            Shape (n_pixels, MAX_ADC_VALUES).
+    """
     ip = cuda.grid(1)
 
     if ip >= signal_charge.shape[0]:
@@ -438,14 +526,57 @@ def integrate_windows(
     time_padding,
     periodic_reset_phase
 ):
+    """Accumulate per-track current fractions and write final ADC outputs.
+
+    For each accepted ADC window, iterates from the last reset tick
+    through the window end, accumulating per-track charge from
+    pre-computed arrays and normalizing to fractional contributions.
+    Also writes the ADC value and timestamp for each window.
+
+    Args:
+        signal_charge (:obj:`numpy.ndarray`): integrated charge per pixel
+            per tick (from integrate_signal). Shape (n_pixels, n_ticks).
+        signal_charge_track (:obj:`numpy.ndarray`): integrated charge per
+            pixel per tick per track (from integrate_signal_tracks).
+            Shape (n_pixels, n_ticks, MAX_TRACKS_PER_PIXEL).
+        num_backtrack (:obj:`numpy.ndarray`): number of backtracked track
+            segments per pixel. Shape (n_pixels,).
+        adc_end (:obj:`numpy.ndarray`): last tick of each ADC integration
+            window (from discover_adc_windows).
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_counts (:obj:`numpy.ndarray`): number of accepted ADC triggers
+            per pixel (from discover_adc_windows). Shape (n_pixels,).
+        adc_ticks_idx (:obj:`numpy.ndarray`): post-integration tick index
+            for timestamp computation (from discover_adc_windows).
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_q_sum (:obj:`numpy.ndarray`): accumulated charge including
+            uncorrelated noise (from discover_adc_windows).
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_last_reset (:obj:`numpy.ndarray`): tick of the most recent ADC
+            reset for each window (from discover_adc_windows).
+            Shape (n_pixels, MAX_ADC_VALUES).
+        adc_list (:obj:`numpy.ndarray`): Output; ADC charge value for each
+            pixel per trigger. Shape (n_pixels, MAX_ADC_VALUES).
+        adc_ticks_list (:obj:`numpy.ndarray`): Output; timestamp for each
+            ADC trigger. Shape (n_pixels, MAX_ADC_VALUES).
+        current_fractions (:obj:`numpy.ndarray`): Output; fraction of
+            charge induced by each track per trigger.
+            Shape (n_pixels, MAX_ADC_VALUES, MAX_TRACKS_PER_PIXEL).
+        time_ticks (:obj:`numpy.ndarray`): array of time tick values.
+            Shape (n_ticks,).
+        time_padding (float): time offset added to each timestamp.
+        periodic_reset_phase (:obj:`numpy.ndarray`): integer phase offset
+            for periodic resets per pixel (from generate_noise).
+            Shape (n_pixels,).
+    """
     ip, iadc = cuda.grid(2)
     if ip >= signal_charge.shape[0]:
         return
     if iadc >= adc_counts[ip]:
         return
 
-    end    = adc_end[ip, iadc]
-    lr     = adc_last_reset[ip, iadc]
+    end = adc_end[ip, iadc]
+    lr = adc_last_reset[ip, iadc]
     n_ticks = signal_charge.shape[1]
 
     apply_periodic_reset = PERIODIC_RESET_CYCLES > 0
@@ -515,4 +646,11 @@ integrate_windows[blocks, threads](signal_charge,
     periodic_reset_phase)
 
 # Quick and dirty array simularity check of new flow compared to frozen outputs (old get_adc_value kernel).
-print((np.sum(integral_list), np.sum(outputs["integral_list"])), (np.sum(adc_ticks_list), np.sum(outputs["adc_ticks_list"])), (np.sum(current_fractions), np.sum(outputs["current_fractions"])))
+print(
+    "Integral List Sum (new, old)      :",
+    (np.sum(integral_list), np.sum(outputs["integral_list"])),
+    "\nADC Ticks List Sum (new, old)   :",
+    (np.sum(adc_ticks_list), np.sum(outputs["adc_ticks_list"])),
+    "\nCurrent Fractions Sum (new, old):",
+    (np.sum(current_fractions), np.sum(outputs["current_fractions"]))
+)
