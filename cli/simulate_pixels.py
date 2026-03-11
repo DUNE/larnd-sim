@@ -1396,7 +1396,6 @@ def run_simulation(input_filename,
                             pixels_signals[tpc_mask, :] += ff_signals_tpc
                         
                     RangePop()
-
                 RangePush("get_adc_values", 3)
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
                 time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
@@ -1473,24 +1472,26 @@ def run_simulation(input_filename,
                     cls = classification_cache.get(int(tpc_idx), None)
                     if cache is None or cache["x"] is None or cls is None or len(cls.induction_pixels) == 0:
                         continue
-                    # Induction-only pixels for this TPC
-                    induction_pix_ids = cp.asarray(cls.induction_pixels, dtype=cp.int32)
-                    if induction_pix_ids.size == 0:
-                        continue
-                    # Drop pixels already covered by near-field processing
-                    if processed_pixels is not None and processed_pixels.size > 0:
-                        induction_pix_ids = cp.setdiff1d(induction_pix_ids, processed_pixels)
-                    if induction_pix_ids.size == 0:
+                    # Induction-only pixels for this TPC; preserve ID/coordinate ordering
+                    induction_pix_all = cp.asarray(cls.induction_pixels, dtype=cp.int32)
+                    pixel_x_all = cp.asarray(cls.induction_pixels_x, dtype=cp.float32)
+                    pixel_y_all = cp.asarray(cls.induction_pixels_y, dtype=cp.float32)
+
+                    if induction_pix_all.size == 0:
                         continue
 
-                    # Use classifier's pre-computed coordinates for induction pixels
-                    pixel_x_ff = cp.asarray(cls.induction_pixels_x, dtype=cp.float32)
-                    pixel_y_ff = cp.asarray(cls.induction_pixels_y, dtype=cp.float32)
-                    # Filter coordinates to only those not in processed_pixels
                     if processed_pixels is not None and processed_pixels.size > 0:
-                        mask = cp.isin(cls.induction_pixels, induction_pix_ids)
-                        pixel_x_ff = pixel_x_ff[mask]
-                        pixel_y_ff = pixel_y_ff[mask]
+                        keep_mask = ~cp.isin(induction_pix_all, processed_pixels)
+                        induction_pix_ids = induction_pix_all[keep_mask]
+                        pixel_x_ff = pixel_x_all[keep_mask]
+                        pixel_y_ff = pixel_y_all[keep_mask]
+                    else:
+                        induction_pix_ids = induction_pix_all
+                        pixel_x_ff = pixel_x_all
+                        pixel_y_ff = pixel_y_all
+
+                    if induction_pix_ids.size == 0:
+                        continue
                     pixel_categories_ff = cp.zeros(len(induction_pix_ids), dtype=cp.int32)  # category 0 = INDUCTION
 
                     # Use event-wide t0 max for tick extension (far-field only)
