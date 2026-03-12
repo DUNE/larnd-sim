@@ -825,20 +825,18 @@ def run_simulation(input_filename,
         RangePush("run_simulation")
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
+        
+        # load NEST yields
+        NEST_ER = np.load('../larndsim/bin/ChargeLightYieldsNestLAr.npz')
+        recomb_energies, Ne_yields, Nph_yields = NEST_ER['E']*1e-3, NEST_ER['Ne_yield'], NEST_ER['Nph_yield']
 
-        if sim.RECOMB_MODE == physics.NEST_ER:
-            NEST_ER = np.load('../larndsim/bin/LArNEST_ER_recombination_values.npz')
-            recomb_energies, recomb_values = NEST_ER['E']*1e-3, NEST_ER['R']
-        else:
-            recomb_energies, recomb_values = np.zeros((0,)), np.zeros((0,))
-        print(f"{sim.RECOMB_MODE=}")
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
         logger.start()
         logger.take_snapshot()
         start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, sim.RECOMB_MODE, recomb_energies, recomb_values)
+        quenching.quench[BPG,TPB](tracks, sim.RECOMB_MODE, recomb_energies, Ne_yields, Nph_yields)
         end_quenching = time()
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')
@@ -876,9 +874,8 @@ def run_simulation(input_filename,
 
             light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
 
-            if (i_mod == 1
-                or (mod2mod_variation
-                    and light_lut != light_lut_filename[i_mod-2])):
+            if (i_mod == -1 or
+               (mod2mod_variation and (i_mod == 1 or light_lut != light_lut_filename[i_mod-2]))):
 
                 lut = np.load(light_lut)['arr']
 
@@ -932,7 +929,7 @@ def run_simulation(input_filename,
                 op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
                 op_channel = cp.array(op_channel)
                 trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
 
                 n_light_det = op_channel.shape[0]
                 n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
@@ -1388,7 +1385,7 @@ def run_simulation(input_filename,
                 light_threshold = light_threshold.ravel()[op_channel.get()].copy()
                 light_threshold = light_threshold.reshape(-1, light.OP_CHANNEL_PER_TRIG)[...,0]
                 trigger_idx, trigger_op_channel_idx, trigger_type = light_sim.get_triggers(light_response, light_threshold, op_channel, 0)
-                digit_samples = ceil((light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0]) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
                 TPB = (1,1,64)
                 BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
                         max(ceil(trigger_op_channel_idx.shape[1] / TPB[1]),1),
