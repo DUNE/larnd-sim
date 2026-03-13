@@ -26,8 +26,11 @@ CHARGE_NEIGHBOR_RADIUS = 2  # pixels
 # Maximum induction consideration distance
 INDUCTION_CUTOFF_RADIUS = 50 # cm
 
+# Far-field segment split step size (1 mm)
+FAR_FIELD_SEGMENT_STEP_CM = 0.5  # cm
+
 # Minimum induction signal threshold (electrons)
-INDUCTION_SIGNAL_THRESHOLD = 1000.0  # e-
+INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 
 ####################################
 # Induced Current Normalization
@@ -40,13 +43,14 @@ INDUCED_CURRENT_SCALE = 0.03
 def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None, 
                         charge_collection_radius=None, charge_neighbor_radius=None, 
                         induction_cutoff_radius=None, induction_signal_threshold=None,
-                        induced_current_scale=None):
+                        induced_current_scale=None, far_field_segment_step_cm=None):
     """
     To be updated to read from YAML
     """
     global COARSE_VOXEL_SIZE_X, COARSE_VOXEL_SIZE_Y, COARSE_VOXEL_SIZE_Z
     global CHARGE_COLLECTION_RADIUS, CHARGE_NEIGHBOR_RADIUS
     global INDUCTION_CUTOFF_RADIUS, INDUCTION_SIGNAL_THRESHOLD, INDUCED_CURRENT_SCALE
+    global FAR_FIELD_SEGMENT_STEP_CM
     
     if voxel_size_x is not None:
         COARSE_VOXEL_SIZE_X = voxel_size_x
@@ -64,3 +68,5 @@ def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None,
         INDUCTION_SIGNAL_THRESHOLD = induction_signal_threshold
     if induced_current_scale is not None:
         INDUCED_CURRENT_SCALE = induced_current_scale
+    if far_field_segment_step_cm is not None:
+        FAR_FIELD_SEGMENT_STEP_CM = far_field_segment_step_cm

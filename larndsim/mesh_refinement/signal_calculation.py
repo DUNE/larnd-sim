@@ -149,6 +149,130 @@ def calculate_far_field_dipole_signal_time_kernel(
     output[p_idx, t_idx] = total_current
 
 
+@cuda.jit
+def calculate_far_field_segment_signal_time_kernel(
+    tracks,
+    pixel_x, pixel_y,
+    exclude_radius,
+    split_step_cm,
+    z_anode, z_cathode,
+    v_drift,
+    tick_size,
+    n_terms,
+    C,
+    output
+):
+    """
+    CUDA kernel: Calculate far-field induced current for each (pixel, tick)
+    by summing over segment contributions outside exclude_radius.
+
+    Long segments are split into pieces of roughly split_step_cm and each
+    piece contributes as a point charge located at the piece midpoint.
+
+    Args:
+        tracks: structured track array (fields: x_start, y_start, z_start,
+                x_end, y_end, z_end, n_electrons, pixel_plane, ...)
+    """
+    p_idx, t_idx = cuda.grid(2)
+    n_pixels = pixel_x.shape[0]
+    n_ticks = output.shape[1]
+    if p_idx >= n_pixels or t_idx >= n_ticks:
+        return
+
+    x_pixel = pixel_x[p_idx]
+    y_pixel = pixel_y[p_idx]
+    t = t_idx * tick_size
+    total_current = 0.0
+
+    n_segments = tracks.shape[0]
+    l = abs(z_cathode - z_anode)
+
+    for s_idx in range(n_segments):
+        segment = tracks[s_idx]
+        x0 = segment['x_start']
+        y0 = segment['y_start']
+        z0_seg = segment['z_start']
+        x1 = segment['x_end']
+        y1 = segment['y_end']
+        z1 = segment['z_end']
+
+        # skip before splitting into sub-pieces.
+        if exclude_radius > 0.0:
+            dx0 = abs(x0 - x_pixel)
+            dy0 = abs(y0 - y_pixel)
+            dx1 = abs(x1 - x_pixel)
+            dy1 = abs(y1 - y_pixel)
+            if max(dx0, dx1) <= exclude_radius and max(dy0, dy1) <= exclude_radius:
+                continue
+
+        vx = x1 - x0
+        vy = y1 - y0
+        vz = z1 - z0_seg
+        seg_len_sq = vx*vx + vy*vy + vz*vz
+        if seg_len_sq <= 1e-20:
+            continue
+        seg_len = math.sqrt(seg_len_sq)
+
+        n_split = 1
+        if split_step_cm > 0.0:
+            n_split = int(math.ceil(seg_len / split_step_cm))
+            if n_split < 1:
+                n_split = 1
+
+        q_piece = segment['n_electrons'] / n_split
+
+        for i_split in range(n_split):
+            frac = (i_split + 0.5) / n_split
+            x = x0 + frac * vx
+            y = y0 + frac * vy
+            z_start_piece = z0_seg + frac * vz
+
+            # far-field exclusion radius
+            if exclude_radius > 0.0:
+                dx_xy = abs(x - x_pixel)
+                dy_xy = abs(y - y_pixel)
+                if dx_xy <= exclude_radius or dy_xy <= exclude_radius:
+                    continue
+
+            drift_distance = v_drift * t
+            if z_start_piece > z_anode:
+                z = z_start_piece - drift_distance
+                if z < z_anode:
+                    continue
+            else:
+                z = z_start_piece + drift_distance
+                if z > z_anode:
+                    continue
+
+            dx = x - x_pixel
+            dy = y - y_pixel
+            dz = z - z_anode
+            r_sq = dx*dx + dy*dy + dz*dz
+            if r_sq < 1e-20:
+                continue
+            r = math.sqrt(r_sq)
+
+            term0 = (r_sq - 3.0*dz*dz) / (r_sq*r_sq*r)
+            term_sum = 0.0
+            for n in range(1, n_terms+1):
+                dz_p = dz + 2*n*l
+                r_p_sq = dx*dx + dy*dy + dz_p*dz_p
+                if r_p_sq > 1e-20:
+                    r_p = math.sqrt(r_p_sq)
+                    term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
+
+                dz_m = dz - 2*n*l
+                r_m_sq = dx*dx + dy*dy + dz_m*dz_m
+                if r_m_sq > 1e-20:
+                    r_m = math.sqrt(r_m_sq)
+                    term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
+
+            dWdz = C * (term0 + term_sum)
+            total_current += -q_piece * v_drift * dWdz
+
+    output[p_idx, t_idx] = total_current
+
+
 def launch_far_field_dipole_signal_calculation(
     voxel_pos, pixel_pos, voxel_charge, pixel_categories, z_anode, z_cathode, v_drift, tick_size, n_ticks, 
     n_terms=5, C=None, bx=16, by=16, exclude_radius=0.0, voxel_size_xy=None
