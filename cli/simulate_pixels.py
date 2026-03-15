@@ -388,6 +388,9 @@ def run_simulation(input_filename,
             except:
                 print("light_det_noise_filename is not provided (required if light_simulated is True)")
 
+    farfield_enabled = cfg.get('FARFIELD_ENABLED', farfield_enabled)
+    farfield_mode = cfg.get('FARFIELD_MODE', farfield_mode)
+
     # Assert necessary ones
     assert pixel_layout, 'pixel_layout (file) must be specified.'
     assert simulation_properties, 'simulation_properties (file) must be specified'
