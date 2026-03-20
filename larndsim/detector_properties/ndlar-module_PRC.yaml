@@ -1,0 +1,132 @@
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
+lifetime: 2.2e+3 # us
+time_interval: [0, 320.] # us
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+response_sampling: 0.05 # us
+response_bin_size: 0.0372 # cm
+time_padding: 320 # us
+time_window: 320 # us
+# These TPC offsets are obtained by inspecting
+# 
+# geometry/nd_hall_with_lar_tms_sand_TDR_Production_geometry_v_1.0.3.gdml
+# using the https://github.com/DUNE/dunendggd/blob/master/locateVolume.C
+# tool with paths like, for example,
+# volWorld/rockBox_lv_0/volDetEnclosure_0/volArgonCubeDetector_0/ \
+# volArgonCubeCryostatWithTagger_0/volArgonCubeCryostat_0/volWarmSteel_0/ \
+# volVaporBarrier_0/volNitrogenGap_0/volThermalInsulation_0/volMembrane_0/ \
+# volArgonInner_0/volLArBath_0/volArgonCubeDetector75_0/volNDBucket_0 \
+# volArgonColumn_0/volInnerDetector_0
+#
+# Note that this is the easiest way to get the x and z positions (since 
+# volTPCActive(s) are single TPCs (half a module). The y positions of 
+# volTPCActive(s) and volInnerDetector(s) line up exactly.
+tpc_offsets: # cm
+  - [-300.0000, -66.8713, 465.7559]
+  - [-300.0000, -66.8713, 565.7559]
+  - [-300.0000, -66.8713, 665.7559]
+  - [-300.0000, -66.8713, 765.7559]
+  - [-300.0000, -66.8713, 865.7559]
+  - [-200.0000, -66.8713, 465.7559]
+  - [-200.0000, -66.8713, 565.7559]
+  - [-200.0000, -66.8713, 665.7559]
+  - [-200.0000, -66.8713, 765.7559]
+  - [-200.0000, -66.8713, 865.7559]
+  - [-100.0000, -66.8713, 465.7559]
+  - [-100.0000, -66.8713, 565.7559]
+  - [-100.0000, -66.8713, 665.7559]
+  - [-100.0000, -66.8713, 765.7559]
+  - [-100.0000, -66.8713, 865.7559]
+  - [0.0000, -66.8713, 465.7559]
+  - [0.0000, -66.8713, 565.7559]
+  - [0.0000, -66.8713, 665.7559]
+  - [0.0000, -66.8713, 765.7559]
+  - [0.0000, -66.8713, 865.7559]
+  - [100.0000, -66.8713, 465.7559]
+  - [100.0000, -66.8713, 565.7559]
+  - [100.0000, -66.8713, 665.7559]
+  - [100.0000, -66.8713, 765.7559]
+  - [100.0000, -66.8713, 865.7559]
+  - [200.0000, -66.8713, 465.7559]
+  - [200.0000, -66.8713, 565.7559]
+  - [200.0000, -66.8713, 665.7559]
+  - [200.0000, -66.8713, 765.7559]
+  - [200.0000, -66.8713, 865.7559]
+  - [300.0000, -66.8713, 465.7559]
+  - [300.0000, -66.8713, 565.7559]
+  - [300.0000, -66.8713, 665.7559]
+  - [300.0000, -66.8713, 765.7559]
+  - [300.0000, -66.8713, 865.7559]
+# Note the tile_map convention is different than 2x2 
+# as in nd-lar (also in fsd) one vertical row of tiles are connected to one pacman (one io-group)
+# while in 2x2 modules, the tile numbering follows horizontal first and then vertical in the 2x4 anode.
+tile_map:
+  - [[10,9,8,7,6,5,4,3,2,1],[20,19,18,17,16,15,14,13,12,11]]
+  - [[30,29,28,27,26,25,24,23,22,21],[40,39,38,37,36,35,34,33,32,31]]
+module_to_io_groups:
+  1: [1, 2, 3, 4]
+  2: [5, 6, 7, 8]
+  3: [9, 10, 11, 12]
+  4: [13, 14, 15, 16]
+  5: [17, 18, 19, 20]
+  6: [21, 22, 23, 24]
+  7: [25, 26, 27, 28]
+  8: [29, 30, 31, 32]
+  9: [33, 34, 35, 36]
+  10: [37, 38, 39, 40]
+  11: [41, 42, 43, 44]
+  12: [45, 46, 47, 48]
+  13: [49, 50, 51, 52]
+  14: [53, 54, 55, 56]
+  15: [57, 58, 59, 60]
+  16: [61, 62, 63, 64]
+  17: [65, 66, 67, 68]
+  18: [69, 70, 71, 72]
+  19: [73, 74, 75, 76]
+  20: [77, 78, 79, 80]
+  21: [81, 82, 83, 84]
+  22: [85, 86, 87, 88]
+  23: [89, 90, 91, 92]
+  24: [93, 94, 95, 96]
+  25: [97, 98, 99, 100]
+  26: [101, 102, 103, 104]
+  27: [105, 106, 107, 108]
+  28: [109, 110, 111, 112]
+  29: [113, 114, 115, 116]
+  30: [117, 118, 119, 120]
+  31: [121, 122, 123, 124]
+  32: [125, 126, 127, 128]
+  33: [129, 130, 131, 132]
+  34: [133, 134, 135, 136]
+  35: [137, 138, 139, 140]
+
+module_to_tpcs: {1: [0, 1], 2: [2, 3], 3: [4, 5], 4: [6, 7], 5: [8, 9], 6: [10, 11], 7: [12, 13], 8: [14, 15], 9: [16, 17], 10: [18, 19], 11: [20, 21], 12: [22, 23], 13: [24, 25], 14: [26, 27], 15: [28, 29], 16: [30, 31], 17: [32, 33], 18: [34, 35], 19: [36, 37], 20: [38, 39], 21: [40, 41], 22: [42, 43], 23: [44, 45], 24: [46, 47], 25: [48, 49], 26: [50, 51], 27: [52, 53], 28: [54, 55], 29: [56, 57], 30: [58, 59], 31: [60, 61], 32: [62, 63], 33: [64, 65], 34: [66, 67], 35: [68, 69]}
+
+discrimination_threshold: 5.0e3 # e-
+v_cm: 478 # mV
+v_ref: 1568 # mV
+
+## Light geometry parameters
+n_op_channel: 8400
+
+## Light simulation parameters.
+light_trig_mode: 1
+
+singlet_fraction: 0.3
+tau_s: 0.001 # us
+tau_t: 1.530 # us
+enable_lut_smearing: True # sample from the time profile for photon arrival time (True) or use average photon arrival time (False)
+op_channel_efficiency: 1
+light_gain: -7.0
+light_det_noise_sample_spacing: 0.016 # us
+light_trig_threshold: [-2000, -4500] # [LCM, ACL]
+light_trig_mode: 1
+light_window: [0, 16] # us
+light_trig_window: [1.6, 14.4] # us
+light_digit_sample_spacing: 0.016 # us
+light_nbit: 14
+sipm_response_model: 1 # 0: RLC model; 1: measured
+impulse_model: 'larndsim/bin/sipm_impulse.npy'
+max_radius: 4
+periodic_reset_cycles: 128

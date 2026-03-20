@@ -114,6 +114,10 @@ ndlar_farSeg: &ndlar_farSeg
     FARFIELD_ENABLED: True
     FARFIELD_MODE: segments
 
+ndlar_farSegPRC: &ndlar_farSegPRC
+    <<: *ndlar_farSeg
+    DET_PROPERTIES: ndlar-module_PRC.yaml
+
 ndlar_shield: &ndlar_shield
     <<: *ndlarmain
     RESPONSE:        [response_37_v2d_shield900V_fsd_ndlar_full.npz]
@@ -140,6 +144,10 @@ ndlar_mpvmpr_farSeg: &ndlar_mpvmpr_farSeg
     <<: *ndlar_mpvmpr
     FARFIELD_ENABLED: True
     FARFIELD_MODE: segments
+
+ndlar_mpvmpr_farSegPRC: &ndlar_mpvmpr_farSegPRC
+    <<: *ndlar_mpvmpr_farSeg
+    DET_PROPERTIES: ndlar-module_PRC.yaml
 
 ndlar_mpvmpr_shield: &ndlar_mpvmpr_shield
     <<: *ndlar_mpvmpr
