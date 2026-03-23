@@ -201,7 +201,7 @@ def set_multi_properties(bucket, n_mod, i_module, message=""):
         prop = float(bucket[i_module-1])
     return prop
 
-def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False):
+def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False, farfield_enabled=False):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -409,7 +409,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
         TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-        MAX_RADIUS = int(detprop.get('max_radius', MAX_RADIUS))
+        MAX_RADIUS = int(detprop.get('max_radius', 2 if farfield_enabled else 4))
 
         # Prepare neighbouring pixel distance for backtracking
         # Currently backtracking range is used to convert from segment base to pixel base
