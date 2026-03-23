@@ -761,7 +761,8 @@ def run_simulation(input_filename,
     # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
     if mod2mod_variation:
-        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
+        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True,
+                                                farfield_enabled=farfield_enabled)
         from larndsim.consts import detector
 
     # Sub-select segments in active volumes and that's not too "late"
@@ -790,7 +791,8 @@ def run_simulation(input_filename,
     for i_mod in mod_ids:
         if mod2mod_variation:
             print(f'Simulating module {i_mod-1}')
-            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
+            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod,
+                                                    farfield_enabled=farfield_enabled)
             # Currently shouln't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
             # `consts.detector` module, we'll be glad for this line:
