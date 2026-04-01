@@ -12,7 +12,7 @@ from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32, xoroshiro128p_uniform_float32
 from math import exp, floor
 
-from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
+from larpix.packet import Packet_v2, Packet_v3, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
 from larpix.format import hdf5format
 
@@ -239,7 +239,7 @@ def export_to_hdf5(event_id_list,
                                     packets_frac.append([0] * current_fractions.shape[2])
                         last_event = event
 
-                p = Packet_v2()
+                p = Packet_v3()
 
                 try:
                     chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x % detector.N_PIXELS_PER_TILE[0],
@@ -270,7 +270,7 @@ def export_to_hdf5(event_id_list,
                 p.chip_key = chip_key
                 p.channel_id = channel
                 p.receipt_timestamp = time_tick
-                p.packet_type = 0
+                p.packet_type = detector.PACKET_TYPE
                 p.first_packet = 1
                 p.assign_parity()
 

@@ -131,6 +131,8 @@ RESET_NOISE_CHARGE = 900 # e
 UNCORRELATED_NOISE_CHARGE = 500 # e
 #: Discriminator noise in e-
 DISCRIMINATOR_NOISE = 650 # e
+#: Data packet type
+PACKET_TYPE = 0 # 0: LArPix-v2; 1: LArPix-v3
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
 #: Offset of the non-beam event time in microseconds
@@ -261,6 +263,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global RESET_NOISE_CHARGE
     global UNCORRELATED_NOISE_CHARGE
     global DISCRIMINATOR_NOISE
+    global PACKET_TYPE
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
     global DIFF_N_SIGMAS
@@ -394,6 +397,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+        PACKET_TYPE = detprop.get('packet_type', PACKET_TYPE)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
 

@@ -23,6 +23,7 @@ larpix_gain: 3.4e-3 # mV/e- ; based on data-taking conditions
 periodic_reset_cycles: 512 # nominal periodic reset cycles used in FSDCube
 adc_counts: 511 # 2**9 - 1 ; to match LArPix-v3 ADC conversion
 adc_hold_delay: 20 # 2us integration window
+packet_type: 1 # Data packet type for LArPix-v3
 
 ## Light geometry parameters
 n_op_channel: 240
