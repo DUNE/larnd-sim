@@ -8,6 +8,12 @@ import cupy as cp
 import yaml
 
 from collections import defaultdict
+from larpix.packet import Packet_v2, Packet_v3
+
+PACKET_REGISTRY = {
+    2: Packet_v2,
+    3: Packet_v3,
+}
 
 from .units import mm, cm, mV, V, kV, e
 
@@ -133,6 +139,8 @@ RESET_NOISE_CHARGE = 900 # e
 UNCORRELATED_NOISE_CHARGE = 500 # e
 #: Discriminator noise in e-
 DISCRIMINATOR_NOISE = 650 # e
+#: LArPix Packet version
+PACKET_VERSION = 2
 #: Data packet type
 PACKET_TYPE = 0 # 0: LArPix-v2; 1: LArPix-v3
 #: Average time between events in microseconds
@@ -266,6 +274,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global RESET_NOISE_CHARGE
     global UNCORRELATED_NOISE_CHARGE
     global DISCRIMINATOR_NOISE
+    global PACKET_VERSION
     global PACKET_TYPE
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
@@ -401,13 +410,20 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+        PACKET_VERSION = detprop.get('packet_version', PACKET_VERSION)
         PACKET_TYPE = detprop.get('packet_type', PACKET_TYPE)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
 
-        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+        if PACKET_VERSION not in PACKET_REGISTRY:
+            raise ValueError(f"Unknown packet_version: {PACKET_VERSION!r}")
+        else:
+            print(f"Using LArPix Packet_v{PACKET_VERSION}")
+            PACKET_VERSION = PACKET_REGISTRY[PACKET_VERSION]
+
         e_field_bucket = detprop.get('e_field', E_FIELD)
         E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
+        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
         V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
         lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)

@@ -239,7 +239,8 @@ def export_to_hdf5(event_id_list,
                                     packets_frac.append([0] * current_fractions.shape[2])
                         last_event = event
 
-                p = Packet_v3()
+                # Instantiate correct packet version for LArPix; see consts/detector.py
+                p = detector.PACKET_VERSION()
 
                 try:
                     chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x % detector.N_PIXELS_PER_TILE[0],
