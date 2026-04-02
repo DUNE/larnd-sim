@@ -431,7 +431,7 @@ def load_response(response_file):
     drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
 
     if drift_ticks_diff > 0: # response is too long, chop
-        response = response[drift_ticks_diff:]
+        response = response[:, :, drift_ticks_diff:]
         warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drfit_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
     elif drift_ticks_diff < 0: # response is too short, pad
         response = cp.pad(response, abs(drift_ticks_diff))
