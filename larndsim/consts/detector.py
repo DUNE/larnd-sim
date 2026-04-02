@@ -125,6 +125,8 @@ V_REF = 1568 # mV
 V_PEDESTAL = 580 # mV
 #: Number of ADC counts
 ADC_COUNTS = 2**8
+#: Scale factor to adjust the ADC range
+ADC_SCALE_FACTOR = 1 # integer >= 1
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900 # e
 #: Uncorrelated noise in e-
@@ -260,6 +262,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global V_REF
     global V_PEDESTAL
     global ADC_COUNTS
+    global ADC_SCALE_FACTOR
     global RESET_NOISE_CHARGE
     global UNCORRELATED_NOISE_CHARGE
     global DISCRIMINATOR_NOISE
@@ -394,6 +397,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         V_REF = detprop.get('v_ref', V_REF)
         V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
         ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
+        ADC_SCALE_FACTOR = detprop.get('adc_scale_factor', ADC_SCALE_FACTOR)
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
@@ -402,7 +406,6 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
 
         TEMPERATURE = detprop.get('temperature', TEMPERATURE)
-
         e_field_bucket = detprop.get('e_field', E_FIELD)
         E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
         V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)

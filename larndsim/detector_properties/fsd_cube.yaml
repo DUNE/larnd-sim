@@ -21,7 +21,8 @@ v_ref: 1734.375 # mV ; based on data-taking conditions
 v_pedestal: 980 # mV ; based on data-taking conditions
 larpix_gain: 3.4e-3 # mV/e- ; based on data-taking conditions
 periodic_reset_cycles: 512 # nominal periodic reset cycles used in FSDCube
-adc_counts: 511 # 2**9 - 1 ; to match LArPix-v3 ADC conversion
+adc_counts: 1024 # 2**10; to match LArPix-v3 ADC conversion
+adc_scale_factor: 2 # adjust 10-bit to 9-bit counts for LArPix-v3
 adc_hold_delay: 20 # 2us integration window
 packet_type: 1 # Data packet type for LArPix-v3
 
