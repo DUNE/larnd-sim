@@ -1,6 +1,6 @@
 temperature: 87.17 # K
 e_field: 0.25 # kV/cm ; FSDCube ran at half-nominal e-field
-lifetime: 1.4e+3 # us ; based on data-taking conditions
+lifetime: 1.1e+3 # us ; based on data-taking conditions
 long_diff: 4.0e-6 # cm * cm / us
 tran_diff: 8.8e-6 # cm * cm / us
 tpc_offsets: # cm
@@ -21,7 +21,7 @@ v_ref: 1734.375 # mV ; based on data-taking conditions
 v_pedestal: 980 # mV ; based on data-taking conditions
 larpix_gain: 3.4e-3 # mV/e- ; based on data-taking conditions
 periodic_reset_cycles: 512 # nominal periodic reset cycles used in FSDCube
-adc_counts: 1024 # 2**10; to match LArPix-v3 ADC conversion
+adc_counts: 1023 # 2**10 - 1; to match LArPix-v3 ADC conversion
 adc_scale_factor: 2 # adjust 10-bit to 9-bit counts for LArPix-v3
 adc_hold_delay: 20 # 2us integration window
 larpix_version: 3 # LArPix-v3 packets

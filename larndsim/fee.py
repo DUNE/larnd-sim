@@ -528,7 +528,7 @@ def digitize(integral_list, gain=detector.GAIN, pedestal=detector.V_PEDESTAL):
     """
     xp = cp.get_array_module(integral_list)
     adcs = xp.floor(xp.minimum(xp.maximum((integral_list * gain * mV / e + pedestal * mV - detector.V_CM * mV), 0)
-                                * (detector.ADC_COUNTS - 1) / ((detector.V_REF * mV - detector.V_CM * mV) * detector.ADC_SCALE_FACTOR), detector.ADC_COUNTS-1))
+                                * detector.ADC_COUNTS / ((detector.V_REF * mV - detector.V_CM * mV) * detector.ADC_SCALE_FACTOR), detector.ADC_COUNTS-1))
 
     adcs[integral_list == 0] = 0
 
