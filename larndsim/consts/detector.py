@@ -432,10 +432,10 @@ def load_response(response_file):
 
     if drift_ticks_diff > 0: # response is too long, chop
         response = response[:, :, drift_ticks_diff:]
-        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drfit_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
+        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drift_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
     elif drift_ticks_diff < 0: # response is too short, pad
-        response = cp.pad(response, abs(drift_ticks_diff))
-        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drfit_length is too short, pad {drift_ticks_diff} 0s at the beginning (close to the readout).')
+        response = cp.pad(response, ((0, 0), (0, 0), (abs(drift_ticks_diff), 0)))
+        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses a drift_length of {res_drift_length} cm; The response drift_length is too short, pad {abs(drift_ticks_diff)} 0s at the beginning (close to the readout).')
 
     RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
 
