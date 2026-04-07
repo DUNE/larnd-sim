@@ -24,8 +24,7 @@ periodic_reset_cycles: 512 # nominal periodic reset cycles used in FSDCube
 adc_counts: 1024 # 2**10; to match LArPix-v3 ADC conversion
 adc_scale_factor: 2 # adjust 10-bit to 9-bit counts for LArPix-v3
 adc_hold_delay: 20 # 2us integration window
-packet_version: 3 # LArPix-v3 packets
-packet_type: 1 # Data packet type for LArPix-v3
+larpix_version: 3 # LArPix-v3 packets
 
 ## Light geometry parameters
 n_op_channel: 240

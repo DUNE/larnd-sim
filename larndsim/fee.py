@@ -299,7 +299,7 @@ def export_to_hdf5(event_id_list,
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),
@@ -409,7 +409,7 @@ def export_sync_to_hdf5(filename, event, sync_times, i_mod, compression=None):
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
@@ -484,7 +484,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_ids, event_start_times, i_m
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
