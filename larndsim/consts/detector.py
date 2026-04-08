@@ -8,6 +8,19 @@ import cupy as cp
 import yaml
 
 from collections import defaultdict
+from larpix.packet import Packet_v2, Packet_v3
+
+# LArPix settings for Packet data structure
+LARPIX_REGISTRY = {
+    2: {"packet_version": Packet_v2,
+        "hdf5_version": "2.4",
+        "packet_type": 0,
+        },
+    3: {"packet_version": Packet_v3,
+        "hdf5_version": "3.0",
+        "packet_type": 1,
+        },
+    }
 
 from .units import mm, cm, mV, V, kV, e
 
@@ -52,7 +65,7 @@ TILE_BORDERS = np.zeros((2,2))
 TIME_SAMPLING = 0.1 # us
 #: Time sampling in the pixel response file in :math:`\mu s`
 RESPONSE_SAMPLING = 0.05
-#: Spatial sampling in the pixel reponse file in :math:`cm`
+#: Spatial sampling in the pixel response file in :math:`cm`
 RESPONSE_BIN_SIZE = 0.04434
 #: The longest cathode charge response in time :math:`\mu s`
 RESPONSE_MAX_TIME = 0.0
@@ -125,12 +138,22 @@ V_REF = 1568 # mV
 V_PEDESTAL = 580 # mV
 #: Number of ADC counts
 ADC_COUNTS = 2**8
+#: Scale factor to adjust the ADC range
+ADC_SCALE_FACTOR = 1 # integer >= 1
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900 # e
 #: Uncorrelated noise in e-
 UNCORRELATED_NOISE_CHARGE = 500 # e
 #: Discriminator noise in e-
 DISCRIMINATOR_NOISE = 650 # e
+#: LArPix version (default v2)
+LARPIX_VERSION = 2
+#: LArPix packet class version
+PACKET_VERSION = 2
+#: Data packet type
+PACKET_TYPE = 0 # 0: LArPix-v2; 1: LArPix-v3
+#: LArPix HDF5 dataset version
+LARPIX_HDF5_VERSION = 2.4 # see larpix-control docs for version descriptions
 #: Average time between events in microseconds
 EVENT_RATE = 100000 # 10Hz
 #: Offset of the non-beam event time in microseconds
@@ -258,9 +281,14 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global V_REF
     global V_PEDESTAL
     global ADC_COUNTS
+    global ADC_SCALE_FACTOR
     global RESET_NOISE_CHARGE
     global UNCORRELATED_NOISE_CHARGE
     global DISCRIMINATOR_NOISE
+    global LARPIX_VERSION
+    global LARPIX_HDF5_VERSION
+    global PACKET_VERSION
+    global PACKET_TYPE
     global EVENT_RATE
     global NON_BEAM_EVENT_GAP
     global DIFF_N_SIGMAS
@@ -391,16 +419,26 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         V_REF = detprop.get('v_ref', V_REF)
         V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
         ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
+        ADC_SCALE_FACTOR = detprop.get('adc_scale_factor', ADC_SCALE_FACTOR)
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
+        LARPIX_VERSION = detprop.get('larpix_version', LARPIX_VERSION)
         EVENT_RATE = detprop.get('event_rate', EVENT_RATE)
         NON_BEAM_EVENT_GAP = detprop.get('non_beam_event_gap', NON_BEAM_EVENT_GAP)
 
-        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+        if LARPIX_VERSION not in LARPIX_REGISTRY:
+            raise ValueError(f"Unknown/invalid larpix_version: {LARPIX_VERSION!r}")
+        else:
+            print(f"Using LArPix-v{LARPIX_VERSION} settings:")
+            print(LARPIX_REGISTRY[LARPIX_VERSION])
+            PACKET_VERSION = LARPIX_REGISTRY[LARPIX_VERSION]['packet_version']
+            PACKET_TYPE = LARPIX_REGISTRY[LARPIX_VERSION]['packet_type']
+            LARPIX_HDF5_VERSION = LARPIX_REGISTRY[LARPIX_VERSION]['hdf5_version']
 
         e_field_bucket = detprop.get('e_field', E_FIELD)
         E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
+        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
         V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
         lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)

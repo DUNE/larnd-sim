@@ -1305,7 +1305,7 @@ def run_simulation(input_filename,
                     pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
                     gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
                 else:
-                    gain_list = detector.GAIN * consts.units.mV / consts.units.e
+                    gain_list = detector.GAIN
 
                 if pixel_pedestals_file is not None:
                     pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
