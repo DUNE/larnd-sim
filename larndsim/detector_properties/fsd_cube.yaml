@@ -1,8 +1,8 @@
 temperature: 87.17 # K
 e_field: 0.25 # kV/cm ; FSDCube ran at half-nominal e-field
 lifetime: 1.1e+3 # us ; based on data-taking conditions
-long_diff: 4.0e-6 # cm * cm / us
-tran_diff: 8.8e-6 # cm * cm / us
+long_diff: 3.78e-6 # cm * cm / us ; calculated by scaling the larnd-sim values by the ratio of 0.5 to 0.25 kV/cm
+tran_diff: 6.34e-6 # cm * cm / us ; on the BNL LAr properties page for diffusion, -5% and -28% for D_L and D_T respectively
 tpc_offsets: # cm
   - [0, 0, 0]
 # Note the tile_map convention is different than 2x2
@@ -25,6 +25,12 @@ adc_counts: 1023 # 2**10 - 1; to match LArPix-v3 ADC conversion
 adc_scale_factor: 2 # adjust 10-bit to 9-bit counts for LArPix-v3
 adc_hold_delay: 20 # 2us integration window
 larpix_version: 3 # LArPix-v3 packets
+
+# LArPix-v3 has reduced noise, values based on a total input noise measurement of ~350e-
+# and on discussion with the LArPix team
+reset_noise_charge: 50 # e
+uncorrelated_noise_charge: 350 # e
+discriminator_noise: 50 # e
 
 ## Light geometry parameters
 n_op_channel: 240

@@ -30719,7 +30719,7 @@ chip_channel_to_position:
   170063:
   - 120
   - 4
-drift_length: 475.5
+drift_length: 477.5 # mm ; Extracted from the FSDCube CAD; slightly different from FSD
 multitile_layout_version: 3.0.40
 pixel_pitch: 3.72
 tile_chip_to_io:
@@ -30894,8 +30894,9 @@ tile_orientations:
   - -1
   - 1
   - -1
+# FSDCube has a slightly longer drift length than FSD, push tile outward to account for it
 tile_positions:
   1:
-  - 471.055
+  - 480.675
   - 1339.2
   - 238.08
