@@ -73,6 +73,10 @@ module0:
     <<: *2x2modvar
     SIM_PROPERTIES:  singles_sim.yaml
 
+2x2_cosmic:
+    <<: *2x2modvar
+    SIM_PROPERTIES:  cosmic_sim.yaml
+
 # nd-lar (same module configuration)
 ndlar: &ndlarmain
     SIM_PROPERTIES:  NDLAr_LBNF_sim.yaml
