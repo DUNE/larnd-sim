@@ -46,7 +46,7 @@ def rotate_tile(pixel_id, tile_id):
         tile_id(int): tile ID
 
     Returns:
-        tuple: pixel indeces
+        tuple: pixel indices
     """
     axes = detector.TILE_ORIENTATIONS[tile_id]
     x_axis = axes[2]
@@ -98,6 +98,7 @@ def export_to_hdf5(event_id_list,
                    compression=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
+
     Args:
         event_id_list (:obj:`numpy.ndarray`): event ids for each tick;
                 shape (nticks, max_adcs); dtype uint32
@@ -108,16 +109,16 @@ def export_to_hdf5(event_id_list,
         unique_pix (:obj:`numpy.ndarray`): pixel IDs for each tick;
                 shape (nticks,); dtype int32
         current_fractions (:obj:`numpy.ndarray`): fractional current induced by
-            each track on each pixel;
+                each track on each pixel;
                 shape (nticks, max_adcs, max_backtracks); dtype float64
         track_ids (:obj:`numpy.ndarray`): track IDs associated to each pixel;
                 shape (nticks, max_backtracks); dtype int64
         filename (str): filename of HDF5 output file
         event_start_times (:obj:`numpy.ndarray`): timestamps of start of each
-            unique event [in microseconds];
+                unique event [in microseconds];
                 shape (nevents,); dtype float64
         light_trigger_times (:obj:`numpy.ndarray`): light trigger timestamps
-            (relative to event t0) [in microseconds];
+                (relative to event t0) [in microseconds];
                 shape (ntrigs,); dtype float64
         light_trigger_event_id (:obj:`numpy.ndarray`): event id for each light trigger;
                 shape (ntrigs,); dtype uint32
@@ -125,12 +126,13 @@ def export_to_hdf5(event_id_list,
                 shape (ntrigs,); dtype int64
         bad_channels (dict): dictionary mapping a chip key to a list of bad channels
         i_mod (int): module index for saving the result in each module
-            individually if needed.
+                individually if needed.
         compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
-            supported options are 'lzf' and 'gzip'
+                supported options are 'lzf' and 'gzip'
+
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of
-            entries for the `mc_packets_assn` dataset
+                entries for the `mc_packets_assn` dataset
     """
 
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
