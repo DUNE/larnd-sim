@@ -34,7 +34,7 @@ LAR_DENSITY = 1.38 # g/cm^3
 #: Electric field magnitude in :math:`kV/cm`
 E_FIELD = 0.50 # kV/cm
 #: Drift velocity in :math:`cm/\mu s`
-V_DRIFT = 0.1648 # cm / us,
+V_DRIFT = 0.1596 # cm / us,
 #: Electron mobility constants
 ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
 #: Electron lifetime in :math:`\mu s`
@@ -440,6 +440,9 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
         TEMPERATURE = detprop.get('temperature', TEMPERATURE)
         V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
+
+        # Recalculate max drift time since v_drift was recalculated
+        DRIFT_MAX_TIME = DRIFT_LENGTH / V_DRIFT
 
         lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
         ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
