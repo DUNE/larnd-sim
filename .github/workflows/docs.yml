@@ -1,54 +1,85 @@
-# Workflow that deploy docs
+name: Documentation
 
-name: Docs
-
-# Controls when the action will run.
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches:
+      - develop      # rebuild on every push to develop
+    tags:
+      - 'v*'         # and on every version tag
+  pull_request:
+    branches:
+      - develop      # build (but don't deploy) on PRs, to catch breakage early
+  workflow_dispatch: # allow manual triggers from the Actions UI
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+# Allow the workflow to write to the gh-pages branch and deploy Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
+# Only one deployment at a time; cancel in-progress runs on new pushes
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  docs:
+  build-docs:
+    name: Build Sphinx documentation
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v2
-      with:
-        # Semantic version range syntax or exact version of a Python version
-        python-version: '3.8'
-    - uses: ammaraskar/sphinx-action@master
-      with:
-        docs-folder: "docs/"
-        pre-build-command: "sed -i 's/from ROOT/#from ROOT/g' cli/dumpTree.py; sed -i 's/from larndsim.cuda_dict/#from larndsim.cuda_dict/g' cli/simulate_pixels.py; sed -i 's/@cuda/#@cuda/g' larndsim/*.py; sed -i 's/import cupy/#import cupy/g' larndsim/light_sim.py; sed -i 's/import cupy/#import cupy/g' larndsim/fee.py; sed -i 's/import cupy/#import cupy/g' cli/simulate_pixels.py; sed -i 's/from cupy/#from cupy/g' cli/simulate_pixels.py; sed -i 's/from larpix/#from larpix/g' larndsim/fee.py"
-    - uses: actions/upload-artifact@v1
-      with:
-        name: DocumentationHTML
-        path: docs/build/html/
-    # Publish built docs to gh-pages branch.
-    # ===============================
-    - name: Commit documentation changes
-      run: |
-        git clone https://github.com/DUNE/larnd-sim.git --branch gh-pages --single-branch gh-pages
-        cp -r docs/build/html/* gh-pages/
-        cd gh-pages
-        touch .nojekyll
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add .
-        git commit -m "Update documentation" -a || true
-        # The above command will fail if no changes were present, so we ignore
-        # that.
-    - name: Push changes
-      uses: ad-m/github-push-action@master
-      with:
-        branch: gh-pages
-        directory: gh-pages
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history lets setuptools-scm compute the version correctly
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install documentation dependencies
+        run: |
+          pip install --upgrade pip setuptools
+          pip install -r docs/requirements.txt
+
+      # Install the package itself in "no-deps" mode so that autodoc can
+      # import larndsim.*  Heavy GPU/CUDA dependencies (numba, cupy, …)
+      # are mocked inside conf.py, so we skip them entirely here.
+      - name: Install larndsim (no heavy deps)
+        run: |
+          pip install --no-deps -e .
+
+      - name: Build HTML documentation
+        run: |
+          cd docs
+          make html SPHINXOPTS="-v -W --keep-going -n"
+        # -v verbose mode
+        # -W turn warnings into errors to keep docs clean
+        # -n nitpicky mode to catch broken cross-references
+        # --keep-going report all errors, not just the first one
+
+      - name: Upload Pages artifact
+        # Only upload on pushes to develop / version tags (not on PRs)
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html
+
+  deploy-docs:
+    name: Deploy to GitHub Pages
+    needs: build-docs
+    # Only deploy on pushes to develop / tags, not on PRs
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,65 +1,20 @@
+.. _api-larndsim:
+
 larndsim package
-=================
+================
 
-Quenching
--------------------------
+The ``larndsim`` package contains all simulation kernels.
+Each module is documented on its own page below.
 
-.. automodule:: larndsim.quenching
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 1
+   :caption: Simulation modules
 
-Drifting
-------------------------
-
-.. automodule:: larndsim.drifting
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Induced charge
-----------------------
-
-.. automodule:: larndsim.detsim
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Charge readout
--------------------------
-
-.. automodule:: larndsim.fee
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Scintillation light
--------------------------
-
-.. automodule:: larndsim.light_sim
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Constants
-----------------------
-
-.. automodule:: larndsim.consts
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: larndsim.consts.detector
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: larndsim.consts.physics
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: larndsim.consts.light
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   larndsim/quenching
+   larndsim/drifting
+   larndsim/detsim
+   larndsim/fee
+   larndsim/light_sim
+   larndsim/active_volume
+   larndsim/pixels_from_track
+   larndsim/util
