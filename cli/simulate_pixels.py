@@ -173,9 +173,7 @@ def run_simulation(input_filename,
                    pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
-                   save_memory=None,
-                   farfield_enabled=False,
-                   farfield_mode='segments'):
+                   save_memory=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -210,7 +208,6 @@ def run_simulation(input_filename,
             store memory snapshot information
         compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
             supported options are 'lzf' and 'gzip'
-        farfield_mode (str, optional): far-field method, either 'segments' or 'voxels'.
     """
     # Define a nested function to save the results
     def save_results(event_times, results, i_trig, i_mod=-1, light_only=False):
@@ -423,12 +420,6 @@ def run_simulation(input_filename,
     else:
         print('Memory resource log will not be recorded')
 
-    farfield_mode = str(farfield_mode).lower()
-    if farfield_mode not in ('segments', 'voxels'):
-        raise ValueError(f"Unsupported farfield_mode='{farfield_mode}'. Use 'segments' or 'voxels'.")
-    if farfield_enabled:
-        print("Far-field mode:", farfield_mode)
-
     # Get number of modules in the simulation
     mod_ids = consts.detector.get_n_modules(detector_properties)
     n_modules = len(mod_ids)
@@ -534,6 +525,9 @@ def run_simulation(input_filename,
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
         from larndsim.consts import light, physics, sim
+
+    if sim.FARFIELD_ENABLED:
+        print("Far-field mode:", sim.FARFIELD_MODE)
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
@@ -760,8 +754,7 @@ def run_simulation(input_filename,
     # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
     if mod2mod_variation:
-        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True,
-                                                farfield_enabled=farfield_enabled)
+        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
         from larndsim.consts import detector
 
     # Sub-select segments in active volumes and that's not too "late"
@@ -790,8 +783,7 @@ def run_simulation(input_filename,
     for i_mod in mod_ids:
         if mod2mod_variation:
             print(f'Simulating module {i_mod-1}')
-            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod,
-                                                    farfield_enabled=farfield_enabled)
+            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
             # Currently shouln't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
             # `consts.detector` module, we'll be glad for this line:
@@ -1118,14 +1110,14 @@ def run_simulation(input_filename,
             voxel_cache = {}
             voxel_radius = None
             classification_cache = {}
-            active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32)) if farfield_enabled else []
-            if farfield_enabled:
+            active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32)) if sim.FARFIELD_ENABLED else []
+            if sim.FARFIELD_ENABLED:
                 all_tracks_cpu = cp.asnumpy(all_selected_tracks)
                 for tpc_idx in active_tpc_indices_all:
                     # Precompute pixel classification per TPC (for induction-only masks)
                     classification_cache[int(tpc_idx)] = pixel_classifier.classify_pixels(all_tracks_cpu, plane_id=int(tpc_idx))
 
-                if farfield_mode == 'voxels':
+                if sim.FARFIELD_MODE == 'voxels':
                     voxel_radius = np.sqrt(
                         (mesh_params.COARSE_VOXEL_SIZE_X / 2.0)**2 +
                         (mesh_params.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
@@ -1333,7 +1325,7 @@ def run_simulation(input_filename,
                 RangePop()
 
                 # ~~~ Far-field signal contribution ~~~
-                if farfield_enabled:
+                if sim.FARFIELD_ENABLED:
                     RangePush("far_field_contribution", 3)
                     # Get pixel coordinates from pixel layout
                     # unique_pix contains pixel indices; convert to (x, y) coordinates
@@ -1366,7 +1358,7 @@ def run_simulation(input_filename,
                         TPB_ff_tpc = (16, 16)
                         BPG_ff_tpc = (ceil(n_pix_tpc / TPB_ff_tpc[0]), ceil(signals_ticks_t0 / TPB_ff_tpc[1]))
 
-                        if farfield_mode == 'voxels':
+                        if sim.FARFIELD_MODE == 'voxels':
                             cache = voxel_cache.get(tpc_idx, None)
                             if cache is None or cache["x"] is None:
                                 continue
@@ -1475,7 +1467,7 @@ def run_simulation(input_filename,
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
             # ~~~ Far-field-only induction pixels (not processed above) ~~~
-            if farfield_enabled:
+            if sim.FARFIELD_ENABLED:
                 RangePush("far_field_induction_only", 2)
                 # Pixels already processed via near-field path
                 processed_pixels = processed_pixels_event
@@ -1517,7 +1509,7 @@ def run_simulation(input_filename,
                     z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
                     z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
 
-                    if farfield_mode == 'voxels':
+                    if sim.FARFIELD_MODE == 'voxels':
                         cache = voxel_cache.get(int(tpc_idx), None)
                         if cache is None or cache["x"] is None:
                             continue

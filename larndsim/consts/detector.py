@@ -9,7 +9,7 @@ import yaml
 
 from collections import defaultdict
 
-from . import mesh_params
+from . import mesh_params, sim
 from .units import mm, cm, mV, V, kV, e
 
 ###################
@@ -202,7 +202,7 @@ def set_multi_properties(bucket, n_mod, i_module, message=""):
         prop = float(bucket[i_module-1])
     return prop
 
-def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False, farfield_enabled=False):
+def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -417,7 +417,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                               f' yaml ({detprop["max_radius"]})')
                 MAX_RADIUS = int(detprop['max_radius'])
 
-        if farfield_enabled:
+        if sim.FARFIELD_ENABLED:
             warnings.warn(f'Far-field enabled; setting MAX_RADIUS (currently ' +
                           f'{MAX_RADIUS}) to CHARGE_NEIGHBOR_RADIUS ' +
                           f'({mesh_params.CHARGE_NEIGHBOR_RADIUS})')
