@@ -38,6 +38,9 @@ MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
 #: Threshold for propogating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
+FARFIELD_ENABLED = False
+FARFIELD_MODE = 'segments'
+
 def set_simulation_properties(simprop_file):
     """
     The function loads the detector properties and
@@ -68,6 +71,9 @@ def set_simulation_properties(simprop_file):
     global MAX_MC_TRUTH_IDS
     global MC_TRUTH_THRESHOLD
 
+    global FARFIELD_ENABLED
+    global FARFIELD_MODE
+
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
 
@@ -88,3 +94,11 @@ def set_simulation_properties(simprop_file):
 
     MAX_MC_TRUTH_IDS = simprop.get('max_light_truth_ids', MAX_MC_TRUTH_IDS)
     MC_TRUTH_THRESHOLD = simprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
+
+    FARFIELD_ENABLED = bool(simprop.get('farfield_enabled', FARFIELD_ENABLED))
+
+    FARFIELD_MODE = simprop.get('farfield_mode', FARFIELD_MODE)
+    options = ['segments', 'voxels']
+    if FARFIELD_MODE not in options:
+        raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
+                            f"must be one of {options}")
