@@ -22,6 +22,7 @@ LARPIX_REGISTRY = {
         },
     }
 
+from . import mesh_params
 from .units import mm, cm, mV, V, kV, e
 
 ###################
@@ -447,7 +448,18 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
         TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-        MAX_RADIUS = int(detprop.get('max_radius', 2 if farfield_enabled else 4))
+        if 'max_radius' in detprop:
+            if detprop['max_radius'] != MAX_RADIUS:
+                warnings.warn(f'Overriding MAX_RADIUS from response file ' +
+                              f'({MAX_RADIUS}) with value from detector_properties ' +
+                              f' yaml ({detprop["max_radius"]})')
+                MAX_RADIUS = int(detprop['max_radius'])
+
+        if farfield_enabled:
+            warnings.warn(f'Far-field enabled; setting MAX_RADIUS (currently ' +
+                          f'{MAX_RADIUS}) to CHARGE_NEIGHBOR_RADIUS ' +
+                          f'({mesh_params.CHARGE_NEIGHBOR_RADIUS})')
+            MAX_RADIUS = mesh_params.CHARGE_NEIGHBOR_RADIUS
 
         # Prepare neighbouring pixel distance for backtracking
         # Currently backtracking range is used to convert from segment base to pixel base
