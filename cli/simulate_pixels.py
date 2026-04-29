@@ -1353,7 +1353,8 @@ def run_simulation(input_filename,
                             pixel_y=pixel_y[tpc_mask],
                             n_ticks=signals_ticks_t0,
                             category=1,
-                            voxel_cache=voxel_cache)
+                            voxel_cache=voxel_cache,
+                            n_terms=1)
 
                         pixels_signals[tpc_mask, :] += ff_signals_tpc
 

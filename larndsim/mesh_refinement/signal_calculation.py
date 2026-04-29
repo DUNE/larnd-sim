@@ -285,6 +285,7 @@ def launch_ffe_kernel(
         category: int,
         voxel_cache: dict[int,
                           dict[str, Optional[cp.ndarray[tuple[int], float]]]],
+        n_terms=mesh_params.DIPOLE_N_TERMS
 ) -> cp.ndarray[tuple[int, int], cp.float32]:
     """Launch CUDA kernel for far-field induced current calculation.
 
