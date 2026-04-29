@@ -38,7 +38,7 @@ INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 
 # Global scale factor applied to far-field induced current calculation (dimensionless)
 # If None, we use tick length of near-field response (see launch_ffe_kernel)
-INDUCED_CURRENT_SCALE = None
+INDUCED_CURRENT_SCALE = 0.03
 
 # How many terms to include in the dipole expansion
 DIPOLE_N_TERMS = 5
