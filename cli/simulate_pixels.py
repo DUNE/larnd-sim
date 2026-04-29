@@ -526,9 +526,6 @@ def run_simulation(input_filename,
         consts.sim.set_simulation_properties(simulation_properties)
         from larndsim.consts import light, physics, sim
 
-    if sim.FARFIELD_ENABLED:
-        print("Far-field mode:", sim.FARFIELD_MODE)
-
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
 
@@ -539,6 +536,10 @@ def run_simulation(input_filename,
     importlib.reload(light_sim)
     importlib.reload(lightLUT)
     importlib.reload(fee)
+
+    if sim.FARFIELD_ENABLED:
+        mesh_params.set_mesh_parameters()
+        print("Far-field mode:", sim.FARFIELD_MODE)
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
@@ -1338,66 +1339,24 @@ def run_simulation(input_filename,
                     pixel_x = cp.asarray(x_min + (px_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
                     pixel_y = cp.asarray(y_min + (py_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
 
-                    exclude_radius = mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
-                    split_step_cm = mesh_params.FAR_FIELD_SEGMENT_STEP_CM
                     active_tpc_indices = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
 
                     for tpc_idx in active_tpc_indices:
-                        tpc_idx = int(tpc_idx)
-                        z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
-                        z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
-
                         tpc_mask = (plane_idx == tpc_idx)
                         if not np.any(tpc_mask):
                             continue
-                        pix_x_tpc = pixel_x[tpc_mask]
-                        pix_y_tpc = pixel_y[tpc_mask]
-                        n_pix_tpc = pix_x_tpc.shape[0]
 
-                        ff_signals_tpc = cp.zeros((n_pix_tpc, signals_ticks_t0), dtype=cp.float32)
-                        TPB_ff_tpc = (16, 16)
-                        BPG_ff_tpc = (ceil(n_pix_tpc / TPB_ff_tpc[0]), ceil(signals_ticks_t0 / TPB_ff_tpc[1]))
-
-                        if sim.FARFIELD_MODE == 'voxels':
-                            cache = voxel_cache.get(tpc_idx, None)
-                            if cache is None or cache["x"] is None:
-                                continue
-                            pixel_categories = cp.ones(n_pix_tpc, dtype=cp.int32)
-                            signal_calculation.calculate_far_field_dipole_signal_time_kernel[BPG_ff_tpc, TPB_ff_tpc](
-                                cache["x"], cache["y"], cache["z"],
-                                cache["q"],
-                                pix_x_tpc, pix_y_tpc,
-                                pixel_categories,
-                                exclude_radius,
-                                voxel_radius,
-                                z_anode,
-                                z_cathode,
-                                detector.V_DRIFT,
-                                detector.TIME_SAMPLING,
-                                5,
-                                mesh_params.INDUCED_CURRENT_SCALE,
-                                ff_signals_tpc
-                            )
-                        else:
-                            tpc_tracks = all_selected_tracks[all_selected_tracks['pixel_plane'] == tpc_idx]
-                            if len(tpc_tracks) == 0:
-                                continue
-                            signal_calculation.calculate_far_field_segment_signal_time_kernel[BPG_ff_tpc, TPB_ff_tpc](
-                                tpc_tracks,
-                                pix_x_tpc, pix_y_tpc,
-                                float(exclude_radius),
-                                float(split_step_cm),
-                                z_anode,
-                                z_cathode,
-                                detector.V_DRIFT,
-                                detector.TIME_SAMPLING,
-                                1,
-                                mesh_params.INDUCED_CURRENT_SCALE,
-                                ff_signals_tpc
-                            )
+                        ff_signals_tpc = signal_calculation.launch_ffe_kernel(
+                            tpc_idx=tpc_idx,
+                            tracks=all_selected_tracks,
+                            pixel_x=pixel_x[tpc_mask],
+                            pixel_y=pixel_y[tpc_mask],
+                            n_ticks=signals_ticks_t0,
+                            category=1,
+                            voxel_cache=voxel_cache)
 
                         pixels_signals[tpc_mask, :] += ff_signals_tpc
-                        
+
                     RangePop()
                 
                 # np.savez(f'sig_{ievd}_{start_pix}_nf.npz', signals=pixels_signals, pixels=unique_pix)
@@ -1501,54 +1460,20 @@ def run_simulation(input_filename,
                     # Use event-wide t0 max for tick extension (far-field only)
                     t0_array = cp.asnumpy(all_selected_tracks['t0'])
                     signals_ticks_t0_ff = signals_ticks + int(np.ceil(t0_array.max() / detector.TIME_SAMPLING))
-                    ff_signals = cp.zeros((len(induction_pix_ids), signals_ticks_t0_ff), dtype=cp.float32)
 
-                    TPB_ff = (16, 16)
-                    BPG_ff = (ceil(len(induction_pix_ids) / TPB_ff[0]), ceil(signals_ticks_t0_ff / TPB_ff[1]))
-
-                    z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
-                    z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
-
-                    if sim.FARFIELD_MODE == 'voxels':
-                        cache = voxel_cache.get(int(tpc_idx), None)
-                        if cache is None or cache["x"] is None:
-                            continue
-                        pixel_categories_ff = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
-                        signal_calculation.calculate_far_field_dipole_signal_time_kernel[BPG_ff, TPB_ff](
-                            cache["x"], cache["y"], cache["z"],
-                            cache["q"],
-                            pixel_x_ff, pixel_y_ff,
-                            pixel_categories_ff,
-                            mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH,
-                            voxel_radius,
-                            z_anode,
-                            z_cathode,
-                            detector.V_DRIFT,
-                            detector.TIME_SAMPLING,
-                            5,
-                            mesh_params.INDUCED_CURRENT_SCALE,
-                            ff_signals
-                        )
-                    else:
-                        tpc_tracks = all_selected_tracks[all_selected_tracks['pixel_plane'] == tpc_idx]
-                        if len(tpc_tracks) == 0:
-                            continue
-                        signal_calculation.calculate_far_field_segment_signal_time_kernel[BPG_ff, TPB_ff](
-                            tpc_tracks,
-                            pixel_x_ff, pixel_y_ff,
-                            float(mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH),
-                            float(mesh_params.FAR_FIELD_SEGMENT_STEP_CM),
-                            z_anode,
-                            z_cathode,
-                            detector.V_DRIFT,
-                            detector.TIME_SAMPLING,
-                            5,
-                            mesh_params.INDUCED_CURRENT_SCALE,
-                            ff_signals
-                        )
+                    ff_signals = signal_calculation.launch_ffe_kernel(
+                        tpc_idx=tpc_idx,
+                        tracks=all_selected_tracks,
+                        pixel_x=pixel_x_ff,
+                        pixel_y=pixel_y_ff,
+                        n_ticks=signals_ticks_t0_ff,
+                        category=0,
+                        voxel_cache=voxel_cache)
 
                     # Offset FF by event's min(t0) before digitization; normalize units if needed
                     min_t0_event = float(t0_array.min())
+                    z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
+                    z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
                     z_span_us = abs(z_cathode - z_anode) / detector.V_DRIFT
                     min_t0_event_used_us = min_t0_event / 1000.0 if (z_span_us > 0 and min_t0_event / max(z_span_us, 1e-9) > 500) else min_t0_event
                     if min_t0_event_used_us != min_t0_event:

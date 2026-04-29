@@ -39,6 +39,9 @@ INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 #: Global scale factor applied to induced current calculation (dimensionless)
 INDUCED_CURRENT_SCALE = 0.03
 
+# How many terms to include in the dipole expansion
+DIPOLE_N_TERMS = 5
+
 
 def set_mesh_parameters(voxel_size_x=None, voxel_size_y=None, voxel_size_t=None, 
                         charge_collection_radius=None, charge_neighbor_radius=None, 
