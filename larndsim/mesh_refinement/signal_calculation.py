@@ -7,11 +7,14 @@ Calculates induced currents on pixels at multiple scales:
 3. Far-field: Coarse mesh aggregate calculation 
 """
 
+import math
+from typing import Any, Optional
+
 import numpy as np
 import cupy as cp
 from numba import cuda
-import math
-from larndsim.consts import mesh_params
+
+from larndsim.consts import detector, mesh_params, sim
 
 
 @cuda.jit
@@ -273,6 +276,105 @@ def calculate_far_field_segment_signal_time_kernel(
     output[p_idx, t_idx] = total_current
 
 
+def launch_ffe_kernel(
+        tpc_idx: int,
+        tracks: cp.ndarray[tuple[int], Any],
+        pixel_x: cp.ndarray[tuple[int], cp.float32],
+        pixel_y: cp.ndarray[tuple[int], cp.float32],
+        n_ticks: int,
+        category: int,
+        voxel_cache: dict[int,
+                          dict[str, Optional[cp.ndarray[tuple[int], float]]]],
+) -> cp.ndarray[tuple[int, int], cp.float32]:
+    """Launch CUDA kernel for far-field induced current calculation.
+
+    This uses a 2D grid/block launch for (pixel, tick) and sums over
+    voxels/segments in each thread.
+
+    Args:
+        tpc_idx: TPC index to consider
+        tracks: 1D array of edep-sim track segments
+        pixel_x: 1D array of pixel x-positions
+        pixel_y: 1D array of pixel y-positions
+        n_ticks: Length (in time ticks) of the calculated current
+        category: Category to assign to the pixels (ignored in 'segments' mode)
+        voxel_cache: Dict that maps from a TPC ID to a dict of voxel data for
+            that TPC. The latter has keys of 'x', 'y', 'z', and 'q'; each one
+            maps to a 1D array of the corresponding value for all the voxels.
+
+    Returns:
+        2D array that maps (pixel, tick) to dQ
+    """
+    n_pixels = pixel_x.shape[0]
+    TPB = (16, 16)
+    BPG = (math.ceil(n_pixels / TPB[0]), math.ceil(n_ticks / TPB[1]))
+
+    output = cp.zeros((n_pixels, n_ticks), dtype=cp.float32)
+
+    z_anode = detector.TPC_BORDERS[tpc_idx, 2, 0]
+    z_cathode = detector.TPC_BORDERS[tpc_idx, 2, 1]
+    exclude_radius = mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+
+    C = mesh_params.INDUCED_CURRENT_SCALE
+
+    def launch_voxels():
+        cache = voxel_cache.get(tpc_idx, None)
+        if cache is None or cache['x'] is None:
+            return
+
+        pixel_categories = cp.full(n_pixels, category, dtype=cp.int32)
+        voxel_radius = np.sqrt(
+            (mesh_params.COARSE_VOXEL_SIZE_X / 2.0)**2 +
+            (mesh_params.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
+            (mesh_params.COARSE_VOXEL_SIZE_Z / 2.0)**2)
+
+        calculate_far_field_dipole_signal_time_kernel[BPG, TPB](
+            cache["x"],
+            cache["y"],
+            cache["z"],
+            cache["q"],
+            pixel_x,
+            pixel_y,
+            pixel_categories,
+            exclude_radius,
+            voxel_radius,
+            z_anode,
+            z_cathode,
+            detector.V_DRIFT,
+            detector.TIME_SAMPLING,
+            mesh_params.DIPOLE_N_TERMS,
+            C,
+            output)
+
+    def launch_segments():
+        tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
+        if len(tpc_tracks) == 0:
+            return
+
+        calculate_far_field_segment_signal_time_kernel[BPG, TPB](
+            tpc_tracks,
+            pixel_x,
+            pixel_y,
+            exclude_radius,
+            mesh_params.FAR_FIELD_SEGMENT_STEP_CM,
+            z_anode,
+            z_cathode,
+            detector.V_DRIFT,
+            detector.TIME_SAMPLING,
+            mesh_params.DIPOLE_N_TERMS,
+            C,
+            output)
+
+    if sim.FARFIELD_MODE == 'voxels':
+        launch_voxels()
+    elif sim.FARFIELD_MODE == 'segments':
+        launch_segments()
+    else:
+        raise RuntimeError(f"Invalid farfield_mode '{sim.FARFIELD_MODE}'")
+
+    return output
+
+
 def launch_far_field_dipole_signal_calculation(
     voxel_pos, pixel_pos, voxel_charge, pixel_categories, z_anode, z_cathode, v_drift, tick_size, n_ticks, 
     n_terms=5, C=None, bx=16, by=16, exclude_radius=0.0, voxel_size_xy=None
@@ -280,6 +382,7 @@ def launch_far_field_dipole_signal_calculation(
     """
     Launch CUDA kernel for far-field dipole induced current calculation with time ticks.
     Uses 2D grid/block launch for (pixel, tick) and sums over voxels in each thread.
+    (USED FOR TESTING/VALIDATION ONLY)
     
     Args:
         voxel_pos: (n_voxels, 3) array (initial positions)
