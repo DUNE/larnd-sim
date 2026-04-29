@@ -316,6 +316,11 @@ def launch_ffe_kernel(
     exclude_radius = mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
 
     C = mesh_params.INDUCED_CURRENT_SCALE
+    if C is None:
+        # The FFE kernel gives dQ per microsecond whereas the standard pixel
+        # response (and the rest of larnd-sim) uses dQ per tick. The FFE signal
+        # therefore needs to be scaled down according to the tick length.
+        C = detector.RESPONSE_SAMPLING
 
     def launch_voxels():
         cache = voxel_cache.get(tpc_idx, None)
