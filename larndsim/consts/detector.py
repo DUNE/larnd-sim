@@ -65,11 +65,11 @@ TILE_BORDERS = np.zeros((2,2))
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
 #: Time sampling in the pixel response file in :math:`\mu s`
-RESPONSE_SAMPLING = 0.05
+RESPONSE_SAMPLING = None
 #: Spatial sampling in the pixel response file in :math:`cm`
-RESPONSE_BIN_SIZE = 0.04434
+RESPONSE_BIN_SIZE = None
 #: The longest cathode charge response in time :math:`\mu s`
-RESPONSE_MAX_TIME = 0.0
+RESPONSE_MAX_TIME = None
 #: The maximum radius to consider the neighbouring charge response
 MAX_RADIUS = 2
 #: The step size to chop up segments :math:`cm`
