@@ -539,7 +539,6 @@ def run_simulation(input_filename,
     importlib.reload(fee)
 
     if sim.FARFIELD_ENABLED:
-        mesh_params.set_mesh_parameters()
         print("Far-field mode:", sim.FARFIELD_MODE)
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
