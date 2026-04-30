@@ -11,3 +11,4 @@ docs/build
 examples/module0_corsika.h5
 test
 *.*.swp
+_version.py

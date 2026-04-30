@@ -1,0 +1,56 @@
+temperature: 87.17 # K
+e_field: 0.25 # kV/cm ; FSDCube ran at half-nominal e-field
+lifetime: 1.1e+3 # us ; based on data-taking conditions
+long_diff: 3.78e-6 # cm * cm / us ; calculated by scaling the larnd-sim values by the ratio of 0.5 to 0.25 kV/cm
+tran_diff: 6.34e-6 # cm * cm / us ; on the BNL LAr properties page for diffusion, -5% and -28% for D_L and D_T respectively
+tpc_offsets: # cm
+  - [0, 0, 0]
+# Note the tile_map convention is different than 2x2
+# as in nd-lar (also in fsd) one vertical row of tiles are connected to one pacman (one io-group)
+# while in 2x2 modules, the tile numbering follows horizontal first and then vertical in the 2x4 anode.
+tile_map:
+  - [[1]]
+module_to_io_groups:
+  1: [1]
+
+module_to_tpcs: {1: [0]}
+
+discrimination_threshold: 5.0e3 # e-
+v_cm: 0.0 # mV ; FSDCube electronics (LArPix-v3) does not use v_cm
+v_ref: 1734.375 # mV ; based on data-taking conditions
+v_pedestal: 980 # mV ; based on data-taking conditions
+larpix_gain: 3.4e-3 # mV/e- ; based on data-taking conditions
+periodic_reset_cycles: 512 # nominal periodic reset cycles used in FSDCube
+adc_counts: 1023 # 2**10 - 1; to match LArPix-v3 ADC conversion
+adc_scale_factor: 2 # adjust 10-bit to 9-bit counts for LArPix-v3
+adc_hold_delay: 20 # 2us integration window
+larpix_version: 3 # LArPix-v3 packets
+
+# LArPix-v3 has reduced noise, values based on a total input noise measurement of ~350e-
+# and on discussion with the LArPix team
+reset_noise_charge: 50 # e
+uncorrelated_noise_charge: 350 # e
+discriminator_noise: 50 # e
+
+## Light geometry parameters
+n_op_channel: 240
+
+## Light simulation parameters.
+light_trig_mode: 1
+
+singlet_fraction: 0.3
+tau_s: 0.001 # us
+tau_t: 1.530 # us
+enable_lut_smearing: True # sample from the time profile for photon arrival time (True) or use average photon arrival time (False)
+op_channel_efficiency: 1
+light_gain: -7.0
+light_tick_size: 0.016 # us
+light_det_noise_sample_spacing: 0.016 # us
+light_trig_threshold: [-2000, -4500] # [LCM, ACL]
+light_trig_mode: 1
+light_window: [0.00, 8.64] # us
+light_trig_window: [0.96, 8.64] # us
+light_digit_sample_spacing: 0.016 # us
+light_nbit: 14
+sipm_response_model: 1 # 0: RLC model; 1: measured
+impulse_model: 'larndsim/bin/sipm_impulse.npy'

@@ -12,7 +12,7 @@ from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32, xoroshiro128p_uniform_float32
 from math import exp, floor
 
-from larpix.packet import Packet_v2, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
+from larpix.packet import Packet_v2, Packet_v3, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
 from larpix.format import hdf5format
 
@@ -239,7 +239,8 @@ def export_to_hdf5(event_id_list,
                                     packets_frac.append([0] * current_fractions.shape[2])
                         last_event = event
 
-                p = Packet_v2()
+                # Instantiate correct packet version for LArPix; see consts/detector.py
+                p = detector.PACKET_VERSION()
 
                 try:
                     chip, channel = detector.PIXEL_CONNECTION_DICT[rotate_tile((pix_x % detector.N_PIXELS_PER_TILE[0],
@@ -270,7 +271,7 @@ def export_to_hdf5(event_id_list,
                 p.chip_key = chip_key
                 p.channel_id = channel
                 p.receipt_timestamp = time_tick
-                p.packet_type = 0
+                p.packet_type = detector.PACKET_TYPE
                 p.first_packet = 1
                 p.assign_parity()
 
@@ -298,7 +299,7 @@ def export_to_hdf5(event_id_list,
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
                           ('fraction', f'({sim.ASSOCIATION_COUNT_TO_STORE},)f8'),
@@ -408,7 +409,7 @@ def export_sync_to_hdf5(filename, event, sync_times, i_mod, compression=None):
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
@@ -483,7 +484,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_ids, event_start_times, i_m
 
     if packets:
         packet_list = PacketCollection(packets, read_id=0, message='')
-        hdf5format.to_file(filename, packet_list, workers=1)
+        hdf5format.to_file(filename, packet_list, workers=1, version=detector.LARPIX_HDF5_VERSION)
 
         dtype = np.dtype([('event_ids',f'(1,)i8'),
                           ('segment_ids',f'({sim.ASSOCIATION_COUNT_TO_STORE},)i8'),
@@ -513,7 +514,7 @@ def export_timestamp_trigger_to_hdf5(filename, event_ids, event_start_times, i_m
 
     return packets, packets_mc_ds
 
-def digitize(integral_list, gain=detector.GAIN * mV / e, pedestal=detector.V_PEDESTAL):
+def digitize(integral_list, gain=detector.GAIN, pedestal=detector.V_PEDESTAL):
     """
     The function takes as input the integrated charge and returns the digitized
     ADC counts.
@@ -526,8 +527,8 @@ def digitize(integral_list, gain=detector.GAIN * mV / e, pedestal=detector.V_PED
         :obj:`numpy.ndarray`: list of ADC values for each pixel
     """
     xp = cp.get_array_module(integral_list)
-    adcs = xp.floor(xp.minimum(xp.maximum((integral_list * gain + pedestal * mV - detector.V_CM * mV), 0)
-                                * detector.ADC_COUNTS / (detector.V_REF * mV - detector.V_CM * mV), detector.ADC_COUNTS-1))
+    adcs = xp.floor(xp.minimum(xp.maximum((integral_list * gain * mV / e + pedestal * mV - detector.V_CM * mV), 0)
+                                * detector.ADC_COUNTS / ((detector.V_REF * mV - detector.V_CM * mV) * detector.ADC_SCALE_FACTOR), detector.ADC_COUNTS-1))
 
     adcs[integral_list == 0] = 0
 
@@ -647,15 +648,6 @@ def get_adc_values(pixels_signals,
                 while ic <= integrate_end:
                     q = 0
 
-                    if apply_periodic_reset and ic % detector.PERIODIC_RESET_CYCLES == periodic_reset_phase:
-                        q_sum = xoroshiro128p_normal_float32(rng_states, ip) * detector.RESET_NOISE_CHARGE * e
-                        true_q = 0
-                        last_periodic_reset = ic
-                        for itrk in range(current_fractions.shape[2]):
-                            current_fractions[ip][iadc][itrk] = 0
-                        ic += 1
-                        continue
-                        
                     if detector.BUFFER_RISETIME > 0:
                         conv_start = max(last_reset, floor(ic - 10*detector.BUFFER_RISETIME/detector.TIME_SAMPLING))
                         for jc in range(conv_start, min(ic+1, curre.shape[0])):
