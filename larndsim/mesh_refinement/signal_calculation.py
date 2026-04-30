@@ -299,7 +299,7 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            if srwf_Ez is not None:
+            if srwf_Ez.shape[0] > 0:
                 dWdz = C * srwf_dWdz(dx, dy, dz, srwf_Ez)
             else:
                 dWdz = C * dipole_dWdz(dx, dy, dz, l, n_terms)
