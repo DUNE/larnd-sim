@@ -139,6 +139,7 @@ def get_srwf_Ez() -> cpt.NDArray[cp.float32]:
         Drift component of the Shockley-Ramo weighting field as
         a 3D array on a 1 mm grid. Pixel at origin.
     """
+    print('Loading Shockley-Ramo weighting field...')
     data = np.loadtxt(detector.SRWF_FILE, skiprows=8)
     Ez = data[:, 5]
     # FIXME:
@@ -392,8 +393,8 @@ def launch_ffe_kernel(
             z_anode, z_cathode,
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
-            get_srwf_Ez() if srwf else None,
             mesh_params.DIPOLE_N_TERMS,
+            get_srwf_Ez() if srwf else None,
             get_current_scale(),
             output)
 
