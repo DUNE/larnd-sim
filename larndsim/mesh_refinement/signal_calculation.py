@@ -14,6 +14,7 @@ from typing import Any, Optional
 import numpy as np
 import cupy as cp
 import cupy.typing as cpt
+import numba as nb
 from numba import cuda
 
 from larndsim.consts import detector, mesh_params, sim
@@ -116,36 +117,11 @@ def calculate_ff_voxels(
         if weight == 0.0:
             continue
 
-        # Dipole field calculation (Eq. 3.21, 3.22 from P. Madigan's thesis)
-        # Vector from electron to pixel (test point relative to dipole)
         dx = x_eff - x_pixel
         dy = y_eff - y_pixel
         dz = z - z_anode
-        r_sq = dx*dx + dy*dy + dz*dz
-        if r_sq < 1e-20:  # Avoid singularity
-            continue
-        r = math.sqrt(r_sq)
-        # Direct dipole term: z-component of gradient
-        # For dipole at origin aligned with z-axis: dW/dz = C x (r² - 3z²)/r⁵
-        term0 = (r_sq - 3.0*dz*dz) / (r_sq*r_sq*r)
-        # Image dipole terms
         l = abs(z_cathode - z_anode)
-        term_sum = 0.0
-        for n in range(1, n_terms+1):
-            # Positive image: z + 2nl
-            dz_p = dz + 2*n*l
-            r_p_sq = dx*dx + dy*dy + dz_p*dz_p
-            if r_p_sq > 1e-20:
-                r_p = math.sqrt(r_p_sq)
-                term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
-            # Negative image: z - 2nl
-            dz_m = dz - 2*n*l
-            r_m_sq = dx*dx + dy*dy + dz_m*dz_m
-            if r_m_sq > 1e-20:
-                r_m = math.sqrt(r_m_sq)
-                term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
-        # Total z-component of weighting field gradient (Eq. 3.21)
-        dWdz = C * (term0 + term_sum)
+        dWdz = C * dipole_dWdz(dx, dy, dz, l, n_terms)
         # Induced current (Eq. 3.23): I = -q * v_d * dW/dz (negative sign for electron charge)
         # Scale by voxel charge
         q = charges[v_idx] * weight
@@ -157,33 +133,54 @@ def calculate_ff_voxels(
 # FIXME if it varies by module
 @lru_cache
 def get_srwf_Ez() -> cpt.NDArray[cp.float32]:
+    """Get the E_z of the finite-element SR weighting field.
+
+    Returns:
+        Drift component of the Shockley-Ramo weighting field as
+        a 3D array on a 1 mm grid. Pixel at origin.
+    """
     data = np.loadtxt(detector.SRWF_FILE, skiprows=6)
     Ez = data[:, 5]
-    return cp.asarray(Ez, dtype=cp.float32).reshape(FIXME)
+    # FIXME:
+    return cp.asarray(Ez, dtype=cp.float32).reshape(239, 150, 469)
 
 
 @nb.njit
 def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> float:
-    r_sq = dx*dx + dy*dy + dz*dz
-    if r_sq < 1e-20:
-        return 0
-    r = math.sqrt(r_sq)
+    """Dipole field calculation (Eq. 3.21, 3.22 from P. Madigan's thesis)
 
+    Args:
+        (dx,dy,dz): Vector from electron to pixel (test point relative to dipole)
+        l: Drift length
+        n_terms: Degree of calculation
+
+    Returns:
+        Calculated Shockley-Ramo weighting field for the current induced on
+        the pixel
+    """
+    r_sq = dx*dx + dy*dy + dz*dz
+    if r_sq < 1e-20:  # Avoid singularity
+        return 0.
+    r = math.sqrt(r_sq)
+    # Direct dipole term: z-component of gradient
+    # For dipole at origin aligned with z-axis: dW/dz = C x (r² - 3z²)/r⁵
     term0 = (r_sq - 3.0*dz*dz) / (r_sq*r_sq*r)
+    # Image dipole terms
     term_sum = 0.0
     for n in range(1, n_terms+1):
+        # Positive image: z + 2nl
         dz_p = dz + 2*n*l
         r_p_sq = dx*dx + dy*dy + dz_p*dz_p
         if r_p_sq > 1e-20:
             r_p = math.sqrt(r_p_sq)
             term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
-
+        # Negative image: z - 2nl
         dz_m = dz - 2*n*l
         r_m_sq = dx*dx + dy*dy + dz_m*dz_m
         if r_m_sq > 1e-20:
             r_m = math.sqrt(r_m_sq)
             term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
-
+    # Total z-component of weighting field gradient (Eq. 3.21)
     return term0 + term_sum
 
 
@@ -311,6 +308,15 @@ def calculate_ff_segments(
     output[p_idx, t_idx] = total_current
 
 
+def get_current_scale() -> float:
+    if C := mesh_params.INDUCED_CURRENT_SCALE is None:
+        # The FFE kernel gives dQ per microsecond whereas the standard pixel
+        # response (and the rest of larnd-sim) uses dQ per tick. The FFE signal
+        # therefore needs to be scaled down according to the tick length.
+        C = detector.RESPONSE_SAMPLING
+    return C
+
+
 def launch_ffe_kernel(
     tpc_idx: int,
     tracks: cpt.NDArray,
@@ -349,13 +355,6 @@ def launch_ffe_kernel(
     z_cathode = detector.TPC_BORDERS[tpc_idx, 2, 1]
     exclude_radius = mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
 
-    C = mesh_params.INDUCED_CURRENT_SCALE
-    if C is None:
-        # The FFE kernel gives dQ per microsecond whereas the standard pixel
-        # response (and the rest of larnd-sim) uses dQ per tick. The FFE signal
-        # therefore needs to be scaled down according to the tick length.
-        C = detector.RESPONSE_SAMPLING
-
     def launch_voxels():
         cache = voxel_cache.get(tpc_idx, None)
         if cache is None or cache['x'] is None:
@@ -377,10 +376,10 @@ def launch_ffe_kernel(
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
             mesh_params.DIPOLE_N_TERMS,
-            C,
+            get_current_scale(),
             output)
 
-    def launch_segments():
+    def launch_segments(srwf: bool):
         tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
         if len(tpc_tracks) == 0:
             return
@@ -393,36 +392,18 @@ def launch_ffe_kernel(
             z_anode, z_cathode,
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
-            False, cp.array([], dtype=cp.float32), # srwf
+            get_srwf_Ez() if srwf else None,
             mesh_params.DIPOLE_N_TERMS,
-            C,
-            output)
-
-    def launch_segments_swrf():
-        tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
-        if len(tpc_tracks) == 0:
-            return
-
-        calculate_ff_segments[BPG, TPB](
-            tpc_tracks,
-            pixel_x, pixel_y,
-            exclude_radius,
-            mesh_params.FAR_FIELD_SEGMENT_STEP_CM,
-            z_anode, z_cathode,
-            detector.V_DRIFT,
-            detector.TIME_SAMPLING,
-            True, get_srwf_Ez(),
-            0,                  # dipole n_terms
-            C,
+            get_current_scale(),
             output)
 
     match sim.FARFIELD_MODE:
         case 'voxels':
             launch_voxels()
         case 'segments':
-            launch_segments()
+            launch_segments(False)
         case 'segments-swrf':
-            launch_segments_swrf()
+            launch_segments(True)
         case _:
             e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
             raise RuntimeError(e)
@@ -473,7 +454,7 @@ def launch_far_field_dipole_signal_calculation(
     else:
         voxel_rad = 0.5 * math.sqrt(voxel_size_xy[0]**2 + voxel_size_xy[1]**2)
 
-    calculate_far_field_dipole_signal_time_kernel[blockspergrid, threadsperblock](
+    calculate_ff_voxels[blockspergrid, threadsperblock](
         cp.asarray(voxel_pos[:,0]),
         cp.asarray(voxel_pos[:,1]),
         cp.asarray(voxel_pos[:,2]),
