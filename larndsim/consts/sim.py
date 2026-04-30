@@ -98,7 +98,7 @@ def set_simulation_properties(simprop_file):
     FARFIELD_ENABLED = bool(simprop.get('farfield_enabled', FARFIELD_ENABLED))
 
     FARFIELD_MODE = simprop.get('farfield_mode', FARFIELD_MODE)
-    options = ['segments', 'voxels']
+    options = ['voxels', 'segments', 'segments-srwf']
     if FARFIELD_MODE not in options:
         raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
                             f"must be one of {options}")

@@ -7,18 +7,20 @@ Calculates induced currents on pixels at multiple scales:
 3. Far-field: Coarse mesh aggregate calculation 
 """
 
+from functools import lru_cache
 import math
 from typing import Any, Optional
 
 import numpy as np
 import cupy as cp
+import cupy.typing as cpt
 from numba import cuda
 
 from larndsim.consts import detector, mesh_params, sim
 
 
 @cuda.jit
-def calculate_far_field_dipole_signal_time_kernel(
+def calculate_ff_voxels(
     voxel_x, voxel_y, voxel_z,   # (n_voxels,) arrays (initial positions)
     charges,                              # (n_voxels,) array (charge in each voxel)
     pixel_x, pixel_y,                     # (n_pixels,) arrays
@@ -152,18 +154,66 @@ def calculate_far_field_dipole_signal_time_kernel(
     output[p_idx, t_idx] = total_current
 
 
+# FIXME if it varies by module
+@lru_cache
+def get_srwf_Ez() -> cpt.NDArray[cp.float32]:
+    data = np.loadtxt(detector.SRWF_FILE, skiprows=6)
+    Ez = data[:, 5]
+    return cp.asarray(Ez, dtype=cp.float32).reshape(FIXME)
+
+
+@nb.njit
+def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> float:
+    r_sq = dx*dx + dy*dy + dz*dz
+    if r_sq < 1e-20:
+        return 0
+    r = math.sqrt(r_sq)
+
+    term0 = (r_sq - 3.0*dz*dz) / (r_sq*r_sq*r)
+    term_sum = 0.0
+    for n in range(1, n_terms+1):
+        dz_p = dz + 2*n*l
+        r_p_sq = dx*dx + dy*dy + dz_p*dz_p
+        if r_p_sq > 1e-20:
+            r_p = math.sqrt(r_p_sq)
+            term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
+
+        dz_m = dz - 2*n*l
+        r_m_sq = dx*dx + dy*dy + dz_m*dz_m
+        if r_m_sq > 1e-20:
+            r_m = math.sqrt(r_m_sq)
+            term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
+
+    return term0 + term_sum
+
+
+@nb.njit
+def srwf_dWdz(dx: float, dy: float, dz: float,
+              Ez: cp.ndarray[tuple[int, int, int], cp.float32]) -> float:
+    # FIXME assume grid is in mm
+    ix, iy, iz = round(dx/10), round(dy/10), round(dz/10)
+    # v_drift is in cm/microsec
+    # Ez is in V/m per 1 V i.e. has units of 1/m
+    # Ez [1/m] * v_drift [cm/mu_sec] * (1e-2 m/cm) => 1/mu_sec
+    # ==> need a factor of 1e-2
+    return 1e-2 * Ez[ix, iy, iz]
+
+
 @cuda.jit
-def calculate_far_field_segment_signal_time_kernel(
-    tracks,
-    pixel_x, pixel_y,
-    exclude_radius,
-    split_step_cm,
-    z_anode, z_cathode,
-    v_drift,
-    tick_size,
-    n_terms,
-    C,
-    output
+def calculate_ff_segments(
+    tracks: cpt.NDArray,
+    pixel_x: cpt.NDArray[cp.float32],
+    pixel_y: cpt.NDArray[cp.float32],
+    exclude_radius: float,
+    split_step_cm: float,
+    z_anode: float,
+    z_cathode: float,
+    v_drift: float,
+    tick_size: float,
+    n_terms: int,
+    srwf_Ez: Optional[cpt.NDArray[cp.float32]],
+    C: float,
+    output: cp.ndarray[tuple[int, int], cp.float32]
 ):
     """
     CUDA kernel: Calculate far-field induced current for each (pixel, tick)
@@ -250,41 +300,25 @@ def calculate_far_field_segment_signal_time_kernel(
             dx = x - x_pixel
             dy = y - y_pixel
             dz = z - z_anode
-            r_sq = dx*dx + dy*dy + dz*dz
-            if r_sq < 1e-20:
-                continue
-            r = math.sqrt(r_sq)
 
-            term0 = (r_sq - 3.0*dz*dz) / (r_sq*r_sq*r)
-            term_sum = 0.0
-            for n in range(1, n_terms+1):
-                dz_p = dz + 2*n*l
-                r_p_sq = dx*dx + dy*dy + dz_p*dz_p
-                if r_p_sq > 1e-20:
-                    r_p = math.sqrt(r_p_sq)
-                    term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
+            if srwf_Ez is not None:
+                dWdz = C * srwf_dWdz(dx, dy, dz, srwf_Ez)
+            else:
+                dWdz = C * dipole_dWdz(dx, dy, dz, l, n_terms)
 
-                dz_m = dz - 2*n*l
-                r_m_sq = dx*dx + dy*dy + dz_m*dz_m
-                if r_m_sq > 1e-20:
-                    r_m = math.sqrt(r_m_sq)
-                    term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
-
-            dWdz = C * (term0 + term_sum)
             total_current += -q_piece * v_drift * dWdz
 
     output[p_idx, t_idx] = total_current
 
 
 def launch_ffe_kernel(
-        tpc_idx: int,
-        tracks: cp.ndarray[tuple[int], Any],
-        pixel_x: cp.ndarray[tuple[int], cp.float32],
-        pixel_y: cp.ndarray[tuple[int], cp.float32],
-        n_ticks: int,
-        category: int,
-        voxel_cache: dict[int,
-                          dict[str, Optional[cp.ndarray[tuple[int], float]]]],
+    tpc_idx: int,
+    tracks: cpt.NDArray,
+    pixel_x: cpt.NDArray[cp.float32],
+    pixel_y: cpt.NDArray[cp.float32],
+    n_ticks: int,
+    category: int,
+    voxel_cache: dict[int, dict[str, Optional[cpt.NDArray[cp.float32]]]],
 ) -> cp.ndarray[tuple[int, int], cp.float32]:
     """Launch CUDA kernel for far-field induced current calculation.
 
@@ -333,18 +367,13 @@ def launch_ffe_kernel(
             (mesh_params.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
             (mesh_params.COARSE_VOXEL_SIZE_Z / 2.0)**2)
 
-        calculate_far_field_dipole_signal_time_kernel[BPG, TPB](
-            cache["x"],
-            cache["y"],
-            cache["z"],
-            cache["q"],
-            pixel_x,
-            pixel_y,
+        calculate_ff_voxels[BPG, TPB](
+            cache["x"], cache["y"], cache["z"], cache["q"],
+            pixel_x, pixel_y,
             pixel_categories,
             exclude_radius,
             voxel_radius,
-            z_anode,
-            z_cathode,
+            z_anode, z_cathode,
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
             mesh_params.DIPOLE_N_TERMS,
@@ -356,26 +385,47 @@ def launch_ffe_kernel(
         if len(tpc_tracks) == 0:
             return
 
-        calculate_far_field_segment_signal_time_kernel[BPG, TPB](
+        calculate_ff_segments[BPG, TPB](
             tpc_tracks,
-            pixel_x,
-            pixel_y,
+            pixel_x, pixel_y,
             exclude_radius,
             mesh_params.FAR_FIELD_SEGMENT_STEP_CM,
-            z_anode,
-            z_cathode,
+            z_anode, z_cathode,
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
+            False, cp.array([], dtype=cp.float32), # srwf
             mesh_params.DIPOLE_N_TERMS,
             C,
             output)
 
-    if sim.FARFIELD_MODE == 'voxels':
-        launch_voxels()
-    elif sim.FARFIELD_MODE == 'segments':
-        launch_segments()
-    else:
-        raise RuntimeError(f"Invalid farfield_mode '{sim.FARFIELD_MODE}'")
+    def launch_segments_swrf():
+        tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
+        if len(tpc_tracks) == 0:
+            return
+
+        calculate_ff_segments[BPG, TPB](
+            tpc_tracks,
+            pixel_x, pixel_y,
+            exclude_radius,
+            mesh_params.FAR_FIELD_SEGMENT_STEP_CM,
+            z_anode, z_cathode,
+            detector.V_DRIFT,
+            detector.TIME_SAMPLING,
+            True, get_srwf_Ez(),
+            0,                  # dipole n_terms
+            C,
+            output)
+
+    match sim.FARFIELD_MODE:
+        case 'voxels':
+            launch_voxels()
+        case 'segments':
+            launch_segments()
+        case 'segments-swrf':
+            launch_segments_swrf()
+        case _:
+            e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
+            raise RuntimeError(e)
 
     return output
 

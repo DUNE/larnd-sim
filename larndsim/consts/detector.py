@@ -140,6 +140,9 @@ NON_BEAM_EVENT_GAP = 0 # us
 DIFF_N_SIGMAS = 5
 #: Distances of the neighboring pixels to the center pixel
 NEIGHBORING_PIX_DIST = []
+#: Shockley-Ramo weighting field for 'segments-swrf' FFE mode
+SRWF_FILE = None
+
 
 def electron_mobility(efield, temperature):
     """
@@ -266,6 +269,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global NON_BEAM_EVENT_GAP
     global DIFF_N_SIGMAS
     global NEIGHBORING_PIX_DIST
+    global SRWF_FILE
 
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -430,6 +434,9 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             for j in range(MAX_RADIUS + 1):
                 NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
         NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
+
+        SRWF_FILE = detprop.get('srwf_file', SRWF_FILE)
+
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME
