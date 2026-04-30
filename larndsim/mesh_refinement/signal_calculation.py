@@ -139,7 +139,7 @@ def get_srwf_Ez() -> cpt.NDArray[cp.float32]:
         Drift component of the Shockley-Ramo weighting field as
         a 3D array on a 1 mm grid. Pixel at origin.
     """
-    data = np.loadtxt(detector.SRWF_FILE, skiprows=6)
+    data = np.loadtxt(detector.SRWF_FILE, skiprows=8)
     Ez = data[:, 5]
     # FIXME:
     return cp.asarray(Ez, dtype=cp.float32).reshape(239, 150, 469)
