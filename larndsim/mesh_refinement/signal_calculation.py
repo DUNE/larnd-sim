@@ -402,7 +402,7 @@ def launch_ffe_kernel(
             launch_voxels()
         case 'segments':
             launch_segments(False)
-        case 'segments-swrf':
+        case 'segments-srwf':
             launch_segments(True)
         case _:
             e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
