@@ -394,7 +394,7 @@ def launch_ffe_kernel(
             detector.V_DRIFT,
             detector.TIME_SAMPLING,
             mesh_params.DIPOLE_N_TERMS,
-            get_srwf_Ez() if srwf else cp.empty(0, dtype=cp.float32),
+            get_srwf_Ez() if srwf else cp.empty((0, 0, 0), dtype=cp.float32),
             get_current_scale(),
             output)
 
