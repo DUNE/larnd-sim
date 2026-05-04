@@ -53,6 +53,17 @@ LOGO = r"""
 """
 
 warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
+def warning_str_format(message, category, filename, lineno, line=None):
+    # Get the last few parts of the filepath for less clutter when printing
+    splitname = "/".join(filename.split('/')[-3:])
+    return f"\033[33m{splitname}:{lineno}: {category.__name__}: {message}\033[0m"
+
+# Play nice with loops wrapped with tqdm; using tqdm.write() prints the warning on its own line
+def tqdm_show_warning(message, category, filename, lineno, file=None, line=None):
+    tqdm.write(warning_str_format(str(message), category, filename, lineno))
+
+warnings.formatwarning = warning_str_format
+warnings.showwarning = tqdm_show_warning
 
 def swap_coordinates(tracks):
     """
