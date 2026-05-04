@@ -6,6 +6,7 @@ photodetector
 import numba as nb
 
 from numba import cuda
+from numba import float32
 
 import numpy as np
 import cupy as cp
@@ -100,7 +101,7 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                         for iprof in range(time_profile.shape[0]):
                             profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
                             if profile_time < end_tick_time and profile_time > start_tick_time:
-                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * time_profile[iprof] / light.LIGHT_TICK_SIZE
+                                photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * float32(time_profile[iprof]) / light.LIGHT_TICK_SIZE
                                 light_sample_inc[idet,itick] += photons
 
                                 if photons > sim.MC_TRUTH_THRESHOLD:

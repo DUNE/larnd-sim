@@ -182,7 +182,7 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
 
     if args.force:
         logger.info("Overwriting existing output files.")
-        cmd += " --force-overwrite=true"
+        cmd += " --force-overwrite"
 
     output_dir = ncu_config.get('output_dir', '.')
     output_file = args.output if args.output else ncu_config.get('output_file', None)
@@ -193,7 +193,8 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
 
     if args.args:
         logger.info(f"Adding the following arguments {args.args}")
-        cmd += f" {args.args}"
+        for arg in args.args:
+            cmd += f" {arg}"
 
     lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
     cmd += lar_cmd
