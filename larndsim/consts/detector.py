@@ -140,6 +140,8 @@ V_PEDESTAL = 580 # mV
 ADC_COUNTS = 2**8
 #: Scale factor to adjust the ADC range
 ADC_SCALE_FACTOR = 1 # integer >= 1
+#: Offset to for the ADC digitize function
+ADC_OFFSET = 0
 #: Reset noise in e-
 RESET_NOISE_CHARGE = 900 # e
 #: Uncorrelated noise in e-
@@ -282,6 +284,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global V_PEDESTAL
     global ADC_COUNTS
     global ADC_SCALE_FACTOR
+    global ADC_OFFSET
     global RESET_NOISE_CHARGE
     global UNCORRELATED_NOISE_CHARGE
     global DISCRIMINATOR_NOISE
@@ -420,6 +423,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         V_PEDESTAL = detprop.get('v_pedestal', V_PEDESTAL)
         ADC_COUNTS = detprop.get('adc_counts', ADC_COUNTS)
         ADC_SCALE_FACTOR = detprop.get('adc_scale_factor', ADC_SCALE_FACTOR)
+        ADC_OFFSET = detprop.get('adc_offset', ADC_OFFSET)
         RESET_NOISE_CHARGE = detprop.get('reset_noise_charge', RESET_NOISE_CHARGE)
         UNCORRELATED_NOISE_CHARGE = detprop.get('uncorrelated_noise_charge', UNCORRELATED_NOISE_CHARGE)
         DISCRIMINATOR_NOISE = detprop.get('discriminator_noise', DISCRIMINATOR_NOISE)
