@@ -15,7 +15,7 @@ import cupy as cp
 
 from larndsim import consts, quenching, drifting
 from larndsim.active_volume import select_active_volume
-from larndsim.mesh_refinement.voxelization import gpu_voxelize
+from larndsim.far_field.voxelization import gpu_voxelize
 from larndsim.config import get_config
 import warnings
 from numba.core.errors import NumbaPerformanceWarning

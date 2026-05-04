@@ -38,8 +38,8 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
-from larndsim.mesh_refinement import voxelization, signal_calculation, pixel_classifier
-from larndsim.consts import mesh_params
+from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
+from larndsim.consts import ff_induction
 
 SEED = int(time())
 
@@ -1119,9 +1119,9 @@ def run_simulation(input_filename,
 
                 if sim.FARFIELD_MODE == 'voxels':
                     voxel_radius = np.sqrt(
-                        (mesh_params.COARSE_VOXEL_SIZE_X / 2.0)**2 +
-                        (mesh_params.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
-                        (mesh_params.COARSE_VOXEL_SIZE_Z / 2.0)**2
+                        (ff_induction.COARSE_VOXEL_SIZE_X / 2.0)**2 +
+                        (ff_induction.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
+                        (ff_induction.COARSE_VOXEL_SIZE_Z / 2.0)**2
                     )
                     for tpc_idx in active_tpc_indices_all:
                         tpc_tracks = all_selected_tracks[all_selected_tracks['pixel_plane'] == tpc_idx]

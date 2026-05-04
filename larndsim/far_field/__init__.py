@@ -36,7 +36,7 @@ class PixelClassificationResult:
     induction_pixels_x: Optional[Any] = None  # (n_induction,) x-coordinates in cm
     induction_pixels_y: Optional[Any] = None  # (n_induction,) y-coordinates in cm
 
-    def summary(self, n_total_pixels):
+    def summary(self, n_total_pixels: int):
         n_charge = len(self.charge_pixels) if self.charge_pixels is not None else 0
         n_neighbor = len(self.neighbor_pixels) if self.neighbor_pixels is not None else 0
         n_induction = len(self.induction_pixels) if self.induction_pixels is not None else 0

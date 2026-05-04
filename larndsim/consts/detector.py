@@ -9,7 +9,7 @@ import yaml
 
 from collections import defaultdict
 
-from . import mesh_params, sim
+from . import ff_induction, sim
 from .units import mm, cm, mV, V, kV, e
 
 ###################
@@ -420,8 +420,8 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         if sim.FARFIELD_ENABLED:
             warnings.warn(f'Far-field enabled; setting MAX_RADIUS (currently ' +
                           f'{MAX_RADIUS}) to CHARGE_NEIGHBOR_RADIUS ' +
-                          f'({mesh_params.CHARGE_NEIGHBOR_RADIUS})')
-            MAX_RADIUS = mesh_params.CHARGE_NEIGHBOR_RADIUS
+                          f'({ff_induction.CHARGE_NEIGHBOR_RADIUS})')
+            MAX_RADIUS = ff_induction.CHARGE_NEIGHBOR_RADIUS
 
         # Prepare neighbouring pixel distance for backtracking
         # Currently backtracking range is used to convert from segment base to pixel base

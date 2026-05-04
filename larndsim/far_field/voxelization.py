@@ -1,11 +1,24 @@
-import numpy as np
-import cupy as cp
-from numba import cuda
 import math
-from ..consts import detector, mesh_params
+from typing import Optional
+
+import cupy as cp
+import cupy.typing as cpt
+from numba import cuda
+import numpy as np
+import numpy.typing as npt
+
+from ..consts import detector, ff_induction
 
 
-def voxel_id_to_coordinates(voxel_indices, grid_shape, voxel_size, bounds):
+type Bounds = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+
+
+def voxel_id_to_coordinates(
+    voxel_indices: cpt.NDArray[cp.int32],
+    grid_shape: tuple[int, int, int],
+    voxel_size: tuple[float, float, float],
+    bounds: Bounds
+):
     """
     Convert flattened voxel indices to physical (x, y, z) center coordinates.
     
@@ -41,19 +54,37 @@ def voxel_id_to_coordinates(voxel_indices, grid_shape, voxel_size, bounds):
     return x_centers, y_centers, z_centers
 
 
-def gpu_voxelize(tracks, tpc_borders=None, voxel_size=None, z_padding=0.0):
-    """Voxelize track segments on GPU.
+def gpu_voxelize(
+   tracks: cpt.NDArray,
+   tpc_borders: Optional[npt.NDArray]=None,
+   voxel_size: Optional[float]=None,
+   z_padding: float=0.0
+) -> tuple[cpt.NDArray[cp.int32], cpt.NDArray[cp.float32],
+           tuple[float, float, float], float, Bounds]:
+    """
+    Voxelize track segments on GPU.
 
-    Returns (voxel_indices, voxel_charges, grid_shape, voxel_size, bounds)
-    where voxel_indices & voxel_charges are 1D CuPy arrays for non-zero voxels.
+    Args:
+        tracks: structured track array (fields: x_start, y_start, z_start,
+            x_end, y_end, z_end, n_electrons, pixel_plane, ...)
+        tpc_borders: TPC borders override (optional; defaults to
+            detector.TPC_BORDERS)
+        voxel_size: Voxel size override (optional; defaults to using voxel size
+            from ff_induction)
+        z_padding: Extra padding on the range of drift coordinatess to cover
+
+
+    Returns:
+        (voxel_indices, voxel_charges, grid_shape, voxel_size, bounds) where
+        voxel_indices & voxel_charges are 1D CuPy arrays for non-zero voxels.
     """
     if tpc_borders is None:
         tpc_borders = detector.TPC_BORDERS
     if voxel_size is None:
         voxel_size = (
-            mesh_params.COARSE_VOXEL_SIZE_X,
-            mesh_params.COARSE_VOXEL_SIZE_Y,
-            mesh_params.COARSE_VOXEL_SIZE_Z,
+            ff_induction.COARSE_VOXEL_SIZE_X,
+            ff_induction.COARSE_VOXEL_SIZE_Y,
+            ff_induction.COARSE_VOXEL_SIZE_Z,
         )
     x_min = float(np.min(tpc_borders[:,0,0])); x_max = float(np.max(tpc_borders[:,0,1]))
     y_min = float(np.min(tpc_borders[:,1,0])); y_max = float(np.max(tpc_borders[:,1,1]))
@@ -91,17 +122,24 @@ def gpu_voxelize(tracks, tpc_borders=None, voxel_size=None, z_padding=0.0):
 
 
 @cuda.jit
-def voxelize_segments_kernel(tracks, voxel_charges, voxel_size, bounds, grid_shape):
+def voxelize_segments_kernel(
+   tracks: cpt.NDArray,
+   voxel_charges: cpt.NDArray[cp.float32],
+   voxel_size: cpt.NDArray[cp.float32],
+   bounds: cp.ndarray[tuple[int, int], cp.float32],
+   grid_shape: cpt.NDArray[cp.int32]
+):
     """
     CUDA kernel for fast voxelization of track segments.
     
     Parallelizes the voxelization process across segments.
     
     Args:
-        tracks: Track segment array
-        voxel_charges: Output array for voxel charges (flattened 3D grid)
+        tracks: structured track array (fields: x_start, y_start, z_start,
+            x_end, y_end, z_end, n_electrons, pixel_plane, ...)
+        voxel_charges: (n_voxels,) output array for voxel charges (flattened 3D grid)
         voxel_size: (dx, dy, dt) voxel dimensions
-        bounds: ((x_min, x_max), (y_min, y_max), (t_min, t_max))
+        bounds: ((x_min, x_max), (y_min, y_max), (z_min, z_max))
         grid_shape: (nx, ny, nt) grid dimensions
     """
     i = cuda.grid(1)
