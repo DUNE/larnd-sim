@@ -15,8 +15,8 @@ import cupy as cp
 
 from larndsim import consts, quenching, drifting
 from larndsim.active_volume import select_active_volume
-from larndsim.mesh_refinement.pixel_classifier import classify_pixels
-from larndsim.mesh_refinement import PixelCategory
+from larndsim.far_field.pixel_classifier import classify_pixels
+from larndsim.far_field import PixelCategory
 from larndsim.config import get_config
 import warnings
 from numba.core.errors import NumbaPerformanceWarning

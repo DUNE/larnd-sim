@@ -24,15 +24,73 @@ import cupy as cp
 
 from larndsim import consts, quenching, drifting, fee
 from larndsim.active_volume import select_active_volume
-from larndsim.mesh_refinement.pixel_classifier import classify_pixels
-from larndsim.mesh_refinement.voxelization import gpu_voxelize, voxel_id_to_coordinates
-from larndsim.mesh_refinement.signal_calculation import launch_far_field_dipole_signal_calculation
+from larndsim.far_field.pixel_classifier import classify_pixels
+from larndsim.far_field.voxelization import gpu_voxelize, voxel_id_to_coordinates
+from larndsim.far_field.signal_calculation import calculate_ff_voxels
 from larndsim.config import get_config
-from larndsim.consts import units, sim
+from larndsim.consts import detector, ff_induction, units, sim
 from numba.cuda.random import create_xoroshiro128p_states
 from numba.core.errors import NumbaPerformanceWarning
 
 warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
+
+
+def launch_far_field_dipole_signal_calculation(
+    voxel_pos, pixel_pos, voxel_charge, pixel_categories, z_anode, z_cathode, v_drift, tick_size, n_ticks,
+    n_terms=5, C=None, bx=16, by=16
+):
+    """
+    Launch CUDA kernel for far-field dipole induced current calculation with time ticks.
+    Uses 2D grid/block launch for (pixel, tick) and sums over voxels in each thread.
+    (USED FOR TESTING/VALIDATION ONLY)
+
+    Args:
+        voxel_pos: (n_voxels, 3) array (initial positions)
+        pixel_pos: (n_pixels, 2) array
+        voxel_charge: (n_voxels,) array (charge in each voxel, in units of electrons)
+        pixel_categories: (n_pixels,) array with values 0=INDUCTION, 1=COLLECTION, 2=NEIGHBOR
+        z_anode, z_cathode: float
+        v_drift: float
+        tick_size: float (us)
+        n_ticks: int
+        n_terms: int (default 5)
+        C: float (default: use INDUCED_CURRENT_SCALE from ff_induction)
+        bx, by: block dimensions for (pixels, ticks) (default 16x16)
+
+    Returns:
+        output: (n_pixels, n_ticks) CuPy array - total induced current per pixel per tick
+    """
+    n_pixels = pixel_pos.shape[0]
+    output = cp.zeros((n_pixels, n_ticks), dtype=cp.float32)
+    blockspergrid = (
+        (n_pixels + bx - 1) // bx,
+        (n_ticks + by - 1) // by
+    )
+    threadsperblock = (bx, by)
+
+    prev_n_terms = ff_induction.DIPOLE_N_TERMS
+    ff_induction.DIPOLE_N_TERMS = n_terms
+    prev_v_drift = detector.V_DRIFT
+    detector.V_DRIFT = v_drift
+    prev_tick_size = detector.TIME_SAMPLING
+    detector.TIME_SAMPLING = tick_size
+
+    calculate_ff_voxels[blockspergrid, threadsperblock](
+        cp.asarray(voxel_pos[:,0]),
+        cp.asarray(voxel_pos[:,1]),
+        cp.asarray(voxel_pos[:,2]),
+        cp.asarray(voxel_charge, dtype=cp.float32),
+        cp.asarray(pixel_pos[:,0]),
+        cp.asarray(pixel_pos[:,1]),
+        cp.asarray(pixel_categories, dtype=cp.int32),
+        float(z_anode), float(z_cathode), output
+    )
+
+    ff_induction.DIPOLE_N_TERMS = prev_n_terms
+    detector.V_DRIFT = prev_v_drift
+    detector.TIME_SAMPLING = prev_tick_size
+
+    return output
 
 
 def swap_coordinates(tracks):
@@ -66,7 +124,7 @@ def test_far_field_pipeline_performance(input_filename, config='2x2', n_events=N
     print(f"\n[1/9] Loading configuration: {config}")
     cfg = get_config(config)
     consts.load_properties(cfg['DET_PROPERTIES'], cfg['PIXEL_LAYOUT'], cfg['RESPONSE'], cfg['SIM_PROPERTIES'])
-    from larndsim.consts import detector, sim, physics, mesh_params
+    from larndsim.consts import detector, sim, physics, ff_induction
 
     # 2. Load segments
     print(f"\n[2/9] Loading segments from {input_filename}")
@@ -248,7 +306,7 @@ def test_far_field_pipeline_performance(input_filename, config='2x2', n_events=N
                 float(tick_size),
                 int(n_ticks_this),
                 5,
-                None,  # Use INDUCED_CURRENT_SCALE from mesh_params
+                None,  # Use INDUCED_CURRENT_SCALE from ff_induction
             )
             cp.cuda.Stream.null.synchronize()
             stats['far_times'].append(time.time() - t0_far)

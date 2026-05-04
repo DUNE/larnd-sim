@@ -22,17 +22,20 @@ import math
 
 from numba import cuda
 import numpy as np
+import numpy.typing as npt
 
 import cupy as cp
+import cupy.typing as cpt
 
 from . import (
     PixelCategory,
     PixelClassificationResult,
 )
-from ..consts import detector, mesh_params
+from ..consts import detector, ff_induction
 
 
-def generate_pixel_coordinates(plane_id):
+def generate_pixel_coordinates(plane_id: int) \
+        -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.int64]]:
     """
     Generate all pixel center coordinates for a given TPC plane.
     
@@ -41,7 +44,7 @@ def generate_pixel_coordinates(plane_id):
     physical positions.
     
     Args:
-        plane_id (int): TPC plane index
+        plane_id: TPC plane index
         
     Returns:
         tuple: (pixel_coords_x, pixel_coords_y, pixel_ids)
@@ -76,16 +79,11 @@ def generate_pixel_coordinates(plane_id):
 
 @cuda.jit
 def classify_pixels_kernel(
-    segments,
-    pixel_coords_x,
-    pixel_coords_y,
-    categories,
-    thresholds_cc,
-    thresholds_neighbor,
-    thresholds_induction,
-    induction_signal_threshold,
-    diffusion_n_sigmas,
-    z_anode,
+    segments: cpt.NDArray,
+    pixel_coords_x: cpt.NDArray[cp.float32],
+    pixel_coords_y: cpt.NDArray[cp.float32],
+    categories: cpt.NDArray[cp.int32],
+    z_anode: float,
 ):
     """
     CUDA kernel to classify each pixel by proximity to segments.
@@ -106,11 +104,6 @@ def classify_pixels_kernel(
         pixel_coords_x: (n_pixels,) pixel center x positions (cm)
         pixel_coords_y: (n_pixels,) pixel center y positions (cm)
         categories: (n_pixels,) output array of PixelCategory enum values
-        thresholds_cc: charge collection radius (cm)
-        thresholds_neighbor: charge neighbor radius (cm)
-        thresholds_induction: induction cutoff radius (cm)
-        induction_signal_threshold: minimum signal strength for induction-only (e-)
-        diffusion_n_sigmas: number of sigmas to consider for diffusion extent
         z_anode: anode z-position for this plane (cm)
     """
 
@@ -238,8 +231,10 @@ def classify_pixels_kernel(
         sigma_T = math.sqrt(2.0 * detector.TRAN_DIFF * t_drift)
 
         # Effective radius including diffusion
-        r_eff_cc = thresholds_cc + diffusion_n_sigmas * sigma_T
-        r_eff_neighbor = thresholds_neighbor + diffusion_n_sigmas * sigma_T
+        thresholds_cc = ff_induction.CHARGE_COLLECTION_RADIUS * detector.PIXEL_PITCH
+        r_eff_cc = thresholds_cc + detector.DIFF_N_SIGMAS * sigma_T
+        thresholds_neighbor = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+        r_eff_neighbor = thresholds_neighbor + detector.DIFF_N_SIGMAS * sigma_T
 
         # Check charge collection first (highest priority)
         if r_trans <= r_eff_cc:
@@ -255,7 +250,7 @@ def classify_pixels_kernel(
 
         # Accumulate induction signal (lowest priority)
         # We accumulate from all segments, then check threshold at the end
-        if r_trans <= thresholds_induction:
+        if r_trans <= ff_induction.INDUCTION_CUTOFF_RADIUS:
             # 3D distance: include drift distance at closest point
             r3d = math.sqrt(r_trans * r_trans + drift_distance_closest * drift_distance_closest)
             if r3d > 0.05:  # avoid singularity
@@ -266,7 +261,7 @@ def classify_pixels_kernel(
 
     # After checking all segments, apply induction classification if threshold met
     # Only upgrade to INDUCTION_ONLY if we're currently INACTIVE
-    if total_induction_signal >= induction_signal_threshold:
+    if total_induction_signal >= ff_induction.INDUCTION_SIGNAL_THRESHOLD:
         if pixel_category == PixelCategory.INACTIVE:
             pixel_category = PixelCategory.INDUCTION_ONLY
 
@@ -275,9 +270,9 @@ def classify_pixels_kernel(
 
 
 def classify_pixels(
-    segments,
-    plane_id
-    ):
+    segments: cpt.NDArray,
+    plane_id: int
+) -> PixelClassificationResult:
     """
     Classify pixels into physics regimes based on segment proximity and diffusion.
 
@@ -293,7 +288,7 @@ def classify_pixels(
             - x_start, y_start, z_start, x_end, y_end, z_end (cm)
             - n_electrons (float)
             - pixel_plane (int)
-        plane_id: TPC plane identifier (int)
+        plane_id: TPC plane identifier
 
     Returns:
         PixelClassificationResult with:
@@ -343,11 +338,6 @@ def classify_pixels(
         px_dev,
         py_dev,
         categories_dev,
-        mesh_params.CHARGE_COLLECTION_RADIUS * detector.PIXEL_PITCH,
-        mesh_params.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH,
-        mesh_params.INDUCTION_CUTOFF_RADIUS,
-        mesh_params.INDUCTION_SIGNAL_THRESHOLD,
-        detector.DIFF_N_SIGMAS,
         z_anode,
     )
 
