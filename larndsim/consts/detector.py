@@ -57,7 +57,7 @@ RESPONSE_BIN_SIZE = 0.04434
 #: The longest cathode charge response in time :math:`\mu s`
 RESPONSE_MAX_TIME = 0.0
 #: The maximum radius to consider the neighbouring charge response
-MAX_RADIUS = 4
+MAX_RADIUS = 2
 #: The step size to chop up segments :math:`cm`
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
