@@ -1108,41 +1108,12 @@ def run_simulation(input_filename,
 
             # ~~~ Precompute far-field helper data once per event batch ~~~
             RangePush("event_farfield_precompute")
-            voxel_cache = {}
-            voxel_radius = None
-            classification_cache = {}
-            active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32)) if sim.FARFIELD_ENABLED else []
+            classification_cache, voxel_cache = {}, {}
             if sim.FARFIELD_ENABLED:
-                all_tracks_cpu = cp.asnumpy(all_selected_tracks)
-                for tpc_idx in active_tpc_indices_all:
-                    # Precompute pixel classification per TPC (for induction-only masks)
-                    classification_cache[int(tpc_idx)] = pixel_classifier.classify_pixels(all_tracks_cpu, plane_id=int(tpc_idx))
-
+                classification_cache = \
+                    pixel_classifier.get_classification_cache(all_selected_tracks)
                 if sim.FARFIELD_MODE == 'voxels':
-                    voxel_radius = np.sqrt(
-                        (ff_induction.COARSE_VOXEL_SIZE_X / 2.0)**2 +
-                        (ff_induction.COARSE_VOXEL_SIZE_Y / 2.0)**2 +
-                        (ff_induction.COARSE_VOXEL_SIZE_Z / 2.0)**2
-                    )
-                    for tpc_idx in active_tpc_indices_all:
-                        tpc_tracks = all_selected_tracks[all_selected_tracks['pixel_plane'] == tpc_idx]
-                        if len(tpc_tracks) == 0:
-                            voxel_cache[int(tpc_idx)] = {"x": None, "y": None, "z": None, "q": None}
-                            continue
-
-                        voxel_indices, voxel_charges, grid_shape, voxel_size, bounds = voxelization.gpu_voxelize(
-                            tpc_tracks, tpc_borders=detector.TPC_BORDERS[[tpc_idx]]
-                        )
-                        if len(voxel_indices) > 0:
-                            vx, vy, vz = voxelization.voxel_id_to_coordinates(voxel_indices, grid_shape, voxel_size, bounds)
-                            voxel_cache[int(tpc_idx)] = {
-                                "x": cp.asarray(vx, dtype=cp.float32),
-                                "y": cp.asarray(vy, dtype=cp.float32),
-                                "z": cp.asarray(vz, dtype=cp.float32),
-                                "q": cp.asarray(voxel_charges, dtype=cp.float32),
-                            }
-                        else:
-                            voxel_cache[int(tpc_idx)] = {"x": None, "y": None, "z": None, "q": None}
+                    voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
             RangePop()
 
             pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,

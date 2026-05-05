@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Optional, TypedDict
 
 import cupy as cp
 import cupy.typing as cpt
@@ -10,7 +10,16 @@ import numpy.typing as npt
 from ..consts import detector, ff_induction
 
 
+# Type definitions
+
+# ((x_min, x_max), (y_min, y_max), (z_min, z_max))
 Bounds = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+
+class VoxelDict(TypedDict):
+    x: Optional[cpt.NDArray[cp.float32]]
+    y: Optional[cpt.NDArray[cp.float32]]
+    z: Optional[cpt.NDArray[cp.float32]]
+    q: Optional[cpt.NDArray[cp.float32]]
 
 
 def voxel_id_to_coordinates(
@@ -254,3 +263,42 @@ def voxelize_segments_kernel(
             iz += step_z
             t = tMaxZ
             tMaxZ += tDeltaZ
+
+
+def get_voxel_cache(tracks: cpt.NDArray) -> dict[int, VoxelDict]:
+    """Get cache of voxels for each TPC.
+
+    Args:
+        tracks: structured track array (fields: x_start, y_start, z_start,
+            x_end, y_end, z_end, n_electrons, pixel_plane, ...)
+
+    Returns:
+        Dict from TPC index to a VoxelDict
+    """
+    cache = {}
+    active_tpcs = np.unique(tracks['pixel_plane'].astype(np.int32))
+
+    for tpc_idx in active_tpcs:
+        cache[int(tpc_idx)] = {"x": None, "y": None, "z": None, "q": None}
+        tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
+
+        if len(tpc_tracks) == 0:
+            continue
+
+        indices, charges, grid_shape, voxel_size, bounds = gpu_voxelize(
+            tpc_tracks, tpc_borders=detector.TPC_BORDERS[[tpc_idx]])
+
+        if len(indices) == 0:
+            continue
+
+        vx, vy, vz = voxel_id_to_coordinates(indices, grid_shape, voxel_size, bounds)
+
+        cache[int(tpc_idx)] = {
+            "x": cp.asarray(vx, dtype=cp.float32),
+            "y": cp.asarray(vy, dtype=cp.float32),
+            "z": cp.asarray(vz, dtype=cp.float32),
+            "q": cp.asarray(charges, dtype=cp.float32),
+        }
+
+    return cache
+

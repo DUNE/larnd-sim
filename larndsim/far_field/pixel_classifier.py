@@ -377,3 +377,26 @@ def classify_pixels(
         induction_pixels_x=induction_pixels_x_gpu,
         induction_pixels_y=induction_pixels_y_gpu,
     )
+
+
+def get_classification_cache(segments: cpt.NDArray) \
+        -> dict[int, PixelClassificationResult]:
+    """Get cache of pixel classes for all active TPCs.
+
+    Args:
+        segments: (n_segments,) structured array with fields:
+            - x_start, y_start, z_start, x_end, y_end, z_end (cm)
+            - n_electrons (float)
+            - pixel_plane (int)
+
+    Returns:
+        Dict from TPC index to PixelClassificationResult
+    """
+    cache = {}
+    active_tpcs = np.unique(segments['pixel_plane'].astype(np.int32))
+    segments_cpu = cp.asnumpy(segments)
+
+    for tpc_idx in active_tpcs:
+        cache[int(tpc_idx)] = classify_pixels(segments_cpu, plane_id=int(tpc_idx))
+
+    return cache
