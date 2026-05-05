@@ -10,7 +10,7 @@ import numpy.typing as npt
 from ..consts import detector, ff_induction
 
 
-type Bounds = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+Bounds = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
 
 
 def voxel_id_to_coordinates(
