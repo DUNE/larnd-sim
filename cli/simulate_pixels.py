@@ -194,6 +194,8 @@ def do_digitize_and_update(results_acc: dict[str, Any],
         rng_states: Result of e.g. create_xoroshiro128p_states
 
     """
+    from larndsim.consts import detector, sim
+
     time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time,
                            detector.TIME_SAMPLING)
     integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
@@ -298,6 +300,8 @@ def do_save_results(
         compression: Optional file compression mode (e.g. 'lzf', 'gzip')
         bad_channels: Optional dict with list of bad channels for each chip key
     """
+    from larndsim.consts import detector, light, sim
+
     for key in list(results.keys()):
         if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
             results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
