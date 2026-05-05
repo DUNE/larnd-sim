@@ -630,18 +630,21 @@ def run_simulation(input_filename,
         RangePop()
 
         RangePush("load_pixel_thresholds")
+        pixel_thresholds_lut = None
         if pixel_thresholds_file is not None:
             print("Pixel thresholds file:", pixel_thresholds_file)
             pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
         RangePop()
 
         RangePush("load_pixel_gains")
+        pixel_gains_lut = None
         if pixel_gains_file is not None:
             print("Pixel gains file:", pixel_gains_file)
             pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
         RangePop()
 
         RangePush("load_pixel_pedestals")
+        pixel_pedestals_lut = None
         if pixel_pedestals_file is not None:
             print("Pixel pedestals file:", pixel_pedestals_file)
             pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
