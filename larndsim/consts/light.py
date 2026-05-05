@@ -52,7 +52,7 @@ IMPULSE_TICK_SIZE = 0.01 # 10 ns a tick for the response measurement
 
 #: Number of SiPMs per detector (used by trigger)
 OP_CHANNEL_PER_TRIG = 6
-#: Light trigger mode (0: threshold each module, 1: beam and threshold)
+#: Light trigger mode (0=threshold each module, 1=beam and threshold)
 LIGHT_TRIG_MODE = 0
 #: Total detector light threshold [ADC] (one value for every OP_CHANNEL_PER_TRIG detector sum)
 LIGHT_TRIG_THRESHOLD = np.zeros((0,))

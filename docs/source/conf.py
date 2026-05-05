@@ -138,6 +138,7 @@ intersphinx_mapping = {
     'numpy':  ('https://numpy.org/doc/stable', None),
     'cupy':   ('https://docs.cupy.dev/en/stable/', None),
     'h5py':   ('https://docs.h5py.org/en/stable', None),
+    'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
 }
 
 # -- Options for HTML output --------------------------------------------------

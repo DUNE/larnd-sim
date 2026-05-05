@@ -28,7 +28,7 @@ def get_nticks(light_incidence):
     event (plus the desired pre- and post-intervals)
 
     Args:
-        light_incidence(array): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
+        light_incidence(:obj:`numpy.ndarray`): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
 
     Returns:
         tuple: number of time ticks (`int`), time of first tick (`float`) [in microseconds]
@@ -46,10 +46,10 @@ def get_active_op_channel(light_incidence):
     Returns an array of optical channels that need to be simulated
 
     Args:
-        light_incidence(array): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
+        light_incidence(:obj:`numpy.ndarray`): shape `(ntracks, ndet)`, containing first hit time and number of photons on each detector
 
     Returns:
-        array: shape `(ndet_active,)` op detector index of each active channel (`int`)
+        :obj:`numpy.ndarray`: shape `(ndet_active,)` op detector index of each active channel (`int`)
     """
     mask = light_incidence['n_photons_det'] > 0
     if np.any(mask):
@@ -62,17 +62,17 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
     Sums the number of photons observed by each light detector at each time tick
 
     Args:
-        segments(array): shape `(ntracks,)`, edep-sim tracks to simulate
-        segment_voxel(array): shape `(ntracks, 3)`, LUT voxel for eack edep-sim track
-        segment_track_id(array): shape `(ntracks,)`, unique id for each track segment (for MC truth backtracking)
-        light_inc(array): shape `(ntracks, ndet)`, number of photons incident on each detector and voxel id
-        op_channel(array): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
-        lut(array): shape `(nx,ny,nz,ndet_tpc)`, light look up table
+        segments(:obj:`numpy.ndarray`): shape `(ntracks,)`, edep-sim tracks to simulate
+        segment_voxel(:obj:`numpy.ndarray`): shape `(ntracks, 3)`, LUT voxel for eack edep-sim track
+        segment_track_id(:obj:`numpy.ndarray`): shape `(ntracks,)`, unique id for each track segment (for MC truth backtracking)
+        light_inc(:obj:`numpy.ndarray`): shape `(ntracks, ndet)`, number of photons incident on each detector and voxel id
+        op_channel(:obj:`numpy.ndarray`): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
+        lut(:obj:`numpy.ndarray`): shape `(nx,ny,nz,ndet_tpc)`, light look up table
         start_time(float): start time of light simulation in microseconds
-        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propagation delay only)
-        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propagation delay only)
-        light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
-        sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
+        light_sample_inc(:obj:`numpy.ndarray`): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propagation delay only)
+        light_sample_inc_true_track_id(:obj:`numpy.ndarray`): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propagation delay only)
+        light_sample_inc_true_photons(:obj:`numpy.ndarray`): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
+        sorted_indices(:obj:`numpy.ndarray`): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
     """
     idet,itick = cuda.grid(2)
 
@@ -153,7 +153,7 @@ def scintillation_array(scint_model):
     the entire input array.
     
     Args:
-        scint_model: array to store result
+        scint_model (:obj:`numpy.ndarray`): array to store result
     """
     for time_tick in range(scint_model.shape[0]):
         p1 = light.SINGLET_FRACTION * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_S) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_S))
@@ -167,8 +167,8 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
     a two decay component scintillation model.
     
     Args:
-        light_sample_inc(array): shape `(ndet, ntick)`, light incident on each detector
-        light_sample_inc_scint(array): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
+        light_sample_inc(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, light incident on each detector
+        light_sample_inc_scint(:obj:`numpy.ndarray`): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
     """
     idet,itick = cuda.grid(2)
 
@@ -210,7 +210,7 @@ def xoroshiro128p_poisson_int32(mean, states, index):
     
     Args:
         mean(float): mean of poisson distribution
-        states(array): array of RNG states
+        states(:obj:`numpy.ndarray`): array of RNG states
         index(int): offset in states to update
     """
     if mean <= 0:
@@ -238,9 +238,9 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
     Simulates Poisson fluctuations in the number of PE per time tick.
     
     Args:
-        light_sample_inc(array): shape `(ndet, ntick)`, effective photocurrent on each detector
-        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stochastic fluctuations)
-        rng_states(array): shape `(>ndet*ntick,)`, random number states
+        light_sample_inc(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, effective photocurrent on each detector
+        light_sample_inc_disc(:obj:`numpy.ndarray`): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stochastic fluctuations)
+        rng_states(:obj:`numpy.ndarray`): shape `(>ndet*ntick,)`, random number states
     """
     idet,itick = cuda.grid(2)
 
@@ -261,7 +261,7 @@ def interp(idx, arr, low, high):
 
     Args:
         idx(float): index into array to interpolate
-        arr(array): 1D array of values to interpolate
+        arr(:obj:`numpy.ndarray`): 1D array of values to interpolate
         low(float): value to return if index is less than 0
         high(float): value to return if index is above `len(arr)-1`
 
@@ -319,7 +319,7 @@ def sipm_response_array(sipm_response):
     for the given array
     
     Args:
-        sipm_response: array to store response
+        sipm_response (:obj:`numpy.ndarray`): array to store response
     """
     if light.SIPM_RESPONSE_MODEL == 0:
         for time_tick in range(sipm_response.shape[0]):
@@ -339,8 +339,8 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
     Simulates the SiPM response and digit
     
     Args:
-        light_sample_inc(array): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
-        light_response(array): shape `(ndet, ntick)`, ADC value at each time tick
+        light_sample_inc(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
+        light_response(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, ADC value at each time tick
     """
     idet,itick = cuda.grid(2)
 
@@ -375,10 +375,10 @@ def gen_light_detector_noise(shape, light_det_noise):
     
     Args:
         shape(tuple): desired shape of output noise, `shape[0]` must equal `light_det_noise.shape[0]`
-        light_det_noise(array): FFT of noise, `light_det_noise.ndim == 2`
+        light_det_noise(:obj:`numpy.ndarray`): FFT of noise, `light_det_noise.ndim == 2`
         
     Returns:
-        array: shape `(shape[0], shape[1])`, randomly generated sample noise
+        :obj:`numpy.ndarray`: shape `(shape[0], shape[1])`, randomly generated sample noise
     """
     if not shape[0]:
         return cp.empty(shape)
@@ -415,9 +415,9 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
     Identifies each simulated ticks that would initiate a trigger taking into account the ADC digitization window
     
     Args:
-        signal(array): shape `(ndet, nticks)`, simulated signal on each channel
-        group_threshold(array): shape `(ngrp,)`, threshold on group sum (requires `ndet/ngrp == OP_CHANNEL_PER_TRIG`)
-        op_channel_idx(array): shape `(ndet,)`, optical channel index for each signal
+        signal(:obj:`numpy.ndarray`): shape `(ndet, nticks)`, simulated signal on each channel
+        group_threshold(:obj:`numpy.ndarray`): shape `(ngrp,)`, threshold on group sum (requires `ndet/ngrp == OP_CHANNEL_PER_TRIG`)
+        op_channel_idx(:obj:`numpy.ndarray`): shape `(ndet,)`, optical channel index for each signal
         i_subbatch(int): index of the sub_batch numbering ("itrk in the batch for loop")
         
     Returns:
@@ -516,11 +516,11 @@ def digitize_signal(signal, signal_op_channel_idx, trigger_idx, trigger_op_chann
     Interpolate signal to the appropriate sampling frequency
     
     Args:
-        signal(array): shape `(ndet, nticks)`, simulated signal on each channel
-        signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
-        trigger_idx(array): shape `(ntrigs,)`, tick index for each trigger
-        trigger_op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
-        digit_signal(array): output array, shape `(ntrigs, ndet_module, nsamples)`, digitized signal
+        signal(:obj:`numpy.ndarray`): shape `(ndet, nticks)`, simulated signal on each channel
+        signal_op_channel_idx(:obj:`numpy.ndarray`): shape `(ndet,)`, optical channel index for each simulated signal
+        trigger_idx(:obj:`numpy.ndarray`): shape `(ntrigs,)`, tick index for each trigger
+        trigger_op_channel_idx(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
+        digit_signal(:obj:`numpy.ndarray`): output array, shape `(ntrigs, ndet_module, nsamples)`, digitized signal
     """
     itrig,idet_module,isample = cuda.grid(3)
     
@@ -582,17 +582,17 @@ def sim_triggers(bpg, tpb, signal, signal_op_channel_idx, signal_true_track_id, 
     Args:
         bpg(tuple): blocks per grid used to generate digitized waveforms, `len(bpg) == 3`, `prod(bpg) * prod(tpb) >= digit_samples.size`
         tpb(tuple): threads per grid used to generate digitized waveforms, `len(bpg) == 3`, `bpg[i] * tpb[i] >= digit_samples.shape[i]`
-        signal(array): shape `(ndet, nticks)`, simulated signal on each channel
-        signal_op_channel_idx(array): shape `(ndet,)`, optical channel index for each simulated signal
-        signal_true_track_id(array): shape `(ndet, nticks, ntruth)`, true segments associated with each tick
-        signal_true_photons(array): shape `(ndet, nticks, ntruth)`, true photons associated with each tick from each track
-        trigger_idx(array): shape `(ntrigs,)`, tick index for each trigger to digitize
-        op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel indices for each trigger
+        signal(:obj:`numpy.ndarray`): shape `(ndet, nticks)`, simulated signal on each channel
+        signal_op_channel_idx(:obj:`numpy.ndarray`): shape `(ndet,)`, optical channel index for each simulated signal
+        signal_true_track_id(:obj:`numpy.ndarray`): shape `(ndet, nticks, ntruth)`, true segments associated with each tick
+        signal_true_photons(:obj:`numpy.ndarray`): shape `(ndet, nticks, ntruth)`, true photons associated with each tick from each track
+        trigger_idx(:obj:`numpy.ndarray`): shape `(ntrigs,)`, tick index for each trigger to digitize
+        op_channel_idx(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module)`, optical channel indices for each trigger
         digit_samples(int): number of digitizations per waveform
-        light_det_noise(array): shape `(ndet, nnoise_bins)`, noise spectrum for each channel (only used if waveforms extend past simulated signal)
+        light_det_noise(:obj:`numpy.ndarray`): shape `(ndet, nnoise_bins)`, noise spectrum for each channel (only used if waveforms extend past simulated signal)
         
     Returns:
-        array: shape `(ntrigs, ndet_module, digit_samples)`, digitized waveform on each channel for each trigger
+        :obj:`numpy.ndarray`: shape `(ntrigs, ndet_module, digit_samples)`, digitized waveform on each channel for each trigger
     """
     digit_signal = cp.zeros((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples), dtype='f8')
     digit_signal_true_track_id = cp.full((trigger_idx.shape[0], op_channel_idx.shape[-1], digit_samples, signal_true_track_id.shape[-1]), -1, dtype=signal_true_track_id.dtype)
@@ -657,14 +657,14 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
 
     Args:
         i_evt(int): event id
-        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
-        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        waveforms_true_track_id(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
         i_evt(int): true event id 
         i_trig(int): light trigger or light event id
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
 
     Returns:
-        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be inferred from `segment_id` but the information helps searching the corresponding reco information from a true event.
+        :obj:`numpy.ndarray`: 1D array that logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be inferred from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
@@ -690,11 +690,11 @@ def export_light_wvfm_to_hdf5(event_id, waveforms, output_filename, waveforms_tr
     Saves waveforms to output file
     
     Args:
-        event_id(array): shape `(ntrigs,)`, event id for each trigger
-        waveforms(array): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
+        event_id(:obj:`numpy.ndarray`): shape `(ntrigs,)`, event id for each trigger
+        waveforms(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
         output_filename(str): output hdf5 file path
-        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
-        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        waveforms_true_track_id(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
     
     """
@@ -742,12 +742,12 @@ def export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx
     Saves light trigger to output file
     
     Args:
-        event_id(array): shape `(ntrigs,)`, event id for each trigger
-        start_times(array): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
-        trigger_idx(array): shape `(ntrigs,)`, simulation time tick of each trigger
-        op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
+        event_id(:obj:`numpy.ndarray`): shape `(ntrigs,)`, event id for each trigger
+        start_times(:obj:`numpy.ndarray`): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
+        trigger_idx(:obj:`numpy.ndarray`): shape `(ntrigs,)`, simulation time tick of each trigger
+        op_channel_idx(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
         output_filename(str): output hdf5 file path
-        event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
+        event_times(:obj:`numpy.ndarray`): shape `(nevents,)`, global event t0 for each unique event [microseconds]
     
     """
     if event_id.shape[0] == 0:
@@ -774,15 +774,15 @@ def export_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, waveforms
     Saves waveforms to output file
 
     Args:
-        event_id(array): shape `(ntrigs,)`, event id for each trigger
-        start_times(array): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
-        trigger_idx(array): shape `(ntrigs,)`, simulation time tick of each trigger
-        op_channel_idx(array): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
-        waveforms(array): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
+        event_id(:obj:`numpy.ndarray`): shape `(ntrigs,)`, event id for each trigger
+        start_times(:obj:`numpy.ndarray`): shape `(ntrigs,)`, simulation time offset for each trigger [microseconds]
+        trigger_idx(:obj:`numpy.ndarray`): shape `(ntrigs,)`, simulation time tick of each trigger
+        op_channel_idx(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module)`, optical channel index for each trigger
+        waveforms(:obj:`numpy.ndarray`): shape `(ntrigs, ndet_module, nsamples)`, simulated waveforms to save
         output_filename(str): output hdf5 file path
-        event_times(array): shape `(nevents,)`, global event t0 for each unique event [microseconds]
-        waveforms_true_track_id(array): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
-        waveforms_true_photons(array): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
+        event_times(:obj:`numpy.ndarray`): shape `(nevents,)`, global event t0 for each unique event [microseconds]
+        waveforms_true_track_id(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, segment ids contributing to each sample
+        waveforms_true_photons(:obj:`numpy.ndarray`): shape `(ntrigs, ndet, nsamples)`, true photocurrent at each sample
 
     """
     export_light_trig_to_hdf5(event_id, start_times, trigger_idx, op_channel_idx, output_filename, event_times, compression)

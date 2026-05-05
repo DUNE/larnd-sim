@@ -68,11 +68,11 @@ def gen_event_times(nevents, t0=detector.NON_BEAM_EVENT_GAP):
     Generate sequential event times assuming events are uncorrelated
 
     Args:
-        nevents(int): number of event times to generate
-        t0(int): offset to apply [microseconds]
+        nevents (int): number of event times to generate
+        t0 (int): offset to apply [microseconds]
 
     Returns:
-        array: shape `(nevents,)`, sequential event times [microseconds]
+        :obj:`numpy.ndarray`: shape `(nevents,)`, sequential event times [microseconds]
     """
     event_start_time = cp.random.exponential(scale=detector.EVENT_RATE, size=int(nevents))
     event_start_time = cp.cumsum(event_start_time)
@@ -127,7 +127,7 @@ def export_to_hdf5(event_id_list,
         bad_channels (dict): dictionary mapping a chip key to a list of bad channels
         i_mod (int): module index for saving the result in each module
                 individually if needed.
-        compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
+        compression (:obj:`str`, optional): enable file compression of the output HDF5 datasets. Defaults to None,
                 supported options are 'lzf' and 'gzip'
 
     Returns:
@@ -522,8 +522,8 @@ def digitize(integral_list, gain=detector.GAIN, pedestal=detector.V_PEDESTAL):
     ADC counts.
 
     Args:
-        integral_list(:obj:`numpy.ndarray`): list of charge collected by each pixel
-        gain(:obj:`numpy.ndarray`): list of gain values (or float) for each pixel
+        integral_list (:obj:`numpy.ndarray`): list of charge collected by each pixel
+        gain (:obj:`numpy.ndarray`): list of gain values (or float) for each pixel
 
     Returns:
         :obj:`numpy.ndarray`: list of ADC values for each pixel
