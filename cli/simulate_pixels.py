@@ -10,6 +10,7 @@ import os
 from typing import Any, Optional
 
 import numpy as np
+import numpy.typing as npt
 import numpy.lib.recfunctions as rfn
 
 import cupy as cp
