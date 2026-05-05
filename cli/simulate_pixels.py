@@ -1487,7 +1487,8 @@ def run_simulation(input_filename,
                                     pixels_signals=pixels_signals,
                                     pixels_tracks_signals=pixels_tracks_signals,
                                     num_backtrack=num_backtrack,
-                                    offset_backtrack=offset_backtrack)
+                                    offset_backtrack=offset_backtrack,
+                                    max_signal_time=max_signal_time)
 
                 # Accumulate pixels processed via near-field path for this event batch
                 processed_pixels_event = cp.unique(cp.concatenate([processed_pixels_event, unique_pix]))
@@ -1568,7 +1569,8 @@ def run_simulation(input_filename,
                                         pixels_signals=pixels_signals,
                                         pixels_tracks_signals=pixels_tracks_signals,
                                         num_backtrack=num_backtrack,
-                                        offset_backtrack=offset_backtrack)
+                                        offset_backtrack=offset_backtrack,
+                                        max_signal_time=max_signal_time)
 
                     dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
                     results_acc['traj_pixel_map'].append(dummy_map)
