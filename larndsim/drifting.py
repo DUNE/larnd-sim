@@ -53,7 +53,7 @@ def drift(tracks):
             track["long_diff"] = sqrt(drift_time * 2 * detector.LONG_DIFF)
             track["tran_diff"] = sqrt(drift_time * 2 * detector.TRAN_DIFF)
 
-            # note t_start and t_end indicate the early and late ends in the segement drift time
+            # note t_start and t_end indicate the early and late ends in the segment drift time
             # which does not necessarily correspond to t0_start and t0_end
             track["t"] = drift_time + track["t0"]
             track["t_start"] = min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]

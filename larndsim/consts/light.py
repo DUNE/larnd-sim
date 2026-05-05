@@ -41,7 +41,7 @@ LIGHT_GAIN = np.zeros((0,))
 SIPM_RESPONSE_MODEL = 0
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
-#: Reponse oscillation period [microseconds]
+#: Response oscillation period [microseconds]
 LIGHT_OSCILLATION_PERIOD = 0.095
 #: Sample rate for input noise spectrum [microseconds]
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us

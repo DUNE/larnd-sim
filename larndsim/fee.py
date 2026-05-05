@@ -398,7 +398,7 @@ def export_sync_to_hdf5(filename, event, sync_times, i_mod, compression=None):
     sync_ticks = sync_times / detector.CLOCK_CYCLE # us -> time tick
     for sync_tick in sync_ticks:
         if sync_tick % detector.CLOCK_RESET_PERIOD != 0:
-            warnings.warn("The provided sync time is not the mutiply of the reset period!")
+            warnings.warn("The provided sync time is not a multiple of the reset period!")
             sync_tick = sync_tick // detector.CLOCK_RESET_PERIOD * detector.CLOCK_RESET_PERIOD
         for io_group in io_groups:
             packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))

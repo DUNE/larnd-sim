@@ -10,7 +10,7 @@ class CudaDict(object):
         Based on this project
         https://github.com/nosferalatu/SimpleGPUHashTable.git
 
-        Initialization is preformed via::
+        Initialization is performed via::
 
             cd = CudaDict(default=cp.array([0.]), tpb=256, bpg=256)
             cd[keys] = values

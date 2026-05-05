@@ -69,8 +69,8 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
         op_channel(array): shape `(ntracks, ndet_active)`, optical channel index, will use lut[:,:,:,op_channel%lut.shape[3]] to look up timing information
         lut(array): shape `(nx,ny,nz,ndet_tpc)`, light look up table
         start_time(float): start time of light simulation in microseconds
-        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propogation delay only)
-        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propogation delay only)
+        light_sample_inc(array): output array, shape `(ndet, nticks)`, number of photons incident on each detector at each time tick (propagation delay only)
+        light_sample_inc_true_track_id(array): output array, shape `(ndet, nticks, maxtracks)`, true track ids on each detector at each time tick (propagation delay only)
         light_sample_inc_true_photons(array): output array, shape `(ndet, nticks, maxtracks)`, number of photons incident on each detector at each time tick from each track
         sorted_indices(array): shape `(maxtracks,)`, indices of segments sorted by how much light they contribute
     """
@@ -239,7 +239,7 @@ def calc_stat_fluctuations(light_sample_inc, light_sample_inc_disc, rng_states):
     
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, effective photocurrent on each detector
-        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stocastic fluctuations)
+        light_sample_inc_disc(array): output array, shape `(ndet, ntick)`, effective photocurrent on each detector (with stochastic fluctuations)
         rng_states(array): shape `(>ndet*ntick,)`, random number states
     """
     idet,itick = cuda.grid(2)
@@ -336,7 +336,7 @@ def sipm_response_array(sipm_response):
 @cuda.jit
 def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
     """
-    Simulates the SiPM reponse and digit
+    Simulates the SiPM response and digit
     
     Args:
         light_sample_inc(array): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
@@ -489,7 +489,7 @@ def get_triggers(signal, group_threshold, op_channel_idx, i_subbatch):
         ## 2. potentially an off-beam event if ever simulated together with the beam, will be considered as a separate event
         ##    therefore, likely will not be in the same batch
         ##    if we ever overlay beam and off-beam, we should consider if we should compare the two signals and overlay the two light signals
-        ##    wether they would be in the same readout window; how to deal with the dead time between the two triggers etc...
+        ##    whether they would be in the same readout window; how to deal with the dead time between the two triggers etc...
         #module_above_thresh = np.any(sample_above_thresh, axis=0)
         #module_above_thresh = module_above_thresh[digit_ticks:]
         #last_trigger = digit_ticks
@@ -664,12 +664,12 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
         i_mod(int): module id. The default value is -1 which indicates that there is no modular variation activated.
 
     Returns:
-        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be infered from `segment_id` but the information helps searching the corresponding reco information from a true event.
+        1D array which logs ['trigger_id', 'op_channel_id', 'tick', 'event_id', 'segment_id', 'pe_current']. The first three locate a unique data point on a recorded light waveform, and the last three provide the truth information associated to it. `event_id` can be inferred from `segment_id` but the information helps searching the corresponding reco information from a true event.
     """
 
     op_channel = light.TPC_TO_OP_CHANNEL[(i_mod-1)*2:i_mod*2].ravel() if i_mod > 0 else light.TPC_TO_OP_CHANNEL[:].ravel()
 
-    # Get indices of those valid entires and destructure the tuple
+    # Get indices of those valid entries and destructure the tuple
     idx0, idx1, idx2, idx3 = np.nonzero(waveforms_true_track_id != -1)
     num_idx = len(idx0) # Total number of non-default entries
 

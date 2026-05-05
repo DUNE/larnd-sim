@@ -35,7 +35,7 @@ MAX_ADC_VALUES = 30
 
 #: Number of true segments to track for each time tick (`MAX_MC_TRUTH_IDS=0` to disable complete truth tracking)
 MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
-#: Threshold for propogating truth information on a given SiPM
+#: Threshold for propagating truth information on a given SiPM
 MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
 def set_simulation_properties(simprop_file):

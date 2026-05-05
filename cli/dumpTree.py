@@ -192,7 +192,7 @@ def dump(input_file, output_file, keep_all_dets=False):
     # print("Class: ", inputTree.ClassName())
 
     # IF CRASH: Uncomment this section (also see IF CRASH below)
-    # Attach a brach to the events.
+    # Attach a branch to the events.
     event = TG4Event()
     inputTree.SetBranchAddress("Event",event)
 

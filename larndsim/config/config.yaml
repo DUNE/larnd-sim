@@ -36,7 +36,7 @@ module0:
     SIM_PROPERTIES:  singles_sim_no_modvar.yaml
     DET_PROPERTIES:  2x2_non_beam_no_modvar.yaml
 
-# 2x2 (differnt module configuration), beam
+# 2x2 (different module configuration), beam
 2x2: &2x2modvar
     <<: *2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim.yaml
@@ -62,13 +62,13 @@ module0:
     LIGHT_LUT:       [/dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod0_06052024_time_norm_swapped_y_fp16.npz, /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_Mod123_06052024_time_norm_swapped_y_fp16.npz]
     LIGHT_LUT_ID:    [0, 1, 1, 1]
 
-# 2x2 (differnt module configuration), single pixel threshold (defined in detector property)
+# 2x2 (different module configuration), single pixel threshold (defined in detector property)
 2x2_single_threshold:
     <<: *2x2modvar
     PIXEL_THRESHOLDS_FILE: None
     PIXEL_THRESHOLDS_ID: None
 
-# 2x2 (differnt module configuration), mpvmpr
+# 2x2 (different module configuration), mpvmpr
 2x2_mpvmpr:
     <<: *2x2modvar
     SIM_PROPERTIES:  singles_sim.yaml
