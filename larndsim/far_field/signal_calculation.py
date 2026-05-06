@@ -218,7 +218,8 @@ def calculate_ff_segments(
             if exclude_radius > 0.0:
                 dx_xy = abs(x - x_pixel)
                 dy_xy = abs(y - y_pixel)
-                if dx_xy <= exclude_radius and dy_xy <= exclude_radius:
+                dr2 = dx_xy*dx_xy + dy_xy*dy_xy
+                if dr2 <= exclude_radius*exclude_radius:
                     continue
 
             drift_distance = detector.V_DRIFT * t
