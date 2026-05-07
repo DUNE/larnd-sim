@@ -358,4 +358,7 @@ def launch_ffe_kernel(
             e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
             raise RuntimeError(e)
 
+    if category == 0:
+        print(f'Tot: {cp.sum(output)}')
+
     return output
