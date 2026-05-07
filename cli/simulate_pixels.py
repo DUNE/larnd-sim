@@ -167,6 +167,7 @@ def do_digitize_and_update(results_acc: dict[str, Any],
                            pixel_pedestals_lut: Optional[CudaDict],
                            rand_seed: int,
                            rng_states: cpt.NDArray,
+                           dump: bool=False,
 ):
     """
     Helper function for calling get_adc_values and updating the results.
@@ -253,6 +254,9 @@ def do_digitize_and_update(results_acc: dict[str, Any],
     results_acc['adc_tot_ticks'].append(adc_ticks_list)
     results_acc['unique_pix'].append(unique_pix)
     results_acc['current_fractions'].append(current_fractions)
+
+    if dump:
+        print(f'FF-only hits: Shape {adc_list.shape}, sum {adc_list.sum()}')
 
 
 def do_save_results(
@@ -1574,7 +1578,8 @@ def run_simulation(input_filename,
                                         pixels_tracks_signals=pixels_tracks_signals,
                                         num_backtrack=num_backtrack,
                                         offset_backtrack=offset_backtrack,
-                                        max_signal_time=max_signal_time)
+                                        max_signal_time=max_signal_time,
+                                        dump=True)
 
                     dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
                     results_acc['traj_pixel_map'].append(dummy_map)
