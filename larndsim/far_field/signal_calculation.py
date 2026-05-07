@@ -145,6 +145,7 @@ def calculate_ff_segments(
     pixel_y: cpt.NDArray[cp.float32],
     z_anode: float,
     z_cathode: float,
+    exclude_radius: float,
     output: cp.ndarray[tuple[int, int], cp.float32]
 ):
     """
@@ -159,6 +160,7 @@ def calculate_ff_segments(
             x_end, y_end, z_end, n_electrons, pixel_plane, ...)
         pixel_x/y: (n_pixels,) array of x/y-positions of each pixel's center
         z_anode/cathode: Drift coordinate of the anode/cathode
+        exclude_radius: Minimum transverse "distance" from pixel to charge
         output: (n_pixels, n_ticks) array of current signals
     """
     p_idx, t_idx = cuda.grid(2)
@@ -174,7 +176,6 @@ def calculate_ff_segments(
 
     n_segments = tracks.shape[0]
     l = abs(z_cathode - z_anode)
-    exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
 
     for s_idx in range(n_segments):
         segment = tracks[s_idx]
@@ -339,10 +340,14 @@ def launch_ffe_kernel(
         if len(tpc_tracks) == 0:
             return
 
+        exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+        if category == 0:
+            exclude_radius = 0
+
         calculate_ff_segments[BPG, TPB](
             tpc_tracks,
             pixel_x, pixel_y,
-            z_anode, z_cathode, output)
+            z_anode, z_cathode, exclude_radius, output)
 
     match sim.FARFIELD_MODE:
         case 'voxels':
