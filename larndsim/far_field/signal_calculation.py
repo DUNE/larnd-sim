@@ -138,7 +138,10 @@ def calculate_ff_voxels(
         # total_current += -q * detector.V_DRIFT * dWdz
         total_current += q * math.sqrt(dx*dx + dy*dy)
     
-    output[p_idx, t_idx] = total_current / total_charge
+    if total_charge > 0:
+        output[p_idx, t_idx] = total_current / total_charge
+    else:
+        output[p_idx, t_idx] = 0.
 
 
 @cuda.jit
