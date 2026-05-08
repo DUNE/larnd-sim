@@ -64,6 +64,7 @@ def calculate_ff_voxels(
 
     # Sum contributions from all voxels
     total_current = 0.0
+    total_charge = 0.0
     
     for v_idx in range(n_voxels):
         # Get initial positions
@@ -133,9 +134,11 @@ def calculate_ff_voxels(
         # Induced current (Eq. 3.23): I = -q * v_d * dW/dz (negative sign for electron charge)
         # Scale by voxel charge
         q = charges[v_idx] * weight
-        total_current += -q * detector.V_DRIFT * dWdz
+        total_charge += q
+        # total_current += -q * detector.V_DRIFT * dWdz
+        total_current += q * math.sqrt(dx*dx + dy*dy)
     
-    output[p_idx, t_idx] = total_current
+    output[p_idx, t_idx] = total_current / total_charge
 
 
 @cuda.jit
