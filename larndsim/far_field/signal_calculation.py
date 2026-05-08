@@ -179,6 +179,7 @@ def calculate_ff_segments(
     y_pixel = pixel_y[p_idx]
     t = t_idx * detector.TIME_SAMPLING
     total_current = 0.0
+    total_charge = 0.0
 
     n_segments = tracks.shape[0]
     l = abs(z_cathode - z_anode)
@@ -246,9 +247,14 @@ def calculate_ff_segments(
             C = detector.RESPONSE_SAMPLING # scale to near-field reponse's time tick
             dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
 
-            total_current += -q_piece * detector.V_DRIFT * dWdz
+            total_charge += q_piece
+            # total_current += -q_piece * detector.V_DRIFT * dWdz
+            total_current += q_piece * math.sqrt(dx*dx + dy*dy)
 
-    output[p_idx, t_idx] = total_current
+    if total_charge > 0:
+        output[p_idx, t_idx] = total_current / total_charge
+    else:
+        output[p_idx, t_idx] = 0.
 
 
 @nb.njit
