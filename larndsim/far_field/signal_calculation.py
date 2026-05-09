@@ -267,14 +267,14 @@ def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> floa
     # Image dipole terms
     term_sum = 0.0
     for n in range(1, n_terms+1):
-        # Positive image: z + 2nl
-        dz_p = dz + 2*n*l
+        # Positive image: z + (2^n)l
+        dz_p = dz + (2**n)*l
         r_p_sq = dx*dx + dy*dy + dz_p*dz_p
         if r_p_sq > 1e-20:
             r_p = math.sqrt(r_p_sq)
             term_sum += (r_p_sq - 3.0*dz_p*dz_p) / (r_p_sq*r_p_sq*r_p)
-        # Negative image: z - 2nl
-        dz_m = dz - 2*n*l
+        # Negative image: z - (2^n)l
+        dz_m = dz - (2**n)*l
         r_m_sq = dx*dx + dy*dy + dz_m*dz_m
         if r_m_sq > 1e-20:
             r_m = math.sqrt(r_m_sq)
