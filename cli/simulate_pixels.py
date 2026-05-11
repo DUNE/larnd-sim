@@ -1265,6 +1265,13 @@ def run_simulation(input_filename,
                     pixel_classifier.get_classification_cache(all_selected_tracks)
                 if sim.FARFIELD_MODE == 'voxels':
                     voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
+                    if unique_eventIDs[0] == 123000101:
+                        np.savez('voxels.npz',
+                                 x=cp.asnumpy(voxel_cache['x']),
+                                 y=cp.asnumpy(voxel_cache['y']),
+                                 z=cp.asnumpy(voxel_cache['z']),
+                                 q=cp.asnumpy(voxel_cache['q']))
+                        return
             RangePop()
 
             pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
