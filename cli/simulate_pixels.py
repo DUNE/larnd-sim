@@ -1267,10 +1267,10 @@ def run_simulation(input_filename,
                     voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
                     if unique_eventIDs[0] == 123000101:
                         np.savez('voxels.npz',
-                                 x=cp.asnumpy(voxel_cache['x']),
-                                 y=cp.asnumpy(voxel_cache['y']),
-                                 z=cp.asnumpy(voxel_cache['z']),
-                                 q=cp.asnumpy(voxel_cache['q']))
+                                 x=cp.asnumpy(voxel_cache[0]['x']),
+                                 y=cp.asnumpy(voxel_cache[0]['y']),
+                                 z=cp.asnumpy(voxel_cache[0]['z']),
+                                 q=cp.asnumpy(voxel_cache[0]['q']))
                         return
             RangePop()
 
