@@ -46,7 +46,7 @@ def rotate_tile(pixel_id, tile_id):
         tile_id(int): tile ID
 
     Returns:
-        tuple: pixel indeces
+        tuple: pixel indices
     """
     axes = detector.TILE_ORIENTATIONS[tile_id]
     x_axis = axes[2]
@@ -68,11 +68,11 @@ def gen_event_times(nevents, t0=detector.NON_BEAM_EVENT_GAP):
     Generate sequential event times assuming events are uncorrelated
 
     Args:
-        nevents(int): number of event times to generate
-        t0(int): offset to apply [microseconds]
+        nevents (int): number of event times to generate
+        t0 (int): offset to apply [microseconds]
 
     Returns:
-        array: shape `(nevents,)`, sequential event times [microseconds]
+        :obj:`numpy.ndarray`: shape `(nevents,)`, sequential event times [microseconds]
     """
     event_start_time = cp.random.exponential(scale=detector.EVENT_RATE, size=int(nevents))
     event_start_time = cp.cumsum(event_start_time)
@@ -98,6 +98,7 @@ def export_to_hdf5(event_id_list,
                    compression=None):
     """
     Saves the ADC counts in the LArPix HDF5 format.
+
     Args:
         event_id_list (:obj:`numpy.ndarray`): event ids for each tick;
                 shape (nticks, max_adcs); dtype uint32
@@ -108,16 +109,16 @@ def export_to_hdf5(event_id_list,
         unique_pix (:obj:`numpy.ndarray`): pixel IDs for each tick;
                 shape (nticks,); dtype int32
         current_fractions (:obj:`numpy.ndarray`): fractional current induced by
-            each track on each pixel;
+                each track on each pixel;
                 shape (nticks, max_adcs, max_backtracks); dtype float64
         track_ids (:obj:`numpy.ndarray`): track IDs associated to each pixel;
                 shape (nticks, max_backtracks); dtype int64
         filename (str): filename of HDF5 output file
         event_start_times (:obj:`numpy.ndarray`): timestamps of start of each
-            unique event [in microseconds];
+                unique event [in microseconds];
                 shape (nevents,); dtype float64
         light_trigger_times (:obj:`numpy.ndarray`): light trigger timestamps
-            (relative to event t0) [in microseconds];
+                (relative to event t0) [in microseconds];
                 shape (ntrigs,); dtype float64
         light_trigger_event_id (:obj:`numpy.ndarray`): event id for each light trigger;
                 shape (ntrigs,); dtype uint32
@@ -125,12 +126,13 @@ def export_to_hdf5(event_id_list,
                 shape (ntrigs,); dtype int64
         bad_channels (dict): dictionary mapping a chip key to a list of bad channels
         i_mod (int): module index for saving the result in each module
-            individually if needed.
-        compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
-            supported options are 'lzf' and 'gzip'
+                individually if needed.
+        compression (:obj:`str`, optional): enable file compression of the output HDF5 datasets. Defaults to None,
+                supported options are 'lzf' and 'gzip'
+
     Returns:
         tuple: a tuple containing the list of LArPix packets and the list of
-            entries for the `mc_packets_assn` dataset
+                entries for the `mc_packets_assn` dataset
     """
 
     io_groups = np.unique(np.array(list(detector.MODULE_TO_IO_GROUPS.values())))
@@ -396,7 +398,7 @@ def export_sync_to_hdf5(filename, event, sync_times, i_mod, compression=None):
     sync_ticks = sync_times / detector.CLOCK_CYCLE # us -> time tick
     for sync_tick in sync_ticks:
         if sync_tick % detector.CLOCK_RESET_PERIOD != 0:
-            warnings.warn("The provided sync time is not the mutiply of the reset period!")
+            warnings.warn("The provided sync time is not a multiple of the reset period!")
             sync_tick = sync_tick // detector.CLOCK_RESET_PERIOD * detector.CLOCK_RESET_PERIOD
         for io_group in io_groups:
             packets.append(SyncPacket(sync_type=b'S', timestamp=sync_tick, io_group=io_group))
@@ -520,8 +522,8 @@ def digitize(integral_list, gain=detector.GAIN, pedestal=detector.V_PEDESTAL):
     ADC counts.
 
     Args:
-        integral_list(:obj:`numpy.ndarray`): list of charge collected by each pixel
-        gain(:obj:`numpy.ndarray`): list of gain values (or float) for each pixel
+        integral_list (:obj:`numpy.ndarray`): list of charge collected by each pixel
+        gain (:obj:`numpy.ndarray`): list of gain values (or float) for each pixel
 
     Returns:
         :obj:`numpy.ndarray`: list of ADC values for each pixel

@@ -41,7 +41,7 @@ LIGHT_GAIN = np.zeros((0,))
 SIPM_RESPONSE_MODEL = 0
 #: Response RC time [microseconds]
 LIGHT_RESPONSE_TIME = 0.055
-#: Reponse oscillation period [microseconds]
+#: Response oscillation period [microseconds]
 LIGHT_OSCILLATION_PERIOD = 0.095
 #: Sample rate for input noise spectrum [microseconds]
 LIGHT_DET_NOISE_SAMPLE_SPACING = 0.01 # us
@@ -52,7 +52,7 @@ IMPULSE_TICK_SIZE = 0.01 # 10 ns a tick for the response measurement
 
 #: Number of SiPMs per detector (used by trigger)
 OP_CHANNEL_PER_TRIG = 6
-#: Light trigger mode (0: threshold each module, 1: beam and threshold)
+#: Light trigger mode (0=threshold each module, 1=beam and threshold)
 LIGHT_TRIG_MODE = 0
 #: Total detector light threshold [ADC] (one value for every OP_CHANNEL_PER_TRIG detector sum)
 LIGHT_TRIG_THRESHOLD = np.zeros((0,))

@@ -12,29 +12,41 @@ MAX_NEIGHBOR_BACKTRACK_DISTANCE=4
 @nb.njit
 def pixel2id(pixel_x, pixel_y, pixel_plane):
     """
-    Convert the x,y,plane tuple to a unique identifier
+    Convert the (x, y, plane) pixel coordinate tuple to a unique integer identifier.
+
+    The identifier is computed as a linearised index over the pixel grid:
+    ``pixel_x + N_PIXELS[0] * (pixel_y + N_PIXELS[1] * pixel_plane)``.
 
     Args:
-        pixel_x (int): number of pixel pitches in x-dimension
-        pixel_y (int): number of pixel pitches in y-dimension
-        pixel_plane (int): pixel plane number
+        pixel_x (int): Pixel index along the x-dimension (number of pixel
+            pitches from the TPC border).
+        pixel_y (int): Pixel index along the y-dimension (number of pixel
+            pitches from the TPC border).
+        pixel_plane (int): Pixel plane number (anode plane index).
 
     Returns:
-        unique integer id
+        int: Unique integer identifier for the pixel.
     """
     return pixel_x + detector.N_PIXELS[0] * (pixel_y + detector.N_PIXELS[1] * pixel_plane)
 
 @nb.njit
 def id2pixel(pid):
     """
-    Convert the unique pixel identifer to an x,y,plane tuple
+    Convert a unique pixel identifier back to its (x, y, plane) coordinate tuple.
+
+    This is the inverse of :func:`pixel2id`.
 
     Args:
-        pid (int): unique pixel identifier
+        pid (int): Unique integer pixel identifier as returned by
+            :func:`pixel2id`.
+
     Returns:
-        tuple: number of pixel pitches in x-dimension,
-            number of pixel pitches in y-dimension,
-            pixel plane number
+        tuple[int, int, int]: A 3-tuple ``(pixel_x, pixel_y, pixel_plane)``
+        where
+
+        * ``pixel_x`` – pixel index along the x-dimension,
+        * ``pixel_y`` – pixel index along the y-dimension,
+        * ``pixel_plane`` – anode plane index.
     """
     return (pid % detector.N_PIXELS[0], (pid // detector.N_PIXELS[0]) % detector.N_PIXELS[1],
             (pid // (detector.N_PIXELS[0] * detector.N_PIXELS[1])))
@@ -42,13 +54,20 @@ def id2pixel(pid):
 @cuda.jit
 def max_pixels(tracks, n_max_pixels):
     """
-    CUDA kernels that calculates the maximum number of pixels in the
-    selected tracks.
+    CUDA kernel that calculates the maximum number of pixels intercepted
+    across all supplied track segments.
+
+    Each CUDA thread handles one track. The per-track pixel count is
+    computed with :func:`get_num_active_pixels` and the global maximum is
+    updated atomically so the result is safe for concurrent execution.
 
     Args:
-        tracks (:obj:`numpy.ndarray`): tracks array.
-        n_max_pixels (:obj:`numpy.ndarray`): array to store the maximum
-            number of pixels in the selected tracks.
+        tracks (:obj:`numpy.ndarray`): Structured array of track segments.
+            Each element must contain at least the fields ``x_start``,
+            ``x_end``, ``y_start``, ``y_end``, and ``pixel_plane``.
+        n_max_pixels (:obj:`numpy.ndarray`): Single-element integer array
+            used to accumulate the maximum pixel count via
+            ``cuda.atomic.max``.  The result is written to index 0.
     """
     itrk = cuda.grid(1)
 
@@ -66,28 +85,41 @@ def max_pixels(tracks, n_max_pixels):
 @cuda.jit
 def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_pixels_list):
     """
-    For all tracks, takes the xy start and end position
-    and calculates all impacted pixels by the track segment
+    CUDA kernel that maps every track segment to its set of active and
+    neighboring pixels on the anode plane.
+
+    For each track the kernel:
+
+    1. Determines the start/end pixel coordinates from physical positions.
+    2. Calls :func:`get_active_pixels` (Bresenham line) to find pixels
+       directly under the projected track segment.
+    3. Calls :func:`get_neighboring_pixels` to expand the set by including
+       pixels within ``detector.MAX_RADIUS`` of each active pixel.
 
     Args:
-        track (:obj:`numpy.ndarray`): array where we store the
-            track segments information
-        active_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments
-        neighboring_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments and the ones next to them
-        neighboring_radius (:obj:`numpy.ndarray`): array where we store
-            the distance to the pixels directly below the projection of
-            the segments
-        n_pixels_list (:obj:`numpy.ndarray`): number of total involved
-            pixels
+        tracks (:obj:`numpy.ndarray`): Structured array of track segments.
+            Each element must contain the fields ``x_start``, ``x_end``,
+            ``y_start``, ``y_end``, and ``pixel_plane``.
+        active_pixels (:obj:`numpy.ndarray`): 2-D integer array of shape
+            ``(n_tracks, max_active_pixels)`` pre-filled with ``-1``.
+            On return, row ``i`` contains the unique pixel IDs that lie
+            directly below the projection of track ``i``.
+        neighboring_pixels (:obj:`numpy.ndarray`): 2-D integer array of
+            shape ``(n_tracks, max_neighboring_pixels)`` pre-filled with
+            ``-1``.  On return, row ``i`` contains the unique pixel IDs of
+            both the active pixels and their neighbours for track ``i``.
+        neighboring_radius (:obj:`numpy.ndarray`): 2-D float array of shape
+            ``(n_tracks, max_neighboring_pixels)``.  On return, entry
+            ``[i, j]`` holds the Euclidean distance (in pixel-pitch units)
+            from the nearest active pixel to ``neighboring_pixels[i, j]``.
+        n_pixels_list (:obj:`numpy.ndarray`): 1-D integer array of length
+            ``n_tracks``.  On return, element ``i`` contains the total
+            number of valid entries in ``neighboring_pixels[i]``.
     """
     itrk = cuda.grid(1)
     if itrk < tracks.shape[0]:
         t = tracks[itrk]
-        
+
         this_border = detector.TPC_BORDERS[int(t["pixel_plane"])]
         start_pixel = (
             int((t["x_start"] - this_border[0][0]) // detector.PIXEL_PITCH),
@@ -107,22 +139,24 @@ def get_pixels(tracks, active_pixels, neighboring_pixels, neighboring_radius, n_
 @nb.njit
 def get_num_active_pixels(x0, y0, x1, y1, plane_id):
     """
-    Counts number of pixels intercepted by the projection of the
-    track on the anode plane
+    Count the number of pixels intercepted by the projection of a track
+    segment onto the anode plane.
+
+    Uses an adapted Bresenham line algorithm (without diagonal steps) to
+    traverse the pixel grid from ``(x0, y0)`` to ``(x1, y1)`` and counts
+    only pixels that fall within the valid detector bounds.
 
     Args:
-        x0 (int): start `x` coordinate
-        y0 (int): start `y` coordinate
-        x1 (int): end `x` coordinate
-        y1 (int): end `y` coordinate
-        plane_id (int): plane index
-        tot_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments
+        x0 (int): Start pixel index along the x-dimension.
+        y0 (int): Start pixel index along the y-dimension.
+        x1 (int): End pixel index along the x-dimension.
+        y1 (int): End pixel index along the y-dimension.
+        plane_id (int): Anode plane index used for bounds checking against
+            ``detector.TPC_BORDERS``.
 
     Returns:
-        int: number of pixels intercepted by the projection of the
-            track on the anode plane.
+        int: Number of valid (in-bounds) pixels intercepted by the line
+        from ``(x0, y0)`` to ``(x1, y1)`` on the given plane.
     """
     dx = abs(x1 - x0)
     sx = 1 if x0 < x1 else -1
@@ -153,20 +187,26 @@ def get_num_active_pixels(x0, y0, x1, y1, plane_id):
 @nb.njit
 def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
     """
-    Converts track segement to an array of active pixels
-    using an adapted version of the Bresenham algorithm
-    used to convert line to grid. Inspired by
-    https://stackoverflow.com/questions/8936183/bresenham-lines-w-o-diagonal-movement/28786538
+    Fill ``tot_pixels`` with the unique IDs of pixels intercepted by the
+    projection of a track segment onto the anode plane.
+
+    Uses an adapted Bresenham line algorithm without diagonal movement to
+    convert the line from ``(x0, y0)`` to ``(x1, y1)`` into a sequence of
+    pixel-grid cells.  Only pixels within the valid detector bounds are
+    recorded.  Inspired by
+    https://stackoverflow.com/questions/8936183/bresenham-lines-w-o-diagonal-movement/28786538.
 
     Args:
-        x0 (int): start `x` coordinate
-        y0 (int): start `y` coordinate
-        x1 (int): end `x` coordinate
-        y1 (int): end `y` coordinate
-        plane_id (int): plane index
-        tot_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments
+        x0 (int): Start pixel index along the x-dimension.
+        y0 (int): Start pixel index along the y-dimension.
+        x1 (int): End pixel index along the x-dimension.
+        y1 (int): End pixel index along the y-dimension.
+        plane_id (int): Anode plane index used for bounds checking against
+            ``detector.TPC_BORDERS``.
+        tot_pixels (:obj:`numpy.ndarray`): 1-D integer array (pre-allocated,
+            length ≥ expected number of active pixels, initialised to ``-1``)
+            that will be populated in-place with the unique pixel IDs
+            (as returned by :func:`pixel2id`) of each intercepted pixel.
     """
     dx = abs(x1 - x0)
     sx = 1 if x0 < x1 else -1
@@ -197,22 +237,36 @@ def get_active_pixels(x0, y0, x1, y1, plane_id, tot_pixels):
 @cuda.jit(device=True)
 def get_neighboring_pixels(active_pixels, neighboring_pixels, neighboring_radius):
     """
-    For each active_pixel, it includes all
-    neighboring pixels within a specified radius
+    Expand a set of active pixels by including all other pixels within
+    ``detector.MAX_RADIUS`` pixels, then record the results in-place.
+
+    For every pixel in ``active_pixels`` the function iterates over the
+    square neighbourhood of half-width ``detector.MAX_RADIUS`` and adds
+    each in-bounds, not-yet-seen pixel to ``neighboring_pixels`` together
+    with its Euclidean distance to the active pixel.  Duplicate entries are
+    suppressed by a linear search over already-added pixels.
+
+    This is a CUDA *device* function and must be called from another kernel
+    or device function.
 
     Args:
-        active_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments
-        neighboring_pixels (:obj:`numpy.ndarray`): array where we store
-            the IDs of the pixels directly below the projection of
-            the segments and the ones next to them
-        neighboring_radius (:obj:`numpy.ndarray`): array where we store
-            the distance to the pixels directly below the projection of
-            the segments
+        active_pixels (:obj:`numpy.ndarray`): 1-D integer array of unique
+            pixel IDs (as from :func:`pixel2id`) that lie directly below
+            the projected track segment.  Entries equal to ``-1`` are
+            treated as empty and skipped.
+        neighboring_pixels (:obj:`numpy.ndarray`): 1-D integer array
+            (pre-allocated, initialised to ``-1``) that will be populated
+            in-place with the unique pixel IDs of all active and
+            neighbouring pixels.
+        neighboring_radius (:obj:`numpy.ndarray`): 1-D float array of the
+            same length as ``neighboring_pixels``, populated in-place with
+            the Euclidean distance (in pixel-pitch units) from the nearest
+            active pixel to each entry in ``neighboring_pixels``.
 
     Returns:
-        int: number of total involved pixels
+        int: Total number of valid pixel entries written into
+        ``neighboring_pixels`` (i.e. the number of unique in-bounds pixels
+        found).
     """
     count = 0
 

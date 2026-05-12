@@ -234,7 +234,7 @@ def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_
             the unique pixels array and the array containing the pixels for each track.
         pixels_tracks_signals (:obj:`numpy.ndarray`): 1D jagged array that collapse the information of (#unique_pix, #ticks, backtracked_segments) for backtracking info per pixel per time tick.
             for each pixel and each track that induced current on the pixel.
-        overflow_flag (:obj:`cp.array`): Single-element output array to indicate whether
+        overflow_flag (:obj:`cupy.ndarray`): Single-element output array to indicate whether
             MAX_TRACKS_PER_PIXEL is insufficient
     """
     # itrk: segment index in signals collection, goes up to the total number of the segments in this batch
@@ -284,11 +284,11 @@ def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
     """
     This kernel fills a 2D array which contains, for each unique pixel,
-    an array with the track indeces associated to that pixel.
+    an array with the track indices associated to that pixel.
 
     Args:
         track_pixel_map (:obj:`numpy.ndarray`): 2D array that will contain the
-            association between the unique pixels array and the track indeces
+            association between the unique pixels array and the track indices
         unique_pix (:obj:`numpy.ndarray`): 1D array containing the unique pixels
         pixels (:obj:`numpy.ndarray`): 2D array containing the pixels for each
             track.
@@ -320,7 +320,7 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
 def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
     """
     This kernel fills a 2D array which contains, for each unique pixel,
-    an array with the track indeces associated to that pixel.
+    an array with the track indices associated to that pixel.
     Summary of the different get_track_pixel_map
     get_track_pixel_map, fills track_pixel_map without distance ranking
     get_track_pixel_map3, fills track_pixel_map ranked by distances of unit pixel pitch

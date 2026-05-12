@@ -78,7 +78,7 @@ def subbatch_pixel_ranges(assmap_pix2seg: cp.ndarray, seg_batch_size: int) \
     Args:
         assmap_pix2seg(:obj:`cp.ndarray`): Array of segments associated with
             each pixel. Shape (n_unique_pix, max_associated_segments).
-        seg_batch_size(int): Targetted number of segments associated with each
+        seg_batch_size(int): Targeted number of segments associated with each
             range of pixels. The actual number of segments will be as large as
             possible without exceeding seg_batch_size.
 

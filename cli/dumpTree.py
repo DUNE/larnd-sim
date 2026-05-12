@@ -169,14 +169,13 @@ def updateHDF5File(output_file, trajectories, segments, vertices):
 
 # Read a file and dump it.
 def dump(input_file, output_file, keep_all_dets=False):
-
     """
     Script to convert edep-sim root output to an h5 file formatted in a way
     that larnd-sim expects for consumption.
+
     Args:
         input_file (str): path to an input ROOT file containing spills.
-        output_file (str): name of the h5 output file to which the information should
-            be written
+        output_file (str): name of the h5 output file to which the information should be written
     """
 
     # Prep output file
@@ -193,7 +192,7 @@ def dump(input_file, output_file, keep_all_dets=False):
     # print("Class: ", inputTree.ClassName())
 
     # IF CRASH: Uncomment this section (also see IF CRASH below)
-    # Attach a brach to the events.
+    # Attach a branch to the events.
     event = TG4Event()
     inputTree.SetBranchAddress("Event",event)
 

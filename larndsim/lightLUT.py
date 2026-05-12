@@ -35,7 +35,7 @@ def get_voxel(pos, itpc, lut_vox_div):
 
     # Assigns tpc borders to variables
     # +- 2e-2 mimics the logic used in drifting.py to prevent event
-    # voxel indicies from being located outside the LUT
+    # voxel indices from being located outside the LUT
     x_min = this_tpc_borders[0][0] - 2e-2
     x_max = this_tpc_borders[0][1] + 2e-2
     y_min = this_tpc_borders[1][0] - 2e-2

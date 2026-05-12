@@ -58,6 +58,17 @@ LOGO = r"""
 """
 
 warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
+def warning_str_format(message, category, filename, lineno, line=None):
+    # Get the last few parts of the filepath for less clutter when printing
+    splitname = "/".join(filename.split('/')[-3:])
+    return f"\033[33m{splitname}:{lineno}: {category.__name__}: {message}\033[0m"
+
+# Play nice with loops wrapped with tqdm; using tqdm.write() prints the warning on its own line
+def tqdm_show_warning(message, category, filename, lineno, file=None, line=None):
+    tqdm.write(warning_str_format(str(message), category, filename, lineno))
+
+warnings.formatwarning = warning_str_format
+warnings.showwarning = tqdm_show_warning
 
 def swap_coordinates(tracks):
     """
@@ -408,7 +419,7 @@ def run_simulation(input_filename,
             field responses. 
         light_lut_file (str, optional): path of the Numpy array containing the light
             look-up table. 
-        light_det_noise_filename (str, optional): path of the Numpy array containning the light noise information
+        light_det_noise_filename (str, optional): path of the Numpy array containing the light noise information
         bad_channels (str, optional): path of the YAML file containing the channels to be
             disabled. Defaults to None
         n_events (int, optional): number of events to be simulated. Defaults to None
@@ -439,7 +450,7 @@ def run_simulation(input_filename,
         try:
             mod2mod_variation = cfg['MOD2MOD_VARIATION']
         except:
-            print("The configuration has not specify wether to load different configurations for different modules. By default all the modules (if more than one simulated) are loaded with the same configuration.")
+            print("The configuration has not specify whether to load different configurations for different modules. By default all the modules (if more than one simulated) are loaded with the same configuration.")
 
     if pixel_layout is None:
         pixel_layout = cfg['PIXEL_LAYOUT']
@@ -484,7 +495,7 @@ def run_simulation(input_filename,
         try:
             light_simulated = cfg['LIGHT_SIMULATED']
         except:
-            print("The configuration has not specify wether to simulate light. By default the light simulation is activated.")
+            print("The configuration has not specify whether to simulate light. By default the light simulation is activated.")
             light_simulated = True
 
     if light_simulated:
@@ -592,7 +603,7 @@ def run_simulation(input_filename,
 
     # if n_modules == 1, mod2mod_variation would have already been set to False
     if not mod2mod_variation:
-        # Check if the configrations are consistent
+        # Check if the configurations are consistent
         # Allow configuration to be provided as a string or a single element list
         if isinstance(pixel_layout, list) and len(pixel_layout) > 1:
             raise KeyError("Provided more than one pixel layout file for the simulation with no module variation.")
@@ -721,7 +732,7 @@ def run_simulation(input_filename,
 
         # Filter out neutrons and gammas, which will not directly create visible charge or light
         # (excluding these segments here results in a modest ~10% improvement to memory usage later on,
-        # since this reduces the size of the arrays CUDA must inialize for pixel current calculations)
+        # since this reduces the size of the arrays CUDA must initialize for pixel current calculations)
         neutrals_mask = (tracks['pdg_id'] != 2112) & (tracks['pdg_id'] != 22)
         if sum(~neutrals_mask) > 0: print("Rejected ",sum(~neutrals_mask), "track segments from neutral particles")
         tracks = tracks[neutrals_mask]
@@ -916,7 +927,7 @@ def run_simulation(input_filename,
         if mod2mod_variation:
             print(f'Simulating module {i_mod-1}')
             consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
-            # Currently shouln't be necessary to reload light props, but if
+            # Currently shouldn't be necessary to reload light props, but if
             # someone later updates `set_light_properties` to use stuff from the
             # `consts.detector` module, we'll be glad for this line:
             consts.light.set_light_properties(detector_properties)
@@ -1354,7 +1365,7 @@ def run_simulation(input_filename,
                 # To conserve memory, we break up the signals calculation into subbatches.
                 # The subbatches are sized so that rng_states array won't have to be expanded.
                 # This is achieved by choosing a BPG_X_subbatch <= BPG_X that lets
-                # the existing length of rng_states be able to accomdate the number of threads (BPG_X_subbatch, BPG_Y, BPG_Z) x TPB.
+                # the existing length of rng_states be able to accommodate the number of threads (BPG_X_subbatch, BPG_Y, BPG_Z) x TPB.
 
                 # In the case that there are not enough rng states for even BPG_X_subbatch = 1, we will have to expand rng_states.
                 if len(rng_states) < (np.prod(TPB) * BPG[1] * BPG[2]):

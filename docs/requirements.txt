@@ -1,8 +1,8 @@
-sphinx-rtd-theme~=0.5
-numpy==1.22.0
-pytest~=6.2
-numba
-tqdm
-pyyaml
-h5py
-fire
+# Sphinx documentation build requirements for larnd-sim
+# Install with: pip install -r docs/requirements.txt
+
+sphinx>=7.2
+sphinx-design>=0.5
+myst-parser>=3.0
+pydata-sphinx-theme>=0.15
+shibuya>=2026.1.9
