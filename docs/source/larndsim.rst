@@ -13,6 +13,7 @@ Each module is documented on its own page below.
    larndsim/quenching
    larndsim/drifting
    larndsim/detsim
+   larndsim/far_field
    larndsim/fee
    larndsim/light_sim
    larndsim/active_volume

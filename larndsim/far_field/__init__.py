@@ -26,7 +26,7 @@ class PixelClassificationResult:
 
     Note:
         - "charge_pixels" means pixels in the CHARGE_COLLECTION category
-        - The *_pixels fields contain global pixel IDs (not indices)
+        - The \*_pixels fields contain global pixel IDs (not indices)
         - Types are Optional[Any] to avoid hard dependency on CuPy at import time.
     """
 

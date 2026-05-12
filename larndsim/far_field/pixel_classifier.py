@@ -1,8 +1,9 @@
 """
 Classifies pixels into physics categories (CHARGE_COLLECTION, CHARGE_NEIGHBOR,
 INDUCTION_ONLY, INACTIVE) based on:
+
 - Perpendicular distance from segment line to pixel surface (point-to-box distance)
-- Expected diffusion spread (sigma_T = sqrt(2 * D_T * t_drift))
+- Expected diffusion spread (:math:`\sigma_T = \sqrt{2 * D_T * t_\mathrm{drift}}`)
 - Far-field induction signal strength estimate
 
 Example workflow:
@@ -89,18 +90,17 @@ def classify_pixels_kernel(
     CUDA kernel to classify each pixel by proximity to segments.
 
     For each pixel:
+
     1. Loop over all segments
     2. Calculate perpendicular distance from segment to pixel surface (point-to-box)
-    3. Estimate diffusion spread: sigma_T = sqrt(2 * D_T * t_drift)
+    3. Estimate diffusion spread: :math:`\sigma_T = \sqrt{2 * D_T * t_\mathrm{drift}}`
     4. Check proximity thresholds including diffusion spread
     5. Assign highest-priority category (CHARGE_COLLECTION > CHARGE_NEIGHBOR > INDUCTION_ONLY)
 
     Args:
-        segments: (n_segments,) structured array with fields:
-            - x_start, y_start, z_start (cm)
-            - x_end, y_end, z_end (cm)
-            - n_electrons (float)
-            - pixel_plane (int)
+        segments: ``(n_segments,)`` structured array with fields
+            ``x_start``, ``y_start``, ``z_start``, ``x_end``, ``y_end``, ``z_end`` (cm),
+            ``n_electrons`` (float), and ``pixel_plane`` (int).
         pixel_coords_x: (n_pixels,) pixel center x positions (cm)
         pixel_coords_y: (n_pixels,) pixel center y positions (cm)
         categories: (n_pixels,) output array of PixelCategory enum values
@@ -275,31 +275,27 @@ def classify_pixels(
 ) -> PixelClassificationResult:
     """
     Classify pixels into physics regimes based on segment proximity and diffusion.
-
+    
     This function is the main entry point for pixel classification. It:
+    
     1. Generates pixel coordinates for the specified TPC plane
     2. Validates inputs and transfers data to GPU if needed
     3. Launches the classification kernel
     4. Extracts per-category pixel indices
     5. Returns a PixelClassificationResult with categorized pixel lists and pixel IDs
-
+    
     Args:
-        segments: (n_segments,) structured array with fields:
-            - x_start, y_start, z_start, x_end, y_end, z_end (cm)
-            - n_electrons (float)
-            - pixel_plane (int)
-        plane_id: TPC plane identifier
-
+        segments: ``(n_segments,)`` structured array with fields
+            ``x_start``, ``y_start``, ``z_start``, ``x_end``, ``y_end``, ``z_end`` (cm),
+            ``n_electrons`` (float), and ``pixel_plane`` (int).
+        plane_id: TPC plane identifier.
+    
     Returns:
-        PixelClassificationResult with:
-            - charge_pixels: pixel IDs (global) of CHARGE_COLLECTION pixels
-            - neighbor_pixels: pixel IDs (global) of CHARGE_NEIGHBOR pixels
-            - induction_pixels: pixel IDs (global) of INDUCTION_ONLY pixels
-            - induction_pixels_x: x coordinates (cm) of INDUCTION_ONLY pixels
-            - induction_pixels_y: y coordinates (cm) of INDUCTION_ONLY pixels
-
+        PixelClassificationResult: Categorized pixel lists and pixel IDs.
+            See :class:`~larndsim.far_field.PixelClassificationResult` for field details.
+    
     Raises:
-        ValueError: If input arrays have mismatched sizes or invalid data
+        ValueError: If input arrays have mismatched sizes or invalid data.
     """
 
     # Generate pixel coordinates for this TPC plane
@@ -384,10 +380,9 @@ def get_classification_cache(segments: cpt.NDArray) \
     """Get cache of pixel classes for all active TPCs.
 
     Args:
-        segments: (n_segments,) structured array with fields:
-            - x_start, y_start, z_start, x_end, y_end, z_end (cm)
-            - n_electrons (float)
-            - pixel_plane (int)
+        segments: ``(n_segments,)`` structured array with fields
+            ``x_start``, ``y_start``, ``z_start``, ``x_end``, ``y_end``, ``z_end`` (cm),
+            ``n_electrons`` (float), and ``pixel_plane`` (int).
 
     Returns:
         Dict from TPC index to PixelClassificationResult

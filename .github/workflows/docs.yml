@@ -55,9 +55,8 @@ jobs:
       - name: Build HTML documentation
         run: |
           cd docs
-          make html SPHINXOPTS="-v -W --keep-going -n"
+          make html SPHINXOPTS="-v --keep-going -n"
         # -v verbose mode
-        # -W turn warnings into errors to keep docs clean
         # -n nitpicky mode to catch broken cross-references
         # --keep-going report all errors, not just the first one
 

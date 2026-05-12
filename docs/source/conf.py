@@ -131,6 +131,7 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = True
 napoleon_use_param = True
 napoleon_use_rtype = True
+napoleon_use_ivar = True
 
 # -- Intersphinx mapping ------------------------------------------------------
 intersphinx_mapping = {

@@ -80,7 +80,7 @@ def gpu_voxelize(
             detector.TPC_BORDERS)
         voxel_size: Voxel size override (optional; defaults to using voxel size
             from ff_induction)
-        z_padding: Extra padding on the range of drift coordinatess to cover
+        z_padding: Extra padding on the range of drift coordinates to cover
 
 
     Returns:
