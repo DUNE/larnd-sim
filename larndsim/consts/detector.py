@@ -22,6 +22,7 @@ LARPIX_REGISTRY = {
         },
     }
 
+from . import ff_induction, sim
 from .units import mm, cm, mV, V, kV, e
 
 ###################
@@ -64,13 +65,13 @@ TILE_BORDERS = np.zeros((2,2))
 #: Time sampling in :math:`\mu s`
 TIME_SAMPLING = 0.1 # us
 #: Time sampling in the pixel response file in :math:`\mu s`
-RESPONSE_SAMPLING = 0.05
+RESPONSE_SAMPLING = None
 #: Spatial sampling in the pixel response file in :math:`cm`
-RESPONSE_BIN_SIZE = 0.04434
+RESPONSE_BIN_SIZE = None
 #: The longest cathode charge response in time :math:`\mu s`
-RESPONSE_MAX_TIME = 0.0
+RESPONSE_MAX_TIME = None
 #: The maximum radius to consider the neighbouring charge response
-MAX_RADIUS = 4
+MAX_RADIUS = 2
 #: The step size to chop up segments :math:`cm`
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
@@ -451,7 +452,18 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
         LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
         TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
 
-        MAX_RADIUS = int(detprop.get('max_radius', MAX_RADIUS))
+        if 'max_radius' in detprop:
+            if detprop['max_radius'] != MAX_RADIUS:
+                warnings.warn(f'Overriding MAX_RADIUS from response file ' +
+                              f'({MAX_RADIUS}) with value from detector_properties ' +
+                              f' yaml ({detprop["max_radius"]})')
+                MAX_RADIUS = int(detprop['max_radius'])
+
+        if sim.FARFIELD_ENABLED:
+            warnings.warn(f'Far-field enabled; setting MAX_RADIUS (currently ' +
+                          f'{MAX_RADIUS}) to CHARGE_NEIGHBOR_RADIUS ' +
+                          f'({ff_induction.CHARGE_NEIGHBOR_RADIUS})')
+            MAX_RADIUS = ff_induction.CHARGE_NEIGHBOR_RADIUS
 
         # Prepare neighbouring pixel distance for backtracking
         # Currently backtracking range is used to convert from segment base to pixel base

@@ -7,11 +7,14 @@ from time import time
 import warnings
 from collections import defaultdict
 import os
+from typing import Any, Optional
 
 import numpy as np
+import numpy.typing as npt
 import numpy.lib.recfunctions as rfn
 
 import cupy as cp
+import cupy.typing as cpt
 from cupy.cuda.nvtx import RangePush, RangePop
 
 # Disabling the memory pool is useful when profiling
@@ -39,6 +42,8 @@ import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
 from larndsim.config import get_config
+from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
+from larndsim.consts import ff_induction
 
 SEED = int(time())
 
@@ -148,6 +153,217 @@ def invert_array_map(in_map,pix_set):
     _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
     return cp.array(mymap)
 
+
+def do_digitize_and_update(results_acc: dict[str, Any],
+                           unique_eventIDs: npt.NDArray[np.int64],
+                           unique_pix: cpt.NDArray[cp.int32],
+                           pixels_signals: cp.ndarray[tuple[int, int], cp.float64],
+                           pixels_tracks_signals: cpt.NDArray[cp.float32],
+                           num_backtrack: cpt.NDArray[cp.float32],
+                           offset_backtrack: cpt.NDArray[cp.float32],
+                           max_signal_time: float,
+                           pixel_thresholds_lut: Optional[CudaDict],
+                           pixel_gains_lut: Optional[CudaDict],
+                           pixel_pedestals_lut: Optional[CudaDict],
+                           rand_seed: int,
+                           rng_states: cpt.NDArray,
+):
+    """
+    Helper function for calling get_adc_values and updating the results.
+
+    TODO: Wrap `run_simulation` in a class so that we can use instance variables
+    instead of a million arguments.
+
+    Args:
+        results_acc: Dict with the keys expected by `save_results`
+        unique_eventIDs: (n_events,) array of unique event IDs
+        unique_pix: (n_pixels,) array of unique pixel IDs
+        pixels_signals: (n_pixels,n_ticks) array of summed signals on each pixel
+        pixels_tracks_signals: (n_ticks, n_pixels, n_backtracks) jagged array
+            (represented as a 1D array) of signals on each pixel for each
+            backtracked edep-sim segment
+        num_backtrack: (len(pixels_tracks_signals),) array of the count of
+            backtracked segments for each (pixel, tick)
+        offset_backtrack: (len(pixels_tracks_signals),) cumulative sum of
+            num_backtrack
+        pixel_thresholds_lut: Look-up table for pixel thresholds
+        pixel_gains_lut: Look-up table for pixel gains
+        pixel_pedestals_lut:  Look-up table for pixel pedestals
+        max_signal_time: Longest possible signal in this batch
+        rand_seed: Random seed
+        rng_states: Result of e.g. create_xoroshiro128p_states
+
+    """
+    from larndsim.consts import detector, sim
+
+    time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time,
+                           detector.TIME_SAMPLING)
+    integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+    adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+    current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES,
+                                  sim.MAX_TRACKS_PER_PIXEL))
+
+    TPB = 4
+    BPG = ceil(pixels_signals.shape[0] / TPB)
+    rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed,
+                                         rng_states=rng_states)
+
+
+    if pixel_thresholds_lut is not None:
+        pixel_thresholds_lut.tpb = 128
+        pixel_thresholds_lut.bpg = ceil(pixels_signals.shape[0]
+                                        / pixel_thresholds_lut.tpb)
+        pixel_thresholds = \
+            pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+    else:
+        default_threshold = detector.DISCRIMINATION_THRESHOLD * consts.units.e
+        pixel_thresholds = cp.full(pixels_signals.shape[0], default_threshold)
+
+
+    fee.get_adc_values[BPG, TPB](pixels_signals,
+                                 pixels_tracks_signals,
+                                 num_backtrack,
+                                 offset_backtrack,
+                                 time_ticks,
+                                 integral_list,
+                                 adc_ticks_list,
+                                 0,
+                                 rng_states,
+                                 current_fractions,
+                                 pixel_thresholds)
+
+    if pixel_gains_lut is not None:
+        pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
+        gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+    else:
+        gain_list = detector.GAIN
+
+    if pixel_pedestals_lut is not None:
+        pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
+        pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+    else:
+        pedestal_list = detector.V_PEDESTAL
+
+    adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
+
+    adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
+
+    results_acc['event_id'].append(adc_event_ids)
+    results_acc['adc_tot'].append(adc_list)
+    results_acc['adc_tot_ticks'].append(adc_ticks_list)
+    results_acc['unique_pix'].append(unique_pix)
+    results_acc['current_fractions'].append(current_fractions)
+
+
+def do_save_results(
+    event_times: cpt.NDArray[cp.float64],
+    results: dict[str, Any],
+    i_trig: int,
+    i_mod: int,
+    light_only: bool,
+    output_filename: str,
+    compression: Optional[str],
+    bad_channels: dict[str, list[int]],
+):
+    """
+    Save the accumulated results of the simulation.
+
+    `results` keys for the charge simulation:
+        - event_id: event id for each hit
+        - adc_tot: adc value for each hit
+        - adc_tot_ticks: timestamp for each hit
+        - track_pixel_map: map from track to active pixels
+        - unique_pix: all unique pixels (per track?)
+        - current_fractions: fraction of charge associated with each true track
+
+        For the light simulation (in addition to all above keys):
+        - light_event_id: event_id for each light trigger
+        - light_start_time: simulation start time for event
+        - light_trigger_idx: time tick at which each trigger occurs
+        - light_op_channel_idx: optical channel id for each waveform
+        - light_waveforms: waveforms of each light trigger
+        - light_waveforms_true_track_id: true track ids for each tick in each
+              waveform
+        - light_waveforms_true_photons: equivalent pe for each track at each
+              tick in each waveform
+
+    Note:
+        Can't handle empty inputs
+
+    Args:
+        event_times: (n_events,) array of event timestamps
+        results: Dictionary of accumulated results (see below)
+        i_trig: Index of light trigger (if any)
+        i_mod: Detector module being simulated
+        light_only: Whether only light data is to be saved
+        output_filename: Output filename
+        compression: Optional file compression mode (e.g. 'lzf', 'gzip')
+        bad_channels: Optional dict with list of bad channels for each chip key
+    """
+    from larndsim.consts import detector, light, sim
+
+    for key in list(results.keys()):
+        if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
+            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
+
+    uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
+    uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+
+    if not light_only:
+        if light.LIGHT_SIMULATED:
+            # prep arrays for embedded triggers in charge data stream
+            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if light.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type'])
+            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
+            light_trigger_event_ids = results['light_event_id']
+        else:
+            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
+            light_trigger_modules = np.ones(len(uniq_events))
+            light_trigger_times = np.zeros_like(uniq_event_times)
+            light_trigger_event_ids = uniq_events
+
+        fee.export_to_hdf5(results['event_id'],
+                           results['adc_tot'],
+                           results['adc_tot_ticks'],
+                           results['unique_pix'],
+                           results['current_fractions'],
+                           results['track_pixel_map'],
+                           results['traj_pixel_map'],
+                           output_filename, # defined earlier in script
+                           uniq_event_times,
+                           light_trigger_times=light_trigger_times,
+                           light_trigger_event_id=light_trigger_event_ids,
+                           light_trigger_modules=light_trigger_modules,
+                           bad_channels=bad_channels, # defined earlier in script
+                           i_mod=i_mod,
+                           compression=compression)
+
+    if light.LIGHT_SIMULATED and len(results['light_event_id']):
+        if light.LIGHT_TRIG_MODE == 0:
+            light_sim.export_to_hdf5(results['light_event_id'],
+                                     results['light_start_time'],
+                                     results['light_trigger_idx'],
+                                     results['light_op_channel_idx'],
+                                     results['light_waveforms'],
+                                     output_filename,
+                                     uniq_event_times,
+                                     results['light_waveforms_true_track_id'],
+                                     results['light_waveforms_true_photons'],
+                                     i_trig,
+                                     i_mod,
+                                     compression=compression)
+        elif light.LIGHT_TRIG_MODE == 1:
+            light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
+                                                results['light_waveforms'],
+                                                output_filename,
+                                                results['light_waveforms_true_track_id'],
+                                                results['light_waveforms_true_photons'],
+                                                i_trig,
+                                                i_mod,
+                                                compression=compression)
+
+
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2',
@@ -208,92 +424,6 @@ def run_simulation(input_filename,
         compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
             supported options are 'lzf' and 'gzip'
     """
-    # Define a nested function to save the results
-    def save_results(event_times, results, i_trig, i_mod=-1, light_only=False):
-        '''
-        results is a dictionary with the following keys
-
-         for the charge simulation
-         - event_id: event id for each hit
-         - adc_tot: adc value for each hit
-         - adc_tot_ticks: timestamp for each hit
-         - track_pixel_map: map from track to active pixels
-         - unique_pix: all unique pixels (per track?)
-         - current_fractions: fraction of charge associated with each true track
-
-         for the light simulation (in addition to all keys for the charge simulation)
-         - light_event_id: event_id for each light trigger
-         - light_start_time: simulation start time for event
-         - light_trigger_idx: time tick at which each trigger occurs
-         - light_op_channel_idx: optical channel id for each waveform
-         - light_waveforms: waveforms of each light trigger
-         - light_waveforms_true_track_id: true track ids for each tick in each waveform
-         - light_waveforms_true_photons: equivalent pe for each track at each tick in each waveform
-        
-        Note: can't handle empty inputs
-        '''
-        for key in list(results.keys()):
-            if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
-                results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
-
-        uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
-        uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
-
-        if not light_only:
-            if light.LIGHT_SIMULATED:
-                # prep arrays for embedded triggers in charge data stream
-                light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
-                if light.LIGHT_TRIG_MODE == 1:
-                    light_trigger_modules = np.array(results['trigger_type'])
-                light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
-                light_trigger_event_ids = results['light_event_id']
-            else:
-                # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
-                light_trigger_modules = np.ones(len(uniq_events))
-                light_trigger_times = np.zeros_like(uniq_event_times)
-                light_trigger_event_ids = uniq_events
-
-            fee.export_to_hdf5(results['event_id'],
-                               results['adc_tot'],
-                               results['adc_tot_ticks'],
-                               results['unique_pix'],
-                               results['current_fractions'],
-                               results['track_pixel_map'],
-                               results['traj_pixel_map'],
-                               output_filename, # defined earlier in script
-                               uniq_event_times,
-                               light_trigger_times=light_trigger_times,
-                               light_trigger_event_id=light_trigger_event_ids,
-                               light_trigger_modules=light_trigger_modules,
-                               bad_channels=bad_channels, # defined earlier in script
-                               i_mod=i_mod,
-                               compression=compression)
-
-        if light.LIGHT_SIMULATED and len(results['light_event_id']):
-            if light.LIGHT_TRIG_MODE == 0:
-                light_sim.export_to_hdf5(results['light_event_id'],
-                                         results['light_start_time'],
-                                         results['light_trigger_idx'],
-                                         results['light_op_channel_idx'],
-                                         results['light_waveforms'],
-                                         output_filename,
-                                         uniq_event_times,
-                                         results['light_waveforms_true_track_id'],
-                                         results['light_waveforms_true_photons'],
-                                         i_trig,
-                                         i_mod,
-                                         compression=compression)
-            elif light.LIGHT_TRIG_MODE == 1:
-                light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
-                                                    results['light_waveforms'],
-                                                    output_filename,
-                                                    results['light_waveforms_true_track_id'],
-                                                    results['light_waveforms_true_photons'],
-                                                    i_trig,
-                                                    i_mod,
-                                                    compression=compression)
-    ###########################################################################################
-
     RangePush("load_config")
     print(LOGO)
     print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
@@ -504,18 +634,21 @@ def run_simulation(input_filename,
         RangePop()
 
         RangePush("load_pixel_thresholds")
+        pixel_thresholds_lut = None
         if pixel_thresholds_file is not None:
             print("Pixel thresholds file:", pixel_thresholds_file)
             pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
         RangePop()
 
         RangePush("load_pixel_gains")
+        pixel_gains_lut = None
         if pixel_gains_file is not None:
             print("Pixel gains file:", pixel_gains_file)
             pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
         RangePop()
 
         RangePush("load_pixel_pedestals")
+        pixel_pedestals_lut = None
         if pixel_pedestals_file is not None:
             print("Pixel pedestals file:", pixel_pedestals_file)
             pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
@@ -535,6 +668,9 @@ def run_simulation(input_filename,
     importlib.reload(light_sim)
     importlib.reload(lightLUT)
     importlib.reload(fee)
+
+    if sim.FARFIELD_ENABLED:
+        print("Far-field mode:", sim.FARFIELD_MODE)
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
@@ -798,16 +934,19 @@ def run_simulation(input_filename,
             RangePop()
 
             RangePush("load_pixel_thresholds")
+            pixel_thresholds_lut = None
             if pixel_thresholds_file is not None:
                 pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_pixel_gains")
+            pixel_gains_lut = None
             if pixel_gains_file is not None:
                 pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
             RangePop()
 
             RangePush("load_pixel_pedestals")
+            pixel_pedestals_file = None
             if pixel_pedestals_file is not None:
                 pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
             RangePop()
@@ -972,6 +1111,23 @@ def run_simulation(input_filename,
         logger.start()
         logger.take_snapshot()
 
+        # HACK: Define nested functions to pass some of our locals
+        # TODO: Write a class. With instance variables.
+        def save_results(*args, **kwargs):
+            do_save_results(*args, **kwargs,
+                            output_filename=output_filename,
+                            compression=compression,
+                            bad_channels=bad_channels)
+
+        def digitize_and_update(*args, **kwargs):
+            do_digitize_and_update(*args, **kwargs,
+                                   results_acc=results_acc,
+                                   pixel_thresholds_lut=pixel_thresholds_lut,
+                                   pixel_gains_lut=pixel_gains_lut,
+                                   pixel_pedestals_lut=pixel_pedestals_lut,
+                                   rand_seed=rand_seed,
+                                   rng_states=rng_states)
+
         segment_ids_arr = cp.asarray(segment_ids)
         trajectory_ids_arr = cp.asarray(trajectory_ids)
 
@@ -1034,7 +1190,16 @@ def run_simulation(input_filename,
             unique_eventIDs = np.unique(event_ids)
             RangePop()
 
-            all_selected_tracks = track_subset
+            # Filter out tracks with invalid pixel_plane (outside TPCs)
+            valid_plane_mask = track_subset['pixel_plane'] != detector.DEFAULT_PLANE_INDEX
+            all_selected_tracks = track_subset[valid_plane_mask]
+            
+            # Create combined mask for light simulation arrays that are indexed by batch_mask
+            # We need indices into the full tracks array for light data
+            batch_indices = np.where(batch_mask)[0]
+            valid_batch_indices = batch_indices[valid_plane_mask]
+            valid_batch_mask = np.zeros_like(batch_mask, dtype=bool)
+            valid_batch_mask[valid_batch_indices] = True
 
             # We find the pixels intersected by the projection of the tracks on
             # the anode plane using the Bresenham's algorithm. We also take into
@@ -1092,8 +1257,21 @@ def run_simulation(input_filename,
             assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
             RangePop() # invert_array_map
 
+            # ~~~ Precompute far-field helper data once per event batch ~~~
+            RangePush("event_farfield_precompute")
+            classification_cache, voxel_cache = {}, {}
+            if sim.FARFIELD_ENABLED:
+                classification_cache = \
+                    pixel_classifier.get_classification_cache(all_selected_tracks)
+                if sim.FARFIELD_MODE == 'voxels':
+                    voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
+            RangePop()
+
             pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
                                                           sim.SEGMENT_BATCH_SIZE)
+
+            # Track all pixels processed in near-field batches for this event batch
+            processed_pixels_event = cp.array([], dtype=cp.int32)
 
             for start_pix, stop_pix in \
                     tqdm(pixel_ranges, delay=1,
@@ -1269,60 +1447,55 @@ def run_simulation(input_filename,
 
                 RangePop()
 
-                RangePush("get_adc_values", 3)
-                # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-                time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time, detector.TIME_SAMPLING)
-                integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
-                adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
-                current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES, track_pixel_map.shape[1]))
+                # ~~~ Far-field signal contribution ~~~
+                if sim.FARFIELD_ENABLED:
+                    RangePush("far_field_contribution", 3)
+                    # Get pixel coordinates from pixel layout
+                    # unique_pix contains pixel indices; convert to (x, y) coordinates
+                    unique_pix_np = cp.asnumpy(unique_pix)
+                    px_idx = unique_pix_np % detector.N_PIXELS[0]
+                    py_idx = (unique_pix_np // detector.N_PIXELS[0]) % detector.N_PIXELS[1]
+                    plane_idx = unique_pix_np // (detector.N_PIXELS[0] * detector.N_PIXELS[1])
+                    x_min = detector.TPC_BORDERS[plane_idx.astype(int), 0, 0]
+                    y_min = detector.TPC_BORDERS[plane_idx.astype(int), 1, 0]
+                    pixel_x = cp.asarray(x_min + (px_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
+                    pixel_y = cp.asarray(y_min + (py_idx + 0.5) * detector.PIXEL_PITCH, dtype=cp.float32)
 
-                # TPB = 128
-                TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
-                BPG = ceil(pixels_signals.shape[0] / TPB)
-                rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed, rng_states=rng_states)
-                TPB_lut = 128 # supposed to be 128
-                BPG_lut = ceil(pixels_signals.shape[0] / TPB_lut)  
-                if pixel_thresholds_file is not None:
-                    pixel_thresholds_lut.tpb = TPB_lut
-                    pixel_thresholds_lut.bpg = BPG_lut
-                    pixel_thresholds = pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-                else:
-                    pixel_thresholds = cp.full(pixels_signals.shape[0], detector.DISCRIMINATION_THRESHOLD * consts.units.e)
+                    active_tpc_indices = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
 
-                fee.get_adc_values[BPG, TPB](pixels_signals,
-                                             pixels_tracks_signals,
-                                             num_backtrack,
-                                             offset_backtrack,
-                                             time_ticks,
-                                             integral_list,
-                                             adc_ticks_list,
-                                             0,
-                                             rng_states,
-                                             current_fractions,
-                                             pixel_thresholds)
-                # get list of adc values
-                if pixel_gains_file is not None:
-                    pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-                    gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                else:
-                    gain_list = detector.GAIN
+                    for tpc_idx in active_tpc_indices:
+                        tpc_mask = (plane_idx == tpc_idx)
+                        if not np.any(tpc_mask):
+                            continue
 
-                if pixel_pedestals_file is not None:
-                    pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
-                    pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-                else:
-                    pedestal_list = detector.V_PEDESTAL
+                        ff_signals_tpc = signal_calculation.launch_ffe_kernel(
+                            tpc_idx=tpc_idx,
+                            tracks=all_selected_tracks,
+                            pixel_x=pixel_x[tpc_mask],
+                            pixel_y=pixel_y[tpc_mask],
+                            n_ticks=signals_ticks_t0,
+                            category=1,
+                            voxel_cache=voxel_cache)
 
-                adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
+                        pixels_signals[tpc_mask, :] += ff_signals_tpc
+
+                    RangePop()
                 
-                adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
-                RangePop()
+                # np.savez(f'sig_{ievd}_{start_pix}_nf.npz', signals=pixels_signals, pixels=unique_pix)
 
-                results_acc['event_id'].append(adc_event_ids)
-                results_acc['adc_tot'].append(adc_list)
-                results_acc['adc_tot_ticks'].append(adc_ticks_list)
-                results_acc['unique_pix'].append(unique_pix)
-                results_acc['current_fractions'].append(current_fractions)
+                RangePush("get_adc_values", 3)
+
+                # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
+                digitize_and_update(unique_eventIDs=unique_eventIDs,
+                                    unique_pix=unique_pix,
+                                    pixels_signals=pixels_signals,
+                                    pixels_tracks_signals=pixels_tracks_signals,
+                                    num_backtrack=num_backtrack,
+                                    offset_backtrack=offset_backtrack,
+                                    max_signal_time=max_signal_time)
+
+                # Accumulate pixels processed via near-field path for this event batch
+                processed_pixels_event = cp.unique(cp.concatenate([processed_pixels_event, unique_pix]))
                 traj_pixel_map = cp.full(track_pixel_map.shape,-1)
                 traj_pixel_map[:] = track_pixel_map
                 traj_pixel_map[traj_pixel_map != -1] = selected_tracks['traj_id'][traj_pixel_map[traj_pixel_map != -1].get()]
@@ -1330,11 +1503,90 @@ def run_simulation(input_filename,
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
+            # ~~~ Far-field-only induction pixels (not processed above) ~~~
+            if sim.FARFIELD_ENABLED:
+                RangePush("far_field_induction_only", 2)
+                # Pixels already processed via near-field path
+                processed_pixels = processed_pixels_event
+                # Unique TPCs in this batch (use all_selected_tracks to capture full event batch)
+                active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
+                for tpc_idx in active_tpc_indices_all:
+                    cls = classification_cache.get(int(tpc_idx), None)
+                    if cls is None or len(cls.induction_pixels) == 0:
+                        continue
+                    # Induction-only pixels for this TPC; preserve ID/coordinate ordering
+                    induction_pix_all = cp.asarray(cls.induction_pixels, dtype=cp.int32)
+                    pixel_x_all = cp.asarray(cls.induction_pixels_x, dtype=cp.float32)
+                    pixel_y_all = cp.asarray(cls.induction_pixels_y, dtype=cp.float32)
+
+                    if induction_pix_all.size == 0:
+                        continue
+
+                    if processed_pixels is not None and processed_pixels.size > 0:
+                        keep_mask = ~cp.isin(induction_pix_all, processed_pixels)
+                        induction_pix_ids = induction_pix_all[keep_mask]
+                        pixel_x_ff = pixel_x_all[keep_mask]
+                        pixel_y_ff = pixel_y_all[keep_mask]
+                    else:
+                        induction_pix_ids = induction_pix_all
+                        pixel_x_ff = pixel_x_all
+                        pixel_y_ff = pixel_y_all
+
+                    if induction_pix_ids.size == 0:
+                        continue
+
+                    # Use event-wide t0 max for tick extension (far-field only)
+                    t0_array = cp.asnumpy(all_selected_tracks['t0'])
+                    signals_ticks_t0_ff = signals_ticks + int(np.ceil(t0_array.max() / detector.TIME_SAMPLING))
+
+                    ff_signals = signal_calculation.launch_ffe_kernel(
+                        tpc_idx=tpc_idx,
+                        tracks=all_selected_tracks,
+                        pixel_x=pixel_x_ff,
+                        pixel_y=pixel_y_ff,
+                        n_ticks=signals_ticks_t0_ff,
+                        category=0,
+                        voxel_cache=voxel_cache)
+
+                    # Offset FF by event's min(t0) before digitization; normalize units if needed
+                    min_t0_event = float(t0_array.min())
+                    z_anode = float(detector.TPC_BORDERS[tpc_idx, 2, 0])
+                    z_cathode = float(detector.TPC_BORDERS[tpc_idx, 2, 1])
+                    z_span_us = abs(z_cathode - z_anode) / detector.V_DRIFT
+                    min_t0_event_used_us = min_t0_event / 1000.0 if (z_span_us > 0 and min_t0_event / max(z_span_us, 1e-9) > 500) else min_t0_event
+                    if min_t0_event_used_us != min_t0_event:
+                        warnings.warn("FF timing (induction-only): min(t0) appears in ns; converting to us for offset.")
+                    offset_ticks_ff = int(np.clip(np.ceil(min_t0_event_used_us / detector.TIME_SAMPLING), 0, signals_ticks_t0_ff))
+                    pixels_signals = cp.zeros_like(ff_signals)
+                    if offset_ticks_ff > 0:
+                        usable_ff = signals_ticks_t0_ff - offset_ticks_ff
+                        if usable_ff > 0:
+                            pixels_signals[:, offset_ticks_ff:offset_ticks_ff+usable_ff] = ff_signals[:, :usable_ff]
+                    else:
+                        pixels_signals = ff_signals
+                    num_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
+                    offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
+                    pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
+
+                    digitize_and_update(unique_eventIDs=unique_eventIDs,
+                                        unique_pix=induction_pix_ids,
+                                        pixels_signals=pixels_signals,
+                                        pixels_tracks_signals=pixels_tracks_signals,
+                                        num_backtrack=num_backtrack,
+                                        offset_backtrack=offset_backtrack,
+                                        max_signal_time=max_signal_time)
+
+                    dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
+                    results_acc['traj_pixel_map'].append(dummy_map)
+                    results_acc['track_pixel_map'].append(dummy_map)
+
+                RangePop()
+
              # ~~~ Light detector response simulation ~~~
             if light.LIGHT_SIMULATED:
                 RangePush("sum_light_signals", 4)
-                light_inc = light_sim_dat[batch_mask]
-                selected_track_id = segment_ids_arr[batch_mask]#cp.array(selected_tracks["segment_id"])
+                light_inc = light_sim_dat[valid_batch_mask]
+                selected_track_id = segment_ids_arr[valid_batch_mask]#cp.array(selected_tracks["segment_id"])
                 n_light_ticks, light_t_start = light_sim.get_nticks(light_inc)
                 n_light_ticks = min(n_light_ticks,int(5E4))
                 # at least the optical channels from a whole module are activated together
@@ -1362,7 +1614,7 @@ def run_simulation(input_filename,
                 BPG = (max(ceil(light_sample_inc.shape[0] / TPB[0]),1),
                         max(ceil(light_sample_inc.shape[1] / TPB[1]),1))
                 light_sim.sum_light_signals[BPG, TPB](
-                    all_selected_tracks, track_light_voxel[batch_mask], selected_track_id,
+                    all_selected_tracks, track_light_voxel[valid_batch_mask], selected_track_id,
                     light_inc, op_channel, lut, light_t_start, light_sample_inc, light_sample_inc_true_track_id,
                     light_sample_inc_true_photons, sorted_indices, t0_profile_length)
                 RangePop()
