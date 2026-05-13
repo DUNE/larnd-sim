@@ -957,7 +957,7 @@ def run_simulation(input_filename,
             RangePop()
 
             RangePush("load_pixel_pedestals")
-            pixel_pedestals_file = None
+            pixel_pedestals_lut = None
             if pixel_pedestals_file is not None:
                 pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
             RangePop()
