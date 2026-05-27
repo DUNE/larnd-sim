@@ -1,8 +1,4 @@
-# module 0 (single 2x2 module), non-beam
-module0:
-    SIM_PROPERTIES:  singles_sim.yaml
-    PIXEL_LAYOUT:    multi_tile_layout-2.4.16_v4.yaml
-    DET_PROPERTIES:  module0.yaml
+# module 0 (single 2x2 module), non-beam module0: SIM_PROPERTIES:  singles_sim.yaml PIXEL_LAYOUT:    multi_tile_layout-2.4.16_v4.yaml DET_PROPERTIES:  module0.yaml
     RESPONSE:        response_44_v2a_full.npz
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
@@ -127,7 +123,7 @@ fsd_cube:
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsdcube.yaml
     DET_PROPERTIES:  fsd_cube.yaml
-    RESPONSE:        response_37_v2d_fsd_ndlar_full.npz
+    RESPONSE:        /dvs_ro/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_fsdcube_v2d_full_25x25pixel_250Vcm.npz
     PIXEL_THRESHOLDS_FILE: [thresholds_fsdcube.npz]
     PIXEL_THRESHOLDS_ID: [0]
     PIXEL_PEDESTALS_FILE: [pedestals_fsdcube.npz]
