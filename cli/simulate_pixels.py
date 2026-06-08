@@ -978,15 +978,19 @@ def run_simulation(input_filename,
         RangePush("run_simulation")
         TPB = 256
         BPG = max(ceil(tracks.shape[0] / TPB),1)
-
+        
         RangePush("quench_electrons")
+        # load NEST yields
+        NEST_ER = np.load('../larndsim/bin/ChargeLightYieldsNestLAr.npz')
+        recomb_energies, Ne_yields, Nph_yields = NEST_ER['E']*1e-3, NEST_ER['Ne_yield'], NEST_ER['Nph_yield']
+
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
         logger.start()
         logger.take_snapshot()
         start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+        quenching.quench[BPG,TPB](tracks, sim.RECOMB_MODE, recomb_energies, Ne_yields, Nph_yields)
         end_quenching = time()
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')

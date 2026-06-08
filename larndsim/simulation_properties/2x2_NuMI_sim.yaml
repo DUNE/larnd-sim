@@ -9,3 +9,5 @@ max_events_per_file: 1000
 
 max_light_truth_ids: 50 # set to zero to disable light truth backtracking
 mc_truth_threshold: 0.1 # pe/us
+
+recomb_mode: 2 

@@ -23,7 +23,7 @@ segments_dtype = np.dtype([("event_id","u4"), ("vertex_id", "u8"), ("file_vertex
                            ("t0_start", "f8"), ("t0_end", "f8"), ("t0", "f8"),
                            ("dx", "f4"), ("long_diff", "f4"),
                            ("pixel_plane", "i4"), ("t_end", "f4"),
-                           ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"),
+                           ("dEdx", "f4"), ("dE", "f4"), ("t", "f4"), ("p_mag_traj_start", "f4"),
                            ("y", "f4"), ("x", "f4"), ("z", "f4"),
                            ("n_photons","f4")], align=True)
 
@@ -462,6 +462,7 @@ def dump(input_file, output_file, keep_all_dets=False):
                 segment[iHit]["tran_diff"] = 0
                 segment[iHit]["pixel_plane"] = 0
                 segment[iHit]["n_photons"] = 0
+                segment[iHit]["p_mag_traj_start"] = sqrt(sum(trajectories[trajectories["traj_id"]==hitSegment.Contrib[0]]["pxyz_start"][0]**2))
 
             segments_list.append(segment)
         trajectories_list.append(trajectories[:n_traj])
