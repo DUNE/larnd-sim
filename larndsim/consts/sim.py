@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from .units import mm, cm, V, kV
 
+SEGMENT_BATCH_SIZE = 10000    # units = track segments
 PIXEL_BATCH_SIZE = 2000     # units = pixels
 EVENT_BATCH_SIZE = 1  # units = N tpcs
 WRITE_BATCH_SIZE = 1  # units = N batches
