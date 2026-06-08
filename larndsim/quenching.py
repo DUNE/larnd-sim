@@ -116,10 +116,10 @@ def quench(tracks, mode, recomb_energies=None, Ne_yields=None, Nph_yields=None):
                 recomb = NEST_ALPHA()
             else:
                 raise ValueError("Invalid recombination mode: must be 'physics.BOX', 'physics.BIRKS', 'physics.NEST_ER', or 'physics.NEST_ALPHA'")
-
+            recomb = NEST_ALPHA()
             if isnan(recomb):
                 raise RuntimeError("Invalid recombination value")
                 
-            if not use_nest:
-                tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
-                tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
+            #if not use_nest:
+            tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
+            tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE

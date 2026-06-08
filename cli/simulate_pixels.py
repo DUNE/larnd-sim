@@ -981,7 +981,7 @@ def run_simulation(input_filename,
         
         RangePush("quench_electrons")
         # load NEST yields
-        NEST_ER = np.load('../larndsim/bin/ChargeLightYieldsNestLAr.npz')
+        NEST_ER = np.load('/global/cfs/cdirs/dune/users/seschwar/ND_Production/run-larnd-sim/larnd-sim/larndsim/bin/ChargeLightYieldsNestLAr.npz') # FIXME
         recomb_energies, Ne_yields, Nph_yields = NEST_ER['E']*1e-3, NEST_ER['Ne_yield'], NEST_ER['Nph_yield']
 
         # We calculate the number of electrons after recombination (quenching module)
