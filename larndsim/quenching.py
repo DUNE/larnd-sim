@@ -112,7 +112,7 @@ def quench(tracks, mode, recomb_energies=None, Ne_yields=None, Nph_yields=None):
                 tracks[itrk]["n_electrons"] = Ne * dE / energy
                 tracks[itrk]["n_photons"] = Nph * dE / energy
                 use_nest = True
-            elif mode == physics.NEST_ALPHA or pdg == 100002004:
+            elif mode == physics.NEST_ALPHA or pdg == 1000020040: # alpha particle PDG code
                 recomb = NEST_ALPHA()
             else:
                 raise ValueError("Invalid recombination mode: must be 'physics.BOX', 'physics.BIRKS', 'physics.NEST_ER', or 'physics.NEST_ALPHA'")
