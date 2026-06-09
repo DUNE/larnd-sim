@@ -8,8 +8,8 @@ tracks_dset_name: 'segments' # or 'segments'
 max_events_per_file: 10000
 
 max_light_truth_ids: 0 # set to zero to disable light truth backtracking
-# mc_truth_threshold: 0.1 # pe/us
-mc_truth_threshold: 1000 # pe/us
+mc_truth_threshold: 0.1 # pe/us
+# mc_truth_threshold: 1000 # pe/us
 
 
 recomb_mode: 3
