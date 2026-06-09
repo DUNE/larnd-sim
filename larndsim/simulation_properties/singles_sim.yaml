@@ -12,4 +12,4 @@ mc_truth_threshold: 0.1 # pe/us
 # mc_truth_threshold: 1000 # pe/us
 
 
-recomb_mode: 3
+recomb_mode: 4

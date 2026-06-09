@@ -125,6 +125,6 @@ def quench(tracks, mode, recomb_energies=None, Ne_yields=None, Nph_yields=None):
             if not use_nest:
                 tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
                 tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
-            print(mode, pdg, use_nest, dEdx, recomb, tracks[itrk]["n_electrons"], tracks[itrk]["n_photons"])
-        else:
-            print(dEdx, pdg)
+            # print(mode, pdg,['False','True'][use_nest], dEdx, recomb, tracks[itrk]["n_electrons"], tracks[itrk]["n_photons"])
+        # else:
+        #     print(dEdx, pdg)
