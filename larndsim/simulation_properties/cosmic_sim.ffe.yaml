@@ -1,0 +1,13 @@
+segment_batch_size: 10000    # track segments
+event_batch_size: 2          # tpcs
+write_batch_size: 1          # batches
+is_spill_sim: 0              # boolean
+event_separator: 'event_id'   # 'eventID'
+tracks_dset_name: 'segments' # or 'segments'
+max_events_per_file: 10000
+
+max_light_truth_ids: 50 # set to zero to disable light truth backtracking
+mc_truth_threshold: 0.1 # pe/us
+
+farfield_enabled: True
+farfield_mode: 'segments'
