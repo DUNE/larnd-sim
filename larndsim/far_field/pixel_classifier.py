@@ -1,4 +1,4 @@
-"""
+R"""
 Classifies pixels into physics categories (CHARGE_COLLECTION, CHARGE_NEIGHBOR,
 INDUCTION_ONLY, INACTIVE) based on:
 
@@ -86,7 +86,7 @@ def classify_pixels_kernel(
     categories: cpt.NDArray[cp.int32],
     z_anode: float,
 ):
-    """
+    R"""
     CUDA kernel to classify each pixel by proximity to segments.
 
     For each pixel:
