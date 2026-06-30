@@ -4,6 +4,7 @@ Command-line interface to larnd-sim module.
 """
 
 from collections import defaultdict
+from functools import lru_cache
 import importlib
 from math import ceil, floor
 import os
@@ -250,6 +251,48 @@ def do_save_results(
                                                 compression=compression)
 
 
+def prep_null_light_results(light_noise):
+    null_light_results_acc = defaultdict(list)
+    trigger_idx = cp.array([0], dtype=int)
+    # FIXME: mod2mod_var?
+    op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
+    op_channel = cp.array(op_channel)
+    trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
+    digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+
+    n_light_det = op_channel.shape[0]
+    n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
+
+    light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+    #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+    light_response_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+    light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+
+    RangePush('light_sim_triggers')
+    TPB = (1,1,64)
+    BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+            max(ceil(len(op_channel) / TPB[1]),1),
+            max(ceil(digit_samples / TPB[2]),1))
+    light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
+        BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+        digit_samples, light_noise)
+    RangePop()
+
+    light_t_start = 0
+    trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
+
+    #null_light_results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
+    null_light_results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+    null_light_results_acc['light_trigger_idx'].append(trigger_idx)
+    null_light_results_acc['trigger_type'].append(trigger_type)
+    null_light_results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+    null_light_results_acc['light_waveforms'].append(light_digit_signal)
+    null_light_results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+    null_light_results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+
+    return null_light_results_acc
+
+
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2',
@@ -287,7 +330,6 @@ def run_simulation(input_filename,
     detector_properties = cfg['DET_PROPERTIES']
     simulation_properties = cfg['SIM_PROPERTIES']
     light_simulated = cfg.get('LIGHT_SIMULATED', True)
-    light_simulated = light_simulated
     bad_channels = cfg.get('BAD_CHANNELS')
 
     pixel_layout = load_mod2mod_prop(cfg, 'PIXEL_LAYOUT')
@@ -676,7 +718,6 @@ def run_simulation(input_filename,
             RangePush('calculate_light_incidence')
             TPB = 256
             BPG = max(ceil(tracks.shape[0] / TPB),1)
-            # breakpoint()
             lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel,
                                                         op_channel_efficiency, op_channel_to_tpc)
             RangePop()
@@ -686,45 +727,8 @@ def run_simulation(input_filename,
             logger.take_snapshot()
             logger.archive(f'light_mod{i_mod}')
 
-            # Prepare the light waveform padding
-            if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                null_light_results_acc = defaultdict(list)
-                trigger_idx = cp.array([0], dtype=int)
-                # FIXME: mod2mod_var?
-                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
-                op_channel = cp.array(op_channel)
-                trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
-                digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
-
-                n_light_det = op_channel.shape[0]
-                n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
-
-                light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-                #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-                light_response_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-                light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
-
-                RangePush('light_sim_triggers')
-                TPB = (1,1,64)
-                BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
-                       max(ceil(len(op_channel) / TPB[1]),1),
-                       max(ceil(digit_samples / TPB[2]),1))
-                light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-                    BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-                    digit_samples, light_noise)
-                RangePop()
-
-                light_t_start = 0
-                trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
-
-                #null_light_results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
-                null_light_results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-                null_light_results_acc['light_trigger_idx'].append(trigger_idx)
-                null_light_results_acc['trigger_type'].append(trigger_type)
-                null_light_results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-                null_light_results_acc['light_waveforms'].append(light_digit_signal)
-                null_light_results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-                null_light_results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+            if light_simulated:
+                null_light_results_acc = prep_null_light_results(light_noise)
 
             print(f" {time()-start_light_time:.2f} s")
 
@@ -748,6 +752,12 @@ def run_simulation(input_filename,
                                    pixel_pedestals_lut=pixel_pedestals_lut,
                                    rand_seed=rand_seed,
                                    rng_states=rng_states)
+
+        if light_simulated:
+            def save_null_light_results(ievd: int, i_trig: int, i_mod: int):
+                null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+                save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
+                del null_light_results_acc['light_event_id']
 
         segment_ids_arr = cp.asarray(segment_ids)
         trajectory_ids_arr = cp.asarray(trajectory_ids)
@@ -796,11 +806,9 @@ def run_simulation(input_filename,
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
             if len(track_subset) == 0:
-                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
-                    i_trig += 1 # add to the trigger counter
-                    del null_light_results_acc['light_event_id']
+                if light_simulated:
+                    save_null_light_results(ievd, i_trig, i_mod)
+                    i_trig += 1
                 # Nothing to simulate for charge readout?
                 RangePop() # setup_event_batch
                 continue
@@ -843,11 +851,9 @@ def run_simulation(input_filename,
             all_n_pixels_list = cp.zeros(shape=(all_selected_tracks.shape[0]))
 
             if not all_active_pixels.shape[1] or not all_neighboring_pixels.shape[1]:
-                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
-                    i_trig += 1 # add to the trigger counter n_max_pixels
-                    del null_light_results_acc['light_event_id']
+                if light_simulated:
+                    save_null_light_results(ievd, i_trig, i_mod)
+                    i_trig += 1
                 continue
 
             RangePush("get_pixels", 7)
@@ -866,11 +872,9 @@ def run_simulation(input_filename,
             RangePop()
 
             if not all_unique_pix.shape[0]:
-                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
-                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
+                if light_simulated:
+                    save_null_light_results(ievd, i_trig, i_mod)
                     i_trig += 1 # add to the trigger counter
-                    del null_light_results_acc['light_event_id']
                 continue
 
             RangePush("invert_array_map")
