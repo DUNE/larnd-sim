@@ -2,167 +2,39 @@
 """
 Command-line interface to larnd-sim module.
 """
-from math import ceil, floor
-from time import time
-import warnings
-from collections import defaultdict
-import os
-from typing import Any, Optional
 
+from collections import defaultdict
+import importlib
+from math import ceil, floor
+import os
+from time import time
+from typing import Any, Optional
+import warnings
+
+import cupy as cp
+from cupy.cuda.nvtx import RangePush, RangePop
+import cupy.typing as cpt
+import fire
+import h5py
+import numba as nb
+from numba.cuda import device_array, to_device
 import numpy as np
 import numpy.typing as npt
 import numpy.lib.recfunctions as rfn
-
-import cupy as cp
-import cupy.typing as cpt
-from cupy.cuda.nvtx import RangePush, RangePop
-
-# Disabling the memory pool is useful when profiling
-# (we can then match memory spikes to the responsible allocations)
-if os.getenv('LARNDSIM_DISABLE_CUPY_MEMPOOL'):
-    # Disable memory pool for device memory (GPU):
-    cp.cuda.set_allocator(None)
-    # Disable memory pool for pinned memory (CPU):
-    cp.cuda.set_pinned_memory_allocator(None)
-
-import fire
-import h5py
-
-import numba as nb
-from numba.cuda import device_array, to_device
-from numba.cuda.random import create_xoroshiro128p_states
-from numba.core.errors import NumbaPerformanceWarning
-
 from tqdm import tqdm
 
 from larndsim import _version
 from larndsim import consts
-from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
-import importlib
-
-from larndsim.util import CudaDict, batching, memory_logger
+from larndsim import active_volume, quenching, drifting, detsim
+from larndsim import pixels_from_track, fee, lightLUT, light_sim
 from larndsim.config import get_config
-from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
 from larndsim.consts import ff_induction
-
-SEED = int(time())
-
-LOGO = r"""
-  _                      _            _
- | |                    | |          (_)
- | | __ _ _ __ _ __   __| |______ ___ _ _ __ ___
- | |/ _` | '__| '_ \ / _` |______/ __| | '_ ` _ \
- | | (_| | |  | | | | (_| |      \__ \ | | | | | |
- |_|\__,_|_|  |_| |_|\__,_|      |___/_|_| |_| |_|
-
-"""
-
-warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
-def warning_str_format(message, category, filename, lineno, line=None):
-    # Get the last few parts of the filepath for less clutter when printing
-    splitname = "/".join(filename.split('/')[-3:])
-    return f"\033[33m{splitname}:{lineno}: {category.__name__}: {message}\033[0m"
-
-# Play nice with loops wrapped with tqdm; using tqdm.write() prints the warning on its own line
-def tqdm_show_warning(message, category, filename, lineno, file=None, line=None):
-    tqdm.write(warning_str_format(str(message), category, filename, lineno))
-
-warnings.formatwarning = warning_str_format
-warnings.showwarning = tqdm_show_warning
-
-def swap_coordinates(tracks):
-    """
-    Swap x and z coordinates in tracks.
-    This is because the convention in larnd-sim is different
-    from the convention in edep-sim. FIXME.
-
-    Args:
-        tracks (:obj:`numpy.ndarray`): tracks array.
-
-    Returns:
-        :obj:`numpy.ndarray`: tracks with swapped axes.
-    """
-    x_start = np.copy(tracks['x_start'] )
-    x_end = np.copy(tracks['x_end'])
-    x = np.copy(tracks['x'])
-
-    tracks['x_start'] = np.copy(tracks['z_start'])
-    tracks['x_end'] = np.copy(tracks['z_end'])
-    tracks['x'] = np.copy(tracks['z'])
-
-    tracks['z_start'] = x_start
-    tracks['z_end'] = x_end
-    tracks['z'] = x
-
-    return tracks
-
-def maybe_create_rng_states(n, seed=0, rng_states=None):
-    """Create or extend random states for CUDA kernel"""
-
-    if rng_states is None:
-        return create_xoroshiro128p_states(n, seed=seed)
-
-    if n > len(rng_states):
-        new_states = device_array(n, dtype=rng_states.dtype)
-        new_states[:len(rng_states)] = rng_states
-        new_states[len(rng_states):] = create_xoroshiro128p_states(n - len(rng_states), seed=seed, subsequence_start = len(rng_states))
-        return new_states
-
-    return rng_states
-
-def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
-    if cfg_files is None:
-        return None
-
-    if ids is None:
-        if isinstance(cfg_files, list) and len(cfg_files) != n_modules:
-            raise KeyError(f"Simulation with module variation activated, but the number of {message} is incorrect!")
-        elif isinstance(cfg_files, list) and len(cfg_files) == n_modules:
-            warnings.warn("Simulation with module variation activated, using default orders for the {message}.")
-    else:
-        if not isinstance(cfg_files, list) or len(ids) != n_modules or max(ids) >= len(cfg_files):
-            raise KeyError(f"Simulation with module variation activated, but the number of pointer for {message} is incorrect!")
-        else:
-            module_files = [cfg_files[idx] for idx in ids]
-            cfg_files = module_files
-
-    return cfg_files
-
-###################################
-# Kazu 2024-07-01 Useful if we modify the output to store all contributions
-###################################
-@nb.njit
-def _invert_array_map_inner(in_map, pix_id2idx, curr_idx, out_map):
-    for seg_idx in range(in_map.shape[0]):
-        ass = in_map[seg_idx]
-        for pixid in ass:
-            if pixid<0: break
-            pix_idx = pix_id2idx[pixid.item()]
-            out_map[pix_idx][curr_idx[pix_idx]]=seg_idx
-            curr_idx[pix_idx] += 1
-
-def invert_array_map(in_map,pix_set):
-    '''
-    Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
-    pixel index => a set of segment indexes (not IDs).
-
-    Args:
-        in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
-        pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
-    Returns:
-        ndarray: 2D array where pixel index => list of segment index
-    '''
-    pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
-
-    pix_id2idx = nb.typed.Dict.empty(key_type=nb.types.int64,
-                                     value_type=nb.types.int64)
-    for i, val in enumerate(pix_set.get()):
-        pix_id2idx[val] = i
-
-    mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
-    curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
-    _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
-    return cp.array(mymap)
+from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
+from larndsim.pixels_from_track import invert_array_map
+from larndsim.util import CudaDict, batching, configure_warnings
+from larndsim.util import LOGO, load_mod2mod_variation_properties
+from larndsim.util import maybe_create_rng_states, maybe_disable_cupy_mempool
+from larndsim.util import memory_logger, swap_coordinates
 
 
 def do_digitize_and_update(results_acc: dict[str, Any],
@@ -593,7 +465,8 @@ def run_simulation(input_filename,
 
     RangePush("set_random_seed")
     # set up random seed for larnd-sim
-    if not rand_seed: rand_seed = SEED
+    if not rand_seed:
+        rand_seed = int(time())
     cp.random.seed(rand_seed)
     # pre-allocate some random number states for custom kernels
     rng_states = maybe_create_rng_states(1024*256, seed=rand_seed)
@@ -1798,7 +1671,16 @@ def run_simulation(input_filename,
     logger.archive('loop',['loop'])
     logger.store(save_memory)
 
-if __name__ == "__main__":
+
+def main():
+    maybe_disable_cupy_mempool()
+    configure_warnings()
+
     RangePush("simulate_pixels")
     fire.Fire(run_simulation)
     RangePop()
+
+
+if __name__ == "__main__":
+    main()
+    

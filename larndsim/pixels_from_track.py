@@ -3,8 +3,11 @@ Module that finds which pixels lie on the projection on the anode plane
 of each track segment. It can eventually include also the neighboring
 pixels.
 """
+
+import cupy as cp
 import numba as nb
 from numba import cuda
+import numpy as np
 from .consts import detector
 
 MAX_NEIGHBOR_BACKTRACK_DISTANCE=4
@@ -296,3 +299,38 @@ def get_neighboring_pixels(active_pixels, neighboring_pixels, neighboring_radius
                         count += 1
 
     return count
+
+
+@nb.njit
+def _invert_array_map_inner(in_map, pix_id2idx, curr_idx, out_map):
+    for seg_idx in range(in_map.shape[0]):
+        ass = in_map[seg_idx]
+        for pixid in ass:
+            if pixid<0: break
+            pix_idx = pix_id2idx[pixid.item()]
+            out_map[pix_idx][curr_idx[pix_idx]]=seg_idx
+            curr_idx[pix_idx] += 1
+
+
+def invert_array_map(in_map,pix_set):
+    '''
+    Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
+    pixel index => a set of segment indexes (not IDs).
+
+    Args:
+        in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
+        pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
+    Returns:
+        ndarray: 2D array where pixel index => list of segment index
+    '''
+    pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
+
+    pix_id2idx = nb.typed.Dict.empty(key_type=nb.types.int64,
+                                     value_type=nb.types.int64)
+    for i, val in enumerate(pix_set.get()):
+        pix_id2idx[val] = i
+
+    mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
+    curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
+    _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
+    return cp.array(mymap)
