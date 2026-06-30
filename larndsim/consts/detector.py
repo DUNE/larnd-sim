@@ -1,14 +1,18 @@
 """
 Set detector constants
 """
+from functools import lru_cache
 import warnings
 
 import numpy as np
 import cupy as cp
+from cupy.cuda.nvtx import RangePush, RangePop
 import yaml
 
 from collections import defaultdict
 from larpix.packet import Packet_v2, Packet_v3
+
+from larndsim.util import CudaDict
 
 # LArPix settings for Packet data structure
 LARPIX_REGISTRY = {
@@ -197,7 +201,8 @@ def load_detector_properties(config_keyword):
     cfg = get_config(config_keyword)
     set_detector_properties(cfg['DET_PROPERTIES'],cfg['PIXEL_LAYOUT'])
 
-def get_n_modules(detprop_file):
+@lru_cache
+def get_module_ids(detprop_file):
     """
     The function loads the global detector properties (not subject to the module variations)
     stores the constants as global variables
@@ -301,7 +306,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     with open(detprop_file) as df:
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
-    MOD_IDS = get_n_modules(detprop_file)
+    MOD_IDS = get_module_ids(detprop_file)
 
     n_mod = len(MOD_IDS)
 
@@ -476,7 +481,9 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                 NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
         NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
 
+@lru_cache
 def load_response(response_file):
+    RangePush("load_module_induction_response")
     global RESPONSE_MAX_TIME
 
     # load the charge response for the full drift length
@@ -496,4 +503,41 @@ def load_response(response_file):
 
     RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
 
+    RangePop()
     return response
+
+@lru_cache(maxsize=1)
+def _load_thresholds(pixel_thresholds_file: str):
+    return CudaDict.load(pixel_thresholds_file, 512)
+
+def load_thresholds(pixel_thresholds_files: list[str] | None, i_mod: int):
+    RangePush("load_pixel_thresholds")
+    result = None
+    if pixel_thresholds_files is not None:
+        result = _load_thresholds(pixel_thresholds_files[i_mod-1])
+    RangePop()
+    return result
+
+@lru_cache(maxsize=1)
+def _load_gains(pixel_gains_file: str):
+    return CudaDict.load(pixel_gains_file, 512)
+
+def load_gains(pixel_gains_files: list[str] | None, i_mod: int):
+    RangePush("load_pixel_gains")
+    result = None
+    if pixel_gains_files is not None:
+        result = _load_gains(pixel_gains_files[i_mod-1])
+    RangePop()
+    return result
+
+@lru_cache(maxsize=1)
+def _load_pedestals(pixel_pedestals_file: str):
+    return CudaDict.load(pixel_pedestals_file, 512)
+
+def load_pedestals(pixel_pedestals_files: list[str] | None, i_mod: int):
+    RangePush("load_pixel_pedestals")
+    result = None
+    if pixel_pedestals_files is not None:
+        result = _load_pedestals(pixel_pedestals_files[i_mod-1])
+    RangePop()
+    return result

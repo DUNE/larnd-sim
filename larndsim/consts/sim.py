@@ -61,7 +61,6 @@ def set_simulation_properties(simprop_file):
     global SPILL_PERIOD
     global MAX_EVENTS_PER_FILE
     global TRACKS_DSET_NAME
-    global MOD2MOD_VARIATION
 
     global MAX_TRACKS_PER_PIXEL
 

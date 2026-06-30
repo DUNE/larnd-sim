@@ -8,8 +8,6 @@ import numbers
 
 from . import detector
 
-LIGHT_SIMULATED = True
-
 ENABLE_LUT_SMEARING = False
 
 N_OP_CHANNEL = 0
@@ -72,8 +70,6 @@ def set_light_properties(detprop_file):
         detprop_file (str): detector properties YAML filename
 
     """
-    global LIGHT_SIMULATED
-
     global N_OP_CHANNEL
     global OP_CHANNEL_EFFICIENCY
     global OP_CHANNEL_TO_TPC
@@ -106,9 +102,7 @@ def set_light_properties(detprop_file):
         detprop = yaml.load(df, Loader=yaml.FullLoader)
 
     try:
-        LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))
-
-        mod_ids = detector.get_n_modules(detprop_file)
+        mod_ids = detector.get_module_ids(detprop_file)
         n_tpc = len(mod_ids)*2
         N_OP_CHANNEL = detprop['n_op_channel']
         if N_OP_CHANNEL % n_tpc != 0:
@@ -190,6 +184,5 @@ def set_light_properties(detprop_file):
 
 
     except KeyError:
-        LIGHT_SIMULATED = False
         LIGHT_TRIG_MODE = int(detprop.get('light_trig_mode', LIGHT_TRIG_MODE))
         assert LIGHT_TRIG_MODE in (0,1)

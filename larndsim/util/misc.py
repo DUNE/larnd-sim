@@ -96,20 +96,3 @@ def maybe_create_rng_states(n, seed=0, rng_states=None):
     return rng_states
 
 
-def load_mod2mod_variation_properties(cfg_files, ids, n_modules, message=""):
-    if cfg_files is None:
-        return None
-
-    if ids is None:
-        if isinstance(cfg_files, list) and len(cfg_files) != n_modules:
-            raise KeyError(f"Simulation with module variation activated, but the number of {message} is incorrect!")
-        elif isinstance(cfg_files, list) and len(cfg_files) == n_modules:
-            warnings.warn("Simulation with module variation activated, using default orders for the {message}.")
-    else:
-        if not isinstance(cfg_files, list) or len(ids) != n_modules or max(ids) >= len(cfg_files):
-            raise KeyError(f"Simulation with module variation activated, but the number of pointer for {message} is incorrect!")
-        else:
-            module_files = [cfg_files[idx] for idx in ids]
-            cfg_files = module_files
-
-    return cfg_files

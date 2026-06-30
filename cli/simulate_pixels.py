@@ -27,12 +27,13 @@ from larndsim import _version
 from larndsim import consts
 from larndsim import active_volume, quenching, drifting, detsim
 from larndsim import pixels_from_track, fee, lightLUT, light_sim
-from larndsim.config import get_config
-from larndsim.consts import ff_induction
+from larndsim.config import get_config, load_mod2mod_prop, reload_modules
+from larndsim.config import load_thresholds, load_gains, load_pedestals
+from larndsim.consts import detector, ff_induction, light, physics, sim
 from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
 from larndsim.pixels_from_track import invert_array_map
 from larndsim.util import CudaDict, batching, configure_warnings
-from larndsim.util import LOGO, load_mod2mod_variation_properties
+from larndsim.util import LOGO
 from larndsim.util import maybe_create_rng_states, maybe_disable_cupy_mempool
 from larndsim.util import memory_logger, swap_coordinates
 
@@ -147,6 +148,7 @@ def do_save_results(
     output_filename: str,
     compression: Optional[str],
     bad_channels: dict[str, list[int]],
+    light_simulated: bool,
 ):
     """
     Save the accumulated results of the simulation.
@@ -182,6 +184,7 @@ def do_save_results(
         output_filename: Output filename
         compression: Optional file compression mode (e.g. 'lzf', 'gzip')
         bad_channels: Optional dict with list of bad channels for each chip key
+        light_simulated: Whether the light sim is enabled
     """
     from larndsim.consts import detector, light, sim
 
@@ -193,7 +196,7 @@ def do_save_results(
     uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
 
     if not light_only:
-        if light.LIGHT_SIMULATED:
+        if light_simulated:
             # prep arrays for embedded triggers in charge data stream
             light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
             if light.LIGHT_TRIG_MODE == 1:
@@ -222,7 +225,7 @@ def do_save_results(
                            i_mod=i_mod,
                            compression=compression)
 
-    if light.LIGHT_SIMULATED and len(results['light_event_id']):
+    if light_simulated and len(results['light_event_id']):
         if light.LIGHT_TRIG_MODE == 0:
             light_sim.export_to_hdf5(results['light_event_id'],
                                      results['light_start_time'],
@@ -250,25 +253,7 @@ def do_save_results(
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2',
-                   mod2mod_variation=None,
-                   pixel_layout=None,
-                   pixel_layout_id=None,
-                   detector_properties=None,
-                   simulation_properties=None,
-                   response_file=None,
-                   response_id=None,
-                   light_simulated=None,
-                   light_lut_filename=None,
-                   light_lut_id=None,
-                   light_det_noise_filename=None,
-                   bad_channels=None,
                    n_events=None,
-                   pixel_thresholds_file=None,
-                   pixel_thresholds_id=None,
-                   pixel_gains_file=None,
-                   pixel_gains_id=None,
-                   pixel_pedestals_file=None,
-                   pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
                    save_memory=None):
@@ -279,27 +264,9 @@ def run_simulation(input_filename,
         input_filename (str): path of the edep-sim input file
         output_filename (str): path of the HDF5 output file. If not specified
             the output is added to the input file.
-        config (str, optional): a keyword to specify a configuration (all necessary meta data files)
-        mod2mod_variation (bool): a flag indicating if load different configurations for different LArTPC modules
-        pixel_layout (str): path of the YAML file containing the pixel
-            layout and connection details.
-        detector_properties (str): path of the YAML file containing
-            the detector properties
-        simulation_properties (str): path of the YAML file containing
-            the simulation properties
-        response_file (str): path of the Numpy array containing the pre-calculated
-            field responses. 
-        light_lut_file (str, optional): path of the Numpy array containing the light
-            look-up table. 
-        light_det_noise_filename (str, optional): path of the Numpy array containing the light noise information
-        bad_channels (str, optional): path of the YAML file containing the channels to be
-            disabled. Defaults to None
+        config (str): a keyword to specify a configuration (all necessary meta data files)
         n_events (int, optional): number of events to be simulated. Defaults to None
             (all tracks).
-        pixel_thresholds_file (str, optional): path to npz file containing pixel thresholds. Defaults
-            to None.
-        pixel_gains_file (str): path to npz file containing pixel gain values. Defaults to None (the value of fee.GAIN)
-        pixel_pedestals_file (str, optional): path to npx files containing pixel pedestals. Defaults to None.
         rand_seed (int, optional): the random number generator seed that can be set through 
             a command-line
         save_memory (string path, optional): if non-empty, this is used as a filename to 
@@ -316,95 +283,23 @@ def run_simulation(input_filename,
     if os.path.exists(output_filename):
         raise Exception(f'Output file {output_filename} already exists.')
 
-    # Set the input (meta data) files
     cfg = get_config(config)
-    if mod2mod_variation is None:
-        try:
-            mod2mod_variation = cfg['MOD2MOD_VARIATION']
-        except:
-            print("The configuration has not specify whether to load different configurations for different modules. By default all the modules (if more than one simulated) are loaded with the same configuration.")
+    detector_properties = cfg['DET_PROPERTIES']
+    simulation_properties = cfg['SIM_PROPERTIES']
+    light_simulated = cfg.get('LIGHT_SIMULATED', True)
+    light_simulated = light_simulated
+    bad_channels = cfg.get('BAD_CHANNELS')
 
-    if pixel_layout is None:
-        pixel_layout = cfg['PIXEL_LAYOUT']
-    if pixel_layout_id is None:
-        try:
-            pixel_layout_id = cfg['PIXEL_LAYOUT_ID']
-        except:
-            if mod2mod_variation is True:
-                print("Simulation with module variation activated, but pixel_layout_id is not provided.")
-    if detector_properties is None:
-        detector_properties = cfg['DET_PROPERTIES']
-    if response_file is None:
-        response_file = cfg['RESPONSE']
-    if response_id is None:
-        try:
-            response_id = cfg['RESPONSE_ID']
-        except:
-            if mod2mod_variation is True:
-                print("Simulation with module variation activated, but response_id is not provided.")
-    if pixel_thresholds_file is None:
-        try:
-            pixel_thresholds_file = cfg['PIXEL_THRESHOLDS_FILE']
-            pixel_thresholds_id = cfg['PIXEL_THRESHOLDS_ID']
-        except:
-            print("Pixel threshold files are not provided. Using the default thresholds.")
-    if pixel_gains_file is None:
-        try:
-            pixel_gains_file = cfg['PIXEL_GAINS_FILE']
-            pixel_gains_id = cfg['PIXEL_GAINS_ID']
-        except:
-            print("Pixel gain files are not provided. Using the default gains.")
-    if pixel_pedestals_file is None:
-        try:
-            pixel_pedestals_file = cfg['PIXEL_PEDESTALS_FILE']
-            pixel_pedestals_id = cfg['PIXEL_PEDESTALS_ID']
-        except:
-            print("Pixel pedestals files are not provided. Using the default pedestals.")
-
-    if simulation_properties is None:
-        simulation_properties = cfg['SIM_PROPERTIES']
-    if light_simulated is None:
-        try:
-            light_simulated = cfg['LIGHT_SIMULATED']
-        except:
-            print("The configuration has not specify whether to simulate light. By default the light simulation is activated.")
-            light_simulated = True
+    pixel_layout = load_mod2mod_prop(cfg, 'PIXEL_LAYOUT')
+    response_file = load_mod2mod_prop(cfg, 'RESPONSE_FILE')
+    pixel_thresholds_file = load_mod2mod_prop(cfg, 'PIXEL_THRESHOLDS_FILE')
+    pixel_gains_file = load_mod2mod_prop(cfg, 'PIXEL_GAINS_FILE')
+    pixel_pedestals_file = load_mod2mod_prop(cfg, 'PIXEL_PEDESTALS_FILE')
 
     if light_simulated:
-        if light_lut_filename is None:
-            try:
-                light_lut_filename = cfg['LIGHT_LUT']
-                if isinstance(light_lut_filename, list):
-                    for i_light_lut, f_light_lut in enumerate(light_lut_filename):
-                        if not os.path.isfile(f_light_lut):
-                            light_lut_filename[i_light_lut] = "larndsim/bin/lightLUT_time_norm.npz" # the default 2x2 module light lookup table
-                            warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
-                else:
-                    if not os.path.isfile(light_lut_filename):
-                        light_lut_filename = "larndsim/bin/lightLUT_time_norm.npz" # the default 2x2 module light lookup table
-                        warnings.warn("Path to light LUT in the configuration file is not valid. Switching to the default 2x2 module light LUT in larnd-sim now...")
-            except:
-                print("light_lut_filename is not provided (required if light_simulated is True)")
-        if light_lut_id is None:
-            try:
-                light_lut_id = cfg['LIGHT_LUT_ID']
-            except:
-                if mod2mod_variation is True:
-                    print("Simulation with module variation activated, but light_lut_id is not provided")
-        if light_det_noise_filename is None:
-            try:
-                light_det_noise_filename = cfg['LIGHT_DET_NOISE']
-            except:
-                print("light_det_noise_filename is not provided (required if light_simulated is True)")
+        light_lut_filename = load_mod2mod_prop(cfg, 'LIGHT_LUT')
+        light_det_noise_filename = cfg['LIGHT_DET_NOISE']
 
-    # Assert necessary ones
-    assert pixel_layout, 'pixel_layout (file) must be specified.'
-    assert simulation_properties, 'simulation_properties (file) must be specified'
-    assert detector_properties, 'detector_properties (file) must be specified'
-    assert response_file, 'response_file must be specified'
-
-    # Print configuration files
-    # Shall we give an option to turn of the print out?
     print("")
     print("edep-sim input file:", input_filename)
     print("larnd-sim output file:", output_filename)
@@ -415,49 +310,26 @@ def run_simulation(input_filename,
     print("Detector properties file:", detector_properties)
     print("Pixel layout file:", pixel_layout)
     print("Response file:", response_file)
-    if bad_channels:
-        print("Disabled channel list: ", bad_channels)
-    if pixel_thresholds_file:
-        print("Pixel threshold file: ", pixel_thresholds_file)
-    if pixel_gains_file:
-        print("Pixel gain file: ", pixel_gains_file)
-    if pixel_pedestals_file:
-        print("Pixel pedestals file: ", pixel_pedestals_file)
-    if light_lut_filename:
+    print("Disabled channel list: ", bad_channels)
+    print("Pixel threshold file: ", pixel_thresholds_file)
+    print("Pixel gain file: ", pixel_gains_file)
+    print("Pixel pedestals file: ", pixel_pedestals_file)
+
+    if sim.FARFIELD_ENABLED:
+        print("Far-field mode:", sim.FARFIELD_MODE)
+
+    if light_simulated:
         print("Light LUT:", light_lut_filename)
-    if light_det_noise_filename:
         print("Light detector noise: ", light_det_noise_filename)
+
     if save_memory:
         print('Recording the process resource log:', save_memory)
-    else:
-        print('Memory resource log will not be recorded')
 
-    # Get number of modules in the simulation
-    mod_ids = consts.detector.get_n_modules(detector_properties)
+    mod_ids = consts.detector.get_module_ids(detector_properties)
     n_modules = len(mod_ids)
 
-    if mod2mod_variation is True:
-        if n_modules == 1:
-            warnings.warn("Simulating one module with module variation activated! \nDeactivating module variation...")
-            mod2mod_variation = False
-        if (isinstance(pixel_layout, str) or len(pixel_layout) == 1) and (isinstance(response_file, str) or len(response_file) == 1) and (isinstance(light_lut_filename, str) or (light_lut_filename and len(light_lut_filename) == 1)):
-            warnings.warn("Simulation with module variation activated, but only provided a single set of configuration files of pixel layout, induction response or light lookup table! \nApplying to all modules...")
-
-    if mod2mod_variation is True:
-        # Load the index for pixel layout, response and LUT
-        pixel_layout = load_mod2mod_variation_properties(pixel_layout, pixel_layout_id, n_modules, message="pixel layout")
-        response_file = load_mod2mod_variation_properties(response_file, response_id, n_modules, message="response files")
-        pixel_thresholds_file = load_mod2mod_variation_properties(pixel_thresholds_file, pixel_thresholds_id, n_modules, message="pixel threshold files")
-        pixel_gains_file = load_mod2mod_variation_properties(pixel_gains_file, pixel_gains_id, n_modules, message="pixel gain files")
-        pixel_pedestals_file = load_mod2mod_variation_properties(pixel_pedestals_file, pixel_pedestals_id, n_modules, message="pixel pedestals files")
-        if light_simulated:
-            light_lut_filename = load_mod2mod_variation_properties(light_lut_filename, light_lut_id, n_modules, message="light LUT")
-
-        if pixel_layout_id and response_id:
-            if pixel_layout_id != response_id:
-                warnings.warn("Simulation with module variation activated, the pixel layout and response files may not be consistent with each other. Please double check!")
-
     RangePop() # load_config
+
     logger = memory_logger(save_memory is None)
     logger.start()
     logger.take_snapshot()
@@ -474,95 +346,8 @@ def run_simulation(input_filename,
 
     RangePush("load_properties")
 
-    # if n_modules == 1, mod2mod_variation would have already been set to False
-    if not mod2mod_variation:
-        # Check if the configurations are consistent
-        # Allow configuration to be provided as a string or a single element list
-        if isinstance(pixel_layout, list) and len(pixel_layout) > 1:
-            raise KeyError("Provided more than one pixel layout file for the simulation with no module variation.")
-        elif isinstance(pixel_layout, list) and len(pixel_layout) == 1:
-            pixel_layout = pixel_layout[0]
-
-        if isinstance(response_file, list) and len(response_file) > 1:
-            raise KeyError("Provided more than one response file for the simulation with no module variation.")
-        elif isinstance(response_file, list) and len(response_file) == 1:
-            response_file = response_file[0]
-
-        if isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) > 1:
-            raise KeyError("Provided more than one pixel threshold file for the simulation with no module variation.")
-        elif isinstance(pixel_thresholds_file, list) and len(pixel_thresholds_file) == 1:
-            pixel_thresholds_file = pixel_thresholds_file[0]
-
-        if isinstance(pixel_gains_file, list) and len(pixel_gains_file) > 1:
-            raise KeyError("Provided more than one pixel gain file for the simulation with no module variation.")
-        elif isinstance(pixel_gains_file, list) and len(pixel_gains_file) == 1:
-            pixel_gains_file = pixel_gains_file[0]
-
-        if isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) > 1:
-            raise KeyError("Provided more than one pixel pedestal file for the simulation with no module variation.")
-        elif isinstance(pixel_pedestals_file, list) and len(pixel_pedestals_file) == 1:
-            pixel_pedestals_file = pixel_pedestals_file[0]
-
-        if isinstance(light_lut_filename, list) and len(light_lut_filename) > 1:
-            raise KeyError("Provided more than one light lookup table for the simulation with no module variation.")
-        elif isinstance(light_lut_filename, list) and len(light_lut_filename) == 1:
-            light_lut_filename = light_lut_filename[0]
-
-        RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties)
-        from larndsim.consts import light, detector, physics, sim
-        RangePop()
-
-        RangePush("load_induction_response")
-        response = consts.detector.load_response(response_file)
-        RangePop()
-
-        RangePush("load_pixel_thresholds")
-        pixel_thresholds_lut = None
-        if pixel_thresholds_file is not None:
-            print("Pixel thresholds file:", pixel_thresholds_file)
-            pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file, 512)
-        RangePop()
-
-        RangePush("load_pixel_gains")
-        pixel_gains_lut = None
-        if pixel_gains_file is not None:
-            print("Pixel gains file:", pixel_gains_file)
-            pixel_gains_lut = CudaDict.load(pixel_gains_file, 512)
-        RangePop()
-
-        RangePush("load_pixel_pedestals")
-        pixel_pedestals_lut = None
-        if pixel_pedestals_file is not None:
-            print("Pixel pedestals file:", pixel_pedestals_file)
-            pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
-        RangePop()
-    else:
-        consts.light.set_light_properties(detector_properties)
-        consts.sim.set_simulation_properties(simulation_properties)
-        from larndsim.consts import light, physics, sim
-
-    # set the value for the global variable MOD2MOD_VARIATION
-    sim.MOD2MOD_VARIATION = mod2mod_variation
-
-    # reload after the variables been defined (has been loaded for the first time at the top)
-    importlib.reload(pixels_from_track)
-    importlib.reload(active_volume)
-    importlib.reload(detsim)
-    importlib.reload(light_sim)
-    importlib.reload(lightLUT)
-    importlib.reload(fee)
-
-    if sim.FARFIELD_ENABLED:
-        print("Far-field mode:", sim.FARFIELD_MODE)
-
-    #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
-    #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
-
-    RangePush("set_if_simulate_light")
-    if light_simulated is not None:
-        light.LIGHT_SIMULATED = light_simulated
-    RangePop()
+    consts.light.set_light_properties(detector_properties)
+    consts.sim.set_simulation_properties(simulation_properties)
 
     RangePop()                  # load_properties
 
@@ -762,16 +547,10 @@ def run_simulation(input_filename,
     all_mod_tracks = tracks
     all_mod_segment_ids = segment_ids
     all_mod_trajectory_ids = trajectory_ids
-    if mod2mod_variation == None or mod2mod_variation == False:
-        mod_ids = [-1]
-    else:
-        mod_ids = consts.detector.get_n_modules(detector_properties)
 
-    # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
+    # We load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
-    if mod2mod_variation:
-        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
-        from larndsim.consts import detector
+    consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
 
     # Sub-select segments in active volumes and that's not too "late"
     # TODO it seems the late signals are all very small, so it's current NOT simulated
@@ -797,51 +576,21 @@ def run_simulation(input_filename,
     # Convention module counting start from 1
     # Loop over all modules
     for i_mod in mod_ids:
-        if mod2mod_variation:
-            print(f'Simulating module {i_mod-1}')
-            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
-            # Currently shouldn't be necessary to reload light props, but if
-            # someone later updates `set_light_properties` to use stuff from the
-            # `consts.detector` module, we'll be glad for this line:
-            consts.light.set_light_properties(detector_properties)
-            from larndsim.consts import detector
-            # reload after the variables been defined/updated; first imported at the top
-            importlib.reload(pixels_from_track)
-            importlib.reload(active_volume)
-            importlib.reload(detsim)
-            importlib.reload(light_sim)
-            importlib.reload(lightLUT)
-            importlib.reload(fee)
+        print(f'Simulating module {i_mod-1}')
+        reload_modules(detector_properties, pixel_layout, response_file, i_mod)
 
-            RangePush("load_module_induction_response")
-            response = consts.detector.load_response(response_file[i_mod-1])
-            RangePop()
+        response = consts.detector.load_response(response_file[i_mod-1])
+        pixel_thresholds_lut = load_thresholds(pixel_thresholds_file, i_mod)
+        pixel_gains_lut = load_gains(pixel_gains_file, i_mod)
+        pixel_pedestals_lut = load_pedestals(pixel_pedestals_file, i_mod)
 
-            RangePush("load_pixel_thresholds")
-            pixel_thresholds_lut = None
-            if pixel_thresholds_file is not None:
-                pixel_thresholds_lut = CudaDict.load(pixel_thresholds_file[i_mod-1], 512)
-            RangePop()
-
-            RangePush("load_pixel_gains")
-            pixel_gains_lut = None
-            if pixel_gains_file is not None:
-                pixel_gains_lut = CudaDict.load(pixel_gains_file[i_mod-1], 512)
-            RangePop()
-
-            RangePush("load_pixel_pedestals")
-            pixel_pedestals_lut = None
-            if pixel_pedestals_file is not None:
-                pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file[i_mod-1], 512)
-            RangePop()
-
-            RangePush("load_segments_in_module")
-            module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
-            module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
-            tracks = all_mod_tracks[module_tracks_mask]
-            segment_ids = all_mod_segment_ids[module_tracks_mask]
-            trajectory_ids = all_mod_trajectory_ids[module_tracks_mask]
-            RangePop()
+        RangePush("load_segments_in_module")
+        module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+        module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
+        tracks = all_mod_tracks[module_tracks_mask]
+        segment_ids = all_mod_segment_ids[module_tracks_mask]
+        trajectory_ids = all_mod_trajectory_ids[module_tracks_mask]
+        RangePop()
 
         # find the module that triggers
         io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
@@ -879,18 +628,11 @@ def run_simulation(input_filename,
         RangePop() # drift_electrons
 
         # Set up light simulation data objects and calculate the optical responses
-        if light.LIGHT_SIMULATED:
+        if light_simulated:
             RangePush("load_light_info")
-            n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids)) if mod2mod_variation else light.N_OP_CHANNEL
-#            if light.LIGHT_TRIG_MODE == 0:
-#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
-#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
-#            else: # light.LIGHT_TRIG_MODE == 1
-#                light_sim_dat = np.zeros([len(tracks), n_light_channel],
-#                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4')])
-#
+            n_light_channel = int(light.N_OP_CHANNEL/len(mod_ids))
             light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                         dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+                                     dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
             light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
             track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
 
@@ -899,20 +641,15 @@ def run_simulation(input_filename,
             logger.start()
             logger.take_snapshot()
 
-            light_lut = light_lut_filename[i_mod-1] if mod2mod_variation else light_lut_filename
+            light_lut = light_lut_filename[i_mod-1]
 
-            if (i_mod == -1 or
-               (mod2mod_variation and (i_mod == 1 or light_lut != light_lut_filename[i_mod-2]))):
-
+            if i_mod == 1 or light_lut != light_lut_filename[i_mod-2]:
                 lut = np.load(light_lut)['arr']
 
                 # check if the light LUT matches with the number of optical channels
                 # lut (x, y, z, n_op_ch) for one TPC
                 # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
-                if mod2mod_variation:
-                    warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
-                else:
-                    warn_n_op_ch = (n_light_channel != lut.shape[3]*2*n_modules)
+                warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
                 if warn_n_op_ch:
                     warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
 
@@ -927,14 +664,13 @@ def run_simulation(input_filename,
 
             light_noise = cp.load(light_det_noise_filename)
 
-            if mod2mod_variation:
-                if light_noise.shape[0] == n_modules * n_light_channel:
-                    light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
-                else:
-                    assert light_noise.shape[0] >= n_light_channel
-                    light_noise = light_noise[:n_light_channel]
-                    warnings.warn(f"Light noise file {light_det_noise_filename} does not span all modules. " +
-                                  f"Using noise from first {n_light_channel} channels for all modules.")
+            if light_noise.shape[0] == n_modules * n_light_channel:
+                light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+            else:
+                assert light_noise.shape[0] >= n_light_channel
+                light_noise = light_noise[:n_light_channel]
+                warnings.warn(f"Light noise file {light_det_noise_filename} does not span all modules. " +
+                                f"Using noise from first {n_light_channel} channels for all modules.")
             RangePop() # load_light_info
 
             RangePush('calculate_light_incidence')
@@ -951,10 +687,11 @@ def run_simulation(input_filename,
             logger.archive(f'light_mod{i_mod}')
 
             # Prepare the light waveform padding
-            if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+            if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                 null_light_results_acc = defaultdict(list)
                 trigger_idx = cp.array([0], dtype=int)
-                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                # FIXME: mod2mod_var?
+                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
                 op_channel = cp.array(op_channel)
                 trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
                 digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
@@ -1023,7 +760,7 @@ def run_simulation(input_filename,
         i_batch = 0
         i_trig = 0
         sync_start = event_times[0] // (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) * (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) +  (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE)
-        det_borders = module_borders if mod2mod_variation else detector.TPC_BORDERS
+        det_borders = module_borders
         # Batching is carried out by simulating detector response with selected segments from X number of tpcs per event
         # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
         for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
@@ -1059,7 +796,7 @@ def run_simulation(input_filename,
             # generate light waveforms for null signal in the module
             # so we can have light waveforms in this case (if the whole detector is triggered together)
             if len(track_subset) == 0:
-                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                     save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
@@ -1106,7 +843,7 @@ def run_simulation(input_filename,
             all_n_pixels_list = cp.zeros(shape=(all_selected_tracks.shape[0]))
 
             if not all_active_pixels.shape[1] or not all_neighboring_pixels.shape[1]:
-                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                     save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter n_max_pixels
@@ -1129,7 +866,7 @@ def run_simulation(input_filename,
             RangePop()
 
             if not all_unique_pix.shape[0]:
-                if light.LIGHT_SIMULATED and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
+                if light_simulated and (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1):
                     null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
                     save_results(event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
                     i_trig += 1 # add to the trigger counter
@@ -1467,7 +1204,7 @@ def run_simulation(input_filename,
                 RangePop()
 
              # ~~~ Light detector response simulation ~~~
-            if light.LIGHT_SIMULATED:
+            if light_simulated:
                 RangePush("sum_light_signals", 4)
                 light_inc = light_sim_dat[valid_batch_mask]
                 selected_track_id = segment_ids_arr[valid_batch_mask]#cp.array(selected_tracks["segment_id"])
@@ -1478,7 +1215,8 @@ def run_simulation(input_filename,
                 # in the mod2mod case, just take the channel indices of the first module (first two TPCs)
                 # e.g. for the 2x2, op_channel = [0..96) in mod2mod mode, [0..384) otherwise
                 # likewise light_inc etc. will have ndet=96 for mod2mod, ndet=384 otherwise
-                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel() if mod2mod_variation else light.TPC_TO_OP_CHANNEL[:].ravel()
+                # FIXME: mod2mod var?
+                op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
                 op_channel = cp.array(op_channel)
                 #op_channel = light_sim.get_active_op_channel(light_inc)
                 n_light_det = op_channel.shape[0]
@@ -1605,7 +1343,7 @@ def run_simulation(input_filename,
     # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
     # once mod2mod variation is enabled, the light threshold triggering does not work properly
     # compare the light trigger between different module and digitize afterwards should solve the issue
-    if light.LIGHT_TRIG_MODE == 1 and light.LIGHT_SIMULATED:
+    if light.LIGHT_TRIG_MODE == 1 and light_simulated:
         light_event_id = np.unique(localSpillIDs) if sim.IS_SPILL_SIM else np.unique(all_mod_tracks['event_id'])
         light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
         light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
@@ -1621,7 +1359,7 @@ def run_simulation(input_filename,
 
     # merge light waveforms per module
     # correspond to light_sim.export_light_wvfm_to_hdf5
-    if light.LIGHT_SIMULATED and mod2mod_variation:
+    if light_simulated:
         light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression=compression)
 
     # prep output file with truth datasets
@@ -1636,13 +1374,10 @@ def run_simulation(input_filename,
         # To distinguish from the "old" files that had z=drift in 'tracks':
         output_file[sim.TRACKS_DSET_NAME].attrs['zbeam'] = True
 
-        if light.LIGHT_SIMULATED:
+        if light_simulated:
             # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
-            if mod2mod_variation:
-                for i_mod in mod_ids:
-                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1], compression=compression)
-            else:
-                output_file.create_dataset(f'light_dat/light_dat_allmodules', data=light_sim_dat_acc[0], compression=compression)
+            for i_mod in mod_ids:
+                output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1], compression=compression)
         if input_has_trajectories:
             output_file.create_dataset("trajectories", data=trajectories, compression=compression)
         if input_has_vertices:
