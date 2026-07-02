@@ -803,3 +803,18 @@ def merge_module_light_wvfm_same_trigger(output_filename, compression=None):
                 merged_wvfm = np.append(merged_wvfm, mod_wvfm, axis=1)
         del f['light_wvfm']
         f.create_dataset(f'light_wvfm', data=merged_wvfm, maxshape=(None,None,None), compression=compression)
+
+
+def export_merged_light_trig_to_hdf5(tracks, event_times, output_filename, compression=None):
+    """Store light triggers altogether if it's beam trigger (all light channels are forced to trigger)."""
+    # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
+    # once mod2mod variation is enabled, the light threshold triggering does not work properly
+    # compare the light trigger between different module and digitize afterwards should solve the issue
+    localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
+    light_event_id = np.unique(localSpillIDs) if sim.IS_SPILL_SIM else np.unique(tracks['event_id'])
+    light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
+    light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
+    light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
+    light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
+
+    export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression=compression)

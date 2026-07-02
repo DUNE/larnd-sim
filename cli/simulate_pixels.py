@@ -33,10 +33,9 @@ from larndsim.config import load_thresholds, load_gains, load_pedestals
 from larndsim.consts import detector, ff_induction, light, physics, sim
 from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
 from larndsim.pixels_from_track import invert_array_map
-from larndsim.util import CudaDict, batching, configure_warnings
-from larndsim.util import LOGO
-from larndsim.util import maybe_create_rng_states, maybe_disable_cupy_mempool
-from larndsim.util import memory_logger, swap_coordinates
+from larndsim.util import batching
+from larndsim.util import *
+from larndsim.util.misc import *
 
 
 def do_digitize_and_update(results_acc: dict[str, Any],
@@ -372,9 +371,6 @@ def run_simulation(input_filename,
 
     RangePop() # load_config
 
-    logger = memory_logger(save_memory is None)
-    logger.start()
-    logger.take_snapshot()
     start_simulation = time()
 
     RangePush("set_random_seed")
@@ -399,103 +395,24 @@ def run_simulation(input_filename,
     # First of all we load the edep-sim output
     with h5py.File(input_filename, 'r') as f:
         tracks = np.array(f['segments'])
-        
-        # Make "t0" attribute, if it doesn't exist
-        if 't0' not in tracks.dtype.names:
-            # the t0 key refers to the time of energy deposition
-            # in the input files, it is called 't'
-            # this is only true for older edep inputs (which are included in `examples/`)
-            t0 = np.array(tracks['t'].copy(), dtype=[('t0', 'f4')])
-            t0_start = np.array(tracks['t_start'].copy(), dtype=[('t0_start', 'f4')])
-            t0_end = np.array(tracks['t_end'].copy(), dtype=[('t0_end', 'f4')])
-            tracks = rfn.merge_arrays((tracks, t0, t0_start, t0_end), flatten=True)
 
-            # then, re-initialize the t key to zero
-            # in larnd-sim, this key is the time at the anode
-            tracks['t'] = np.zeros(tracks.shape[0], dtype=[('t', 'f4')])
-            tracks['t_start'] = np.zeros(tracks.shape[0], dtype=[('t_start', 'f4')])
-            tracks['t_end'] = np.zeros(tracks.shape[0], dtype=[('t_end', 'f4')])
+        tracks = maybe_add_t0(tracks)
+        maybe_shift_times(tracks)
+        tracks = remove_neutrals(tracks)
+        tracks = remove_delayed_segments(tracks)
+        tracks = maybe_add_segment_ids(tracks)
 
-        # larnd-sim uses "t0" in a way that 0 is the "trigger" time (e.g spill time)
-        # Therefore, to run the detector simulation we reset the t0 to reflect that
-        # When storing the mc truth, revert this change and store the "real" segment time
-        # The event times are added to segments in the spill building stage. This step is not needed for non-beam simulation
-        if sim.IS_SPILL_SIM:
-            # "Reset" the spill period so t0 is wrt the corresponding spill start time.
-            # The spill starts are marking the start of
-            # The space between spills will be accounted for in the
-            # packet timestamps through the event_times array below
-            localSpillIDs = tracks[sim.EVENT_SEPARATOR] - (tracks[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-            tracks['t0_start'] = tracks['t0_start'] - localSpillIDs*sim.SPILL_PERIOD
-            tracks['t0_end'] = tracks['t0_end'] - localSpillIDs*sim.SPILL_PERIOD
-            tracks['t0'] = tracks['t0'] - localSpillIDs*sim.SPILL_PERIOD
+        segment_ids = tracks['segment_id']
+        trajectory_ids = tracks['file_traj_id']
 
-        # Filter out neutrons and gammas, which will not directly create visible charge or light
-        # (excluding these segments here results in a modest ~10% improvement to memory usage later on,
-        # since this reduces the size of the arrays CUDA must initialize for pixel current calculations)
-        neutrals_mask = (tracks['pdg_id'] != 2112) & (tracks['pdg_id'] != 22)
-        if sum(~neutrals_mask) > 0: print("Rejected ",sum(~neutrals_mask), "track segments from neutral particles")
-        tracks = tracks[neutrals_mask]
-
-        # Filter out highly-delayed segments
-        t0_delay_mask = (tracks['t0'] < sim.MAX_SEGMENT_T0)
-        if sum(~t0_delay_mask) > 0:
-          print("Rejected ",sum(~t0_delay_mask)," highly-delayed segments with T0 > ",sim.MAX_SEGMENT_T0," us: ")
-          for val in tracks[~t0_delay_mask]: print(' t0 = ',val['t0'])
-        tracks = tracks[t0_delay_mask] 
-
-        if 'segment_id' in tracks.dtype.names:
-            segment_ids = tracks['segment_id']
-            trajectory_ids = tracks['file_traj_id']
-        else:
-            dtype = tracks.dtype.descr
-            dtype = [('segment_id','u4')] + dtype
-            new_tracks = np.empty(tracks.shape, dtype=np.dtype(dtype, align=True))
-            new_tracks['segment_id'] = np.arange(tracks.shape[0], dtype='u4')
-            for field in dtype[1:]:
-                new_tracks[field[0]] = tracks[field[0]]
-            tracks = new_tracks
-            segment_ids = tracks['segment_id']
-            trajectory_ids = tracks['file_traj_id']
-
-        try:
-            trajectories = np.array(f['trajectories'])
-            input_has_trajectories = True
-        except KeyError:
-            input_has_trajectories = False
-
-        try:
-            vertices = np.array(f['vertices'])
-            input_has_vertices = True
-        except KeyError:
-            print("Input file does not have true vertices info")
-            input_has_vertices = False
-
-        try:
-            mc_hdr = np.array(f['mc_hdr'])
-            input_has_mc_hdr = True
-        except KeyError:
-            print("Input file does not have MC event summary info")
-            input_has_mc_hdr = False
-
-        try:
-            mc_stack = np.array(f['mc_stack'])
-            input_has_mc_stack = True
-        except KeyError:
-            print("Input file does not have MC particle stack info")
-            input_has_mc_stack = False
+        trajectories = maybe_read_array(f, 'trajectories')
+        vertices = maybe_read_array(f, 'vertices')
+        mc_hdr = maybe_read_array(f, 'mc_hdr')
+        mc_stack = maybe_read_array(f, 'mc_stack')
 
     if tracks.size == 0:
         print("Empty input dataset, exiting")
         return
-
-    logger.take_snapshot()
-    logger.archive('loading')
-
-    logger.start()
-    logger.take_snapshot()
-    
-        
 
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if n_events:
@@ -505,37 +422,24 @@ def run_simulation(input_filename,
         trajectory_ids = trajectory_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
 
-        if input_has_trajectories:
+        if trajectories:
             trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_vertices:
+        if vertices:
             vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_mc_hdr:
+        if mc_hdr:
             mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
-        if input_has_mc_stack:
+        if mc_stack:
             mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
 
-    # Make "n_photons" attribute, if it doesn't exist
-    if 'n_photons' not in tracks.dtype.names:
-        n_photons = np.zeros(tracks.shape[0], dtype=[('n_photons', 'f4')])
-        tracks = rfn.merge_arrays((tracks, n_photons), flatten=True)
-
-
-    # Here we swap the x and z coordinates of the tracks
-    # because of the different convention in larnd-sim wrt edep-sim
-    # When storing the mc truth, revert this change to have z as the beam direction and x as the drift axis
+    tracks = maybe_add_n_photons(tracks)
     tracks = swap_coordinates(tracks)
     
-    logger.take_snapshot()
-    logger.archive('preparation')
-
     RangePop()                  # load_hdf5_file
     end_load = time()
     print(f"Data preparation time: {end_load-start_load:.2f} s")
 
     print("******************\nRUNNING SIMULATION\n******************")
     RangePush("prep_simulation")
-    logger.start()
-    logger.take_snapshot()
     # Create a lookup table for event timestamps.
 
     # Event IDs may have some offset (e.g. to make them globally unique within
@@ -551,34 +455,8 @@ def run_simulation(input_filename,
     else:
         event_times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
 
-    # broadcast the event times to vertices
-    if input_has_vertices and not sim.IS_SPILL_SIM:
-        # create "t_event" in vertices dataset in case it doesn't exist
-        if 't_event' not in vertices.dtype.names:
-            dtype = vertices.dtype.descr
-            dtype = [("t_event","f4")] + dtype
-            new_vertices = np.empty(vertices.shape, dtype=np.dtype(dtype, align=True))
-            for field in dtype[1:]:
-                if len(field[0]) == 0: continue
-                new_vertices[field[0]] = vertices[field[0]]
-            vertices = new_vertices
-        uniq_ev, counts = np.unique(vertices[sim.EVENT_SEPARATOR], return_counts=True)
-        event_times_in_use = cp.take(event_times, uniq_ev)
-        vertices['t_event'] = np.repeat(event_times_in_use.get(),counts)
-
-    # copy the event times to mc_hdr
-    if input_has_mc_hdr and input_has_vertices:
-        if 't_event' not in mc_hdr.dtype.names:
-            dtype = mc_hdr.dtype.descr
-            dtype = [("t_event","f4")] + dtype
-            new_mc_hdr = np.empty(mc_hdr.shape, dtype=np.dtype(dtype, align=True))
-            for field in dtype[1:]:
-                if len(field[0]) == 0: continue
-                new_mc_hdr[field[0]] = mc_hdr[field[0]]
-            mc_hdr = new_mc_hdr
-        mc_hdr['t_event'] = vertices['t_event']
-        if len(vertices[sim.EVENT_SEPARATOR]) != len(mc_hdr[sim.EVENT_SEPARATOR]):
-            raise ValueError("vertices and mc_hdr datasets have different number of vertices! The number should be the same.")
+    vertices = maybe_set_vertices_times(vertices, event_times)
+    mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
 
     # accumulate results for periodic file saving
     results_acc = defaultdict(list)
@@ -647,25 +525,17 @@ def run_simulation(input_filename,
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
         print("Quenching electrons..." , end="")
-        logger.start()
-        logger.take_snapshot()
         start_quenching = time()
         quenching.quench[BPG,TPB](tracks, physics.BIRKS)
         end_quenching = time()
-        logger.take_snapshot()
-        logger.archive(f'quenching_mod{i_mod}')
         print(f" {end_quenching-start_quenching:.2f} s")
         RangePop() # quench_electrons
 
         RangePush("drift_electrons")
         print("Drifting electrons...", end="")
         start_drifting = time()
-        logger.start()
-        logger.take_snapshot()
         drifting.drift[BPG,TPB](tracks)
         end_drifting = time()
-        logger.take_snapshot()
-        logger.archive(f'drifting_mod{i_mod}')
         print(f" {end_drifting-start_drifting:.2f} s")
         RangePop() # drift_electrons
 
@@ -680,8 +550,6 @@ def run_simulation(input_filename,
 
             print("Calculating optical responses...", end="")
             start_light_time = time()
-            logger.start()
-            logger.take_snapshot()
 
             light_lut = light_lut_filename[i_mod-1]
 
@@ -724,17 +592,10 @@ def run_simulation(input_filename,
 
             light_sim_dat_acc.append(light_sim_dat)
 
-            logger.take_snapshot()
-            logger.archive(f'light_mod{i_mod}')
-
             if light_simulated:
                 null_light_results_acc = prep_null_light_results(light_noise)
 
             print(f" {time()-start_light_time:.2f} s")
-
-        # Restart the memory logger for the electronics simulation loop
-        logger.start()
-        logger.take_snapshot()
 
         # HACK: Define nested functions to pass some of our locals
         # TODO: Write a class. With instance variables.
@@ -765,8 +626,6 @@ def run_simulation(input_filename,
         # We divide the sample in portions that can be processed by the GPU
         is_new_event = True
         event_id_buffer = -1
-        logger.start()
-        logger.take_snapshot([0])
         i_batch = 0
         i_trig = 0
         sync_start = event_times[0] // (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) * (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) +  (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE)
@@ -1311,7 +1170,6 @@ def run_simulation(input_filename,
                 results_acc = defaultdict(list) # reinitialize after each save_results
             RangePop() # save_results
 
-            logger.take_snapshot([len(logger.log)])
         RangePop()                  # run_simulation
 
         RangePush('save_results_final')
@@ -1331,39 +1189,14 @@ def run_simulation(input_filename,
         else:
             segments_to_files = np.append(segments_to_files, tracks)
 
-    logger.take_snapshot([len(logger.log)])
-
-    # revert the mc truth information modified for larnd-sim consumption 
-    # if the event time is generated by larndsim (non-beam cases), then the t0 is relative to the event time (0 ish, assume the edep particle window is O(us))
-    # so there is no need to remove the event time
-    if sim.IS_SPILL_SIM:
-        # write the true timing structure to the file, not t0 wrt event time .....
-        localSpillIDs = segments_to_files[sim.EVENT_SEPARATOR] - (segments_to_files[sim.EVENT_SEPARATOR] // sim.MAX_EVENTS_PER_FILE) * sim.MAX_EVENTS_PER_FILE
-        segments_to_files['t0_start'] = segments_to_files['t0_start'] + localSpillIDs*sim.SPILL_PERIOD
-        segments_to_files['t0_end'] = segments_to_files['t0_end'] + localSpillIDs*sim.SPILL_PERIOD
-        segments_to_files['t0'] = segments_to_files['t0'] + localSpillIDs*sim.SPILL_PERIOD
-
-    # store light triggers altogether if it's beam trigger (all light channels are forced to trigger)
-    # FIXME one can merge the beam + threshold for LIGHT_TRIG_MODE = 1 in future
-    # once mod2mod variation is enabled, the light threshold triggering does not work properly
-    # compare the light trigger between different module and digitize afterwards should solve the issue
-    if light.LIGHT_TRIG_MODE == 1 and light_simulated:
-        light_event_id = np.unique(localSpillIDs) if sim.IS_SPILL_SIM else np.unique(all_mod_tracks['event_id'])
-        light_start_times = np.full(len(light_event_id), 0) # if it is beam trigger it is set to 0
-        light_trigger_idx = np.full(len(light_event_id), 0) # one beam spill, one trigger
-        light_op_channel_idx = light.TPC_TO_OP_CHANNEL[:].ravel()
-        light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
-
-        light_sim.export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression=compression)
-        #fee.export_pacman_trigger_to_hdf5(output_filename, light_event_times)
-
-    # FIXME
-    #if light.LIGHT_TRIG_MODE == 0:
-    #    fee.export_pacman_trigger_to_hdf5(light_event_times_something_different)
-
-    # merge light waveforms per module
-    # correspond to light_sim.export_light_wvfm_to_hdf5
+    maybe_unshift_times(segments_to_files)
+    
     if light_simulated:
+        if light.LIGHT_TRIG_MODE == 1 and light_simulated:
+            light_sim.export_merged_light_trig_to_hdf5(
+                all_mod_tracks, event_times, output_filename,
+                compression=compression)
+
         light_sim.merge_module_light_wvfm_same_trigger(output_filename, compression=compression)
 
     # prep output file with truth datasets
@@ -1382,13 +1215,13 @@ def run_simulation(input_filename,
             # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
             for i_mod in mod_ids:
                 output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=light_sim_dat_acc[i_mod-1], compression=compression)
-        if input_has_trajectories:
+        if trajectories:
             output_file.create_dataset("trajectories", data=trajectories, compression=compression)
-        if input_has_vertices:
+        if vertices:
             output_file.create_dataset("vertices", data=vertices, compression=compression)
-        if input_has_mc_hdr:
+        if mc_hdr:
             output_file.create_dataset("mc_hdr", data=mc_hdr, compression=compression)
-        if input_has_mc_stack:
+        if mc_stack:
             output_file.create_dataset("mc_stack", data=mc_stack, compression=compression)
 
     with h5py.File(output_filename, 'a') as output_file:
@@ -1405,10 +1238,7 @@ def run_simulation(input_filename,
     print("Output saved in:", output_filename)
 
     end_simulation = time()
-    logger.take_snapshot([len(logger.log)])
     print(f"Elapsed time: {end_simulation-start_simulation:.2f} s")
-    logger.archive('loop',['loop'])
-    logger.store(save_memory)
 
 
 def main():
