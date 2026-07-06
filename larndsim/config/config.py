@@ -13,6 +13,7 @@ CONFIG_DIR = dict(
     SIM_PROPERTIES=f'{MODULE_DIR}/simulation_properties/',
     PIXEL_LAYOUT=f'{MODULE_DIR}/pixel_layouts/',
     DET_PROPERTIES=f'{MODULE_DIR}/detector_properties/',
+    FARFIELD_PROPERTIES=f'{MODULE_DIR}/farfield_properties',
     RESPONSE=f'{MODULE_DIR}/bin',
     LIGHT_LUT=f'{MODULE_DIR}/bin',
     LIGHT_DET_NOISE=f'{MODULE_DIR}/bin',
