@@ -14,6 +14,6 @@ def load_properties(detprop_file, pixel_file, response_file, sim_file):
         pixel_file (str): pixel layout YAML filename
         sim_file (str): simulation properties YAML filename
     """
+    sim.set_simulation_properties(sim_file) # must be first!
     detector.set_detector_properties(detprop_file, pixel_file, response_file)
     light.set_light_properties(detprop_file)
-    sim.set_simulation_properties(sim_file)
