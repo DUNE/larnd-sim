@@ -32,7 +32,7 @@ def test_configs():
     for cfg_name,cfg_map in CONFIG_MAP.items():
 
         for key in CONFIG_DIR.keys():
-            if key == 'PIXEL_THRESHOLDS_FILE' or key == 'PIXEL_PEDESTALS_FILE':
+            if key in ['PIXEL_THRESHOLDS_FILE','PIXEL_PEDESTALS_FILE', 'FARFIELD_PROPERTIES']:
                 # Don't throw an error for optional keys
                 continue
             if not key in cfg_map.keys():
