@@ -491,6 +491,9 @@ def run_simulation(input_filename,
 
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
+
+    farfield_properties = cfg.get('FARFIELD_PROPERTIES')
+
     if light_simulated is None:
         try:
             light_simulated = cfg['LIGHT_SIMULATED']
@@ -636,7 +639,7 @@ def run_simulation(input_filename,
             light_lut_filename = light_lut_filename[0]
 
         RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties)
+        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties, farfield_properties)
         from larndsim.consts import light, detector, physics, sim
         RangePop()
 
@@ -667,6 +670,8 @@ def run_simulation(input_filename,
     else:
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
+        if farfield_properties:
+            consts.ff_induction.set_ff_induction_properties(farfield_properties)
         from larndsim.consts import light, physics, sim
 
     # set the value for the global variable MOD2MOD_VARIATION
@@ -682,6 +687,10 @@ def run_simulation(input_filename,
 
     if sim.FARFIELD_ENABLED:
         print("Far-field mode:", sim.FARFIELD_MODE)
+        if farfield_properties:
+            print(f"Far-field properties file: {farfield_properties}")
+        else:
+            print("No far-field properties file specified; using default properties")
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
