@@ -17,8 +17,9 @@ def load_properties(detprop_file, pixel_file, response_file, sim_file, farfield_
         farfield_file (str, optional): far-field induction properties YAML filename
     """
     sim.set_simulation_properties(sim_file) # must be first!
+    if farfield_file:
+        ff_induction.set_ff_induction_properties(farfield_file)
+
     detector.set_detector_properties(detprop_file, pixel_file, response_file)
     light.set_light_properties(detprop_file)
 
-    if farfield_file:
-        ff_induction.set_ff_induction_properties(farfield_file)
