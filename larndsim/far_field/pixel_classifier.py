@@ -236,17 +236,17 @@ def classify_pixels_kernel(
         thresholds_neighbor = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
         r_eff_neighbor = thresholds_neighbor + detector.DIFF_N_SIGMAS * sigma_T
 
-        # Check charge collection first (highest priority)
-        if r_trans <= r_eff_cc:
-            pixel_category = PixelCategory.CHARGE_COLLECTION
-            break  # Can't get higher priority, stop checking
+        # # Check charge collection first (highest priority)
+        # if r_trans <= r_eff_cc:
+        #     pixel_category = PixelCategory.CHARGE_COLLECTION
+        #     break  # Can't get higher priority, stop checking
 
-        # Check charge neighbor
-        if r_trans <= r_eff_neighbor:
-            # Upgrade if we're currently INACTIVE or INDUCTION_ONLY
-            if pixel_category < PixelCategory.CHARGE_NEIGHBOR:
-                pixel_category = PixelCategory.CHARGE_NEIGHBOR
-            continue
+        # # Check charge neighbor
+        # if r_trans <= r_eff_neighbor:
+        #     # Upgrade if we're currently INACTIVE or INDUCTION_ONLY
+        #     if pixel_category < PixelCategory.CHARGE_NEIGHBOR:
+        #         pixel_category = PixelCategory.CHARGE_NEIGHBOR
+        #     continue
 
         # Accumulate induction signal (lowest priority)
         # We accumulate from all segments, then check threshold at the end
