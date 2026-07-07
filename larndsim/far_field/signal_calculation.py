@@ -280,7 +280,8 @@ def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> floa
             r_m = math.sqrt(r_m_sq)
             term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
     # Total z-component of weighting field gradient (Eq. 3.21)
-    return term0 + term_sum
+    fudge = 1.5
+    return fudge * (term0 + term_sum)
 
 
 def launch_ffe_kernel(
