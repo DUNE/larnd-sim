@@ -44,7 +44,7 @@ if 'cupy' in dependencies:
         dependencies.remove('cupy')
     else:
         if 'ALWAYS_COMPILE_CUPY' not in os.environ:
-            if cuda_major_ver in [11, 12]:
+            if cuda_major_ver in [11, 12, 13]:
                 dependencies.remove('cupy')
                 dependencies.append(f'cupy-cuda{cuda_major_ver}x')
 
