@@ -47,6 +47,7 @@ if 'cupy' in dependencies:
             if cuda_major_ver in [11, 12, 13]:
                 dependencies.remove('cupy')
                 dependencies.append(f'cupy-cuda{cuda_major_ver}x')
+                dependencies.append(f'numba-cuda[cu{cuda_major_ver}]')
 
 setup(
     install_requires=dependencies,
