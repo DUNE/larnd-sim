@@ -40,6 +40,9 @@ MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
 FARFIELD_ENABLED = False
 FARFIELD_MODE = 'segments'
+# Dipole approximation to use: 'infinite_plane' or 'box_lattice'
+FARFIELD_DIPOLE_MODE = 'infinite_plane'
+# FARFIELD_DIPOLE_MODE = 'box_lattice'
 
 def set_simulation_properties(simprop_file):
     """

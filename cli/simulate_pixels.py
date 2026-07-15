@@ -682,6 +682,7 @@ def run_simulation(input_filename,
 
     if sim.FARFIELD_ENABLED:
         print("Far-field mode:", sim.FARFIELD_MODE)
+        print("Dipole method:", sim.FARFIELD_DIPOLE_MODE)
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
