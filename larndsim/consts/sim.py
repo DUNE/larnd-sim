@@ -42,7 +42,6 @@ FARFIELD_ENABLED = False
 FARFIELD_MODE = 'segments'
 # Dipole approximation to use: 'infinite_plane' or 'box_lattice'
 FARFIELD_DIPOLE_MODE = 'infinite_plane'
-# FARFIELD_DIPOLE_MODE = 'box_lattice'
 
 def set_simulation_properties(simprop_file):
     """
@@ -76,6 +75,7 @@ def set_simulation_properties(simprop_file):
 
     global FARFIELD_ENABLED
     global FARFIELD_MODE
+    global FARFIELD_DIPOLE_MODE
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -104,4 +104,10 @@ def set_simulation_properties(simprop_file):
     options = ['segments', 'voxels']
     if FARFIELD_MODE not in options:
         raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
+                            f"must be one of {options}")
+
+    FARFIELD_DIPOLE_MODE = simprop.get('farfield_dipole_mode', FARFIELD_DIPOLE_MODE)
+    options = ['infinite_plane', 'box_lattice']
+    if FARFIELD_DIPOLE_MODE not in options:
+        raise RuntimeError(f"Invalid farfield_dipole_mode {FARFIELD_DIPOLE_MODE}; " +
                             f"must be one of {options}")
