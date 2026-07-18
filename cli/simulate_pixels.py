@@ -1500,14 +1500,6 @@ def run_simulation(input_filename,
                         if not np.any(tpc_mask):
                             continue
 
-                        assert np.all(tpc_mask) # fsdcube
-
-                        if ievd == 1 and 3720 in unique_pix:
-                            np.savez(f'ffe_dump.r{ff_induction.CHARGE_NEIGHBOR_RADIUS}.npz',
-                                     tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
-                                     n_ticks=np.array([signals_ticks_t0]))
-                            return
-
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
                             tracks=all_selected_tracks,
