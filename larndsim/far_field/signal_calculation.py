@@ -174,7 +174,7 @@ def calculate_ff_segments(
 
     n_segments = tracks.shape[0]
     l = abs(z_cathode - z_anode)
-    exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+    exclude_radius = (0.5 + ff_induction.CHARGE_NEIGHBOR_RADIUS) * detector.PIXEL_PITCH
 
     for s_idx in range(n_segments):
         segment = tracks[s_idx]
