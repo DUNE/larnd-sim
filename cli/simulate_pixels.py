@@ -1506,7 +1506,10 @@ def run_simulation(input_filename,
                         if ievd == ev2save and pix2save in unique_pix:
                             np.savez(f'ffe_dump.r{ff_induction.CHARGE_NEIGHBOR_RADIUS}.{ev2save}.{pix2save}.npz',
                                      tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
-                                     n_ticks=np.array([signals_ticks_t0]))
+                                     n_ticks=np.array([signals_ticks_t0]),
+                                     pixels_tracks_signals=pixels_tracks_signals,
+                                     num_backtrack=num_backtrack,
+                                     track_pixel_map=track_pixel_map)
                             return
 
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
