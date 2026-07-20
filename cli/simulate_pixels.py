@@ -1510,7 +1510,6 @@ def run_simulation(input_filename,
                                      pixels_tracks_signals=pixels_tracks_signals,
                                      num_backtrack=num_backtrack,
                                      track_pixel_map=track_pixel_map)
-                            return
 
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
