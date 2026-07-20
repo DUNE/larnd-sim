@@ -33,7 +33,7 @@ CHARGE_NEIGHBOR_RADIUS = 2  # pixels
 INDUCTION_CUTOFF_RADIUS = 50 # cm
 
 # Far-field segment split step size (1 mm)
-FAR_FIELD_SEGMENT_STEP_CM = 0.5  # cm
+FAR_FIELD_SEGMENT_STEP_CM = 0.1  # cm
 
 # Minimum induction signal threshold (electrons)
 INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
