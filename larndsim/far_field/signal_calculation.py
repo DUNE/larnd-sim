@@ -14,6 +14,8 @@ from numba import cuda
 
 from larndsim.consts import detector, ff_induction, sim
 
+from .voxelization import VoxelDict
+
 
 @cuda.jit
 def calculate_ff_voxels(
@@ -290,7 +292,7 @@ def launch_ffe_kernel(
     pixel_y: cpt.NDArray[cp.float32],
     n_ticks: int,
     category: int,
-    voxel_cache: dict[int, dict[str, Optional[cpt.NDArray[cp.float32]]]],
+    voxel_cache: dict[int, VoxelDict],
 ) -> cp.ndarray[tuple[int, int], cp.float32]:
     """
     Launch CUDA kernel for far-field induced current calculation.

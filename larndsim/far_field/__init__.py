@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sized
 
 
 class PixelCategory(IntEnum):
@@ -30,11 +30,11 @@ class PixelClassificationResult:
         - Types are Optional[Any] to avoid hard dependency on CuPy at import time.
     """
 
-    charge_pixels: Optional[Any]  # (n_charge,) pixel IDs in CHARGE_COLLECTION category
-    neighbor_pixels: Optional[Any]  # (n_neighbor,) pixel IDs in CHARGE_NEIGHBOR category
-    induction_pixels: Optional[Any]  # (n_induction,) pixel IDs in INDUCTION_ONLY category
-    induction_pixels_x: Optional[Any] = None  # (n_induction,) x-coordinates in cm
-    induction_pixels_y: Optional[Any] = None  # (n_induction,) y-coordinates in cm
+    charge_pixels: Optional[Sized]  # (n_charge,) pixel IDs in CHARGE_COLLECTION category
+    neighbor_pixels: Optional[Sized]  # (n_neighbor,) pixel IDs in CHARGE_NEIGHBOR category
+    induction_pixels: Optional[Sized]  # (n_induction,) pixel IDs in INDUCTION_ONLY category
+    induction_pixels_x: Optional[Sized] = None  # (n_induction,) x-coordinates in cm
+    induction_pixels_y: Optional[Sized] = None  # (n_induction,) y-coordinates in cm
 
     def summary(self, n_total_pixels: int):
         n_charge = len(self.charge_pixels) if self.charge_pixels is not None else 0

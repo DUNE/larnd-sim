@@ -2,7 +2,6 @@
 """
 Command-line interface to larnd-sim module.
 """
-
 from collections import defaultdict
 from functools import lru_cache
 import importlib
@@ -13,7 +12,7 @@ from typing import Any, Optional
 import warnings
 
 import cupy as cp
-from cupy.cuda.nvtx import RangePush, RangePop
+from cupy.cuda.nvtx import RangePush, RangePop # ty: ignore[unresolved-import]
 import cupy.typing as cpt
 import fire
 import h5py
@@ -29,12 +28,14 @@ from larndsim import consts
 from larndsim import active_volume, quenching, drifting, detsim
 from larndsim import pixels_from_track, fee, lightLUT, light_sim
 from larndsim.config import get_config, load_mod2mod_prop, reload_modules
-from larndsim.config import load_thresholds, load_gains, load_pedestals
 from larndsim.consts import detector, ff_induction, light, physics, sim
-from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
+from larndsim.consts.detector import load_thresholds, load_gains, load_pedestals
+import larndsim.consts.units
+from larndsim.far_field import voxelization, signal_calculation, pixel_classifier, PixelClassificationResult
+from larndsim.far_field.voxelization import VoxelDict
 from larndsim.pixels_from_track import invert_array_map
 from larndsim.util import batching
-from larndsim.util import *
+from larndsim.util.cuda_dict import CudaDict
 from larndsim.util.misc import *
 
 
@@ -403,7 +404,6 @@ def run_simulation(input_filename,
         tracks = maybe_add_segment_ids(tracks)
 
         segment_ids = tracks['segment_id']
-        trajectory_ids = tracks['file_traj_id']
 
         trajectories = maybe_read_array(f, 'trajectories')
         vertices = maybe_read_array(f, 'vertices')
@@ -419,7 +419,6 @@ def run_simulation(input_filename,
         print(f'Selecting only the first {n_events} events for simulation.')
         max_eventID = np.unique(vertices[sim.EVENT_SEPARATOR])[n_events-1]
         segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
-        trajectory_ids = trajectory_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
 
         if trajectories:
@@ -455,7 +454,7 @@ def run_simulation(input_filename,
     else:
         event_times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
 
-    vertices = maybe_set_vertices_times(vertices, event_times)
+    vertices = maybe_set_vertex_times(vertices, event_times)
     mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
 
     # accumulate results for periodic file saving
@@ -466,7 +465,6 @@ def run_simulation(input_filename,
     # First copy all tracks and segment_ids
     all_mod_tracks = tracks
     all_mod_segment_ids = segment_ids
-    all_mod_trajectory_ids = trajectory_ids
 
     # We load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
@@ -477,11 +475,7 @@ def run_simulation(input_filename,
     # However, to correctly include this part, one needs to append it to pixels_signals and run get adc_values on it
     # In that case it's possible to have multiple entries for the same pixel
     print("Skipping non-active volumes..." , end="")
-    start_mask = time()
     active_tracks_mask = active_volume.select_active_volume(all_mod_tracks, detector.TPC_BORDERS) # return indices of selected segments
-    active_tracks = all_mod_tracks[active_tracks_mask]
-    active_segment_ids = all_mod_segment_ids[active_tracks_mask]
-    active_trajectory_ids = all_mod_trajectory_ids[active_tracks_mask]
     print(f"{len(all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut.")
 
     # We need to make cupy arrays of these and pass them to the kernels;
@@ -509,7 +503,6 @@ def run_simulation(input_filename,
         module_tracks_mask = active_volume.select_active_volume(all_mod_tracks, module_borders)
         tracks = all_mod_tracks[module_tracks_mask]
         segment_ids = all_mod_segment_ids[module_tracks_mask]
-        trajectory_ids = all_mod_trajectory_ids[module_tracks_mask]
         RangePop()
 
         # find the module that triggers
@@ -621,10 +614,8 @@ def run_simulation(input_filename,
                 del null_light_results_acc['light_event_id']
 
         segment_ids_arr = cp.asarray(segment_ids)
-        trajectory_ids_arr = cp.asarray(trajectory_ids)
 
         # We divide the sample in portions that can be processed by the GPU
-        is_new_event = True
         event_id_buffer = -1
         i_batch = 0
         i_trig = 0
@@ -639,7 +630,6 @@ def run_simulation(input_filename,
             # Grab segments from the current batch
             # If there are no segments in the batch, we still check if we need to generate null light signals
             track_subset = tracks[batch_mask]
-            evt_tracks = track_subset
             #first_trk_id = np.argmax(batch_mask) # first track in batch
 
             # this relies on that batching is done in the order of events
@@ -743,7 +733,8 @@ def run_simulation(input_filename,
 
             # ~~~ Precompute far-field helper data once per event batch ~~~
             RangePush("event_farfield_precompute")
-            classification_cache, voxel_cache = {}, {}
+            classification_cache: dict[int, PixelClassificationResult] = {}
+            voxel_cache: dict[int, VoxelDict] = {}
             if sim.FARFIELD_ENABLED:
                 classification_cache = \
                     pixel_classifier.get_classification_cache(all_selected_tracks)
@@ -812,8 +803,6 @@ def run_simulation(input_filename,
                 isin_unique_pix = np.isin(neighboring_pixels, unique_pix)
                 neighboring_pixels[~isin_unique_pix] = -1
                 neighboring_radius[~isin_unique_pix] = -1
-
-                n_pixels_list = isin_unique_pix.sum(axis = -1)
 
                 RangePush("tracks_current", 2)
                 # Here we find the longest signal in time
@@ -995,8 +984,8 @@ def run_simulation(input_filename,
                 # Unique TPCs in this batch (use all_selected_tracks to capture full event batch)
                 active_tpc_indices_all = np.unique(all_selected_tracks['pixel_plane'].astype(np.int32))
                 for tpc_idx in active_tpc_indices_all:
-                    cls = classification_cache.get(int(tpc_idx), None)
-                    if cls is None or len(cls.induction_pixels) == 0:
+                    cls = classification_cache.get(int(tpc_idx))
+                    if (cls is None or cls.induction_pixels is None or len(cls.induction_pixels) == 0):
                         continue
                     # Induction-only pixels for this TPC; preserve ID/coordinate ordering
                     induction_pix_all = cp.asarray(cls.induction_pixels, dtype=cp.int32)

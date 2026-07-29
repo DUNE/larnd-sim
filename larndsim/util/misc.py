@@ -9,7 +9,7 @@ from numba.cuda import device_array
 from numba.cuda.random import create_xoroshiro128p_states
 import numpy as np
 import numpy.lib.recfunctions as rfn
-import tqdm
+import tqdm as tqdm_mod
 
 from larndsim.consts import sim
 
@@ -49,7 +49,7 @@ def configure_warnings():
 
     # Play nice with loops wrapped with tqdm; using tqdm.write() prints the warning on its own line
     def tqdm_show_warning(message, category, filename, lineno, file=None, line=None):
-        tqdm.write(warning_str_format(str(message), category, filename, lineno))
+        tqdm_mod.write(warning_str_format(str(message), category, filename, lineno))
 
     warnings.formatwarning = warning_str_format
     warnings.showwarning = tqdm_show_warning
