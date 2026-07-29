@@ -441,18 +441,7 @@ def run_simulation(input_filename,
     RangePush("prep_simulation")
     # Create a lookup table for event timestamps.
 
-    # Event IDs may have some offset (e.g. to make them globally unique within
-    # an MC production), which we assume to be a multiple of
-    # sim.MAX_EVENTS_PER_FILE. We remove this offset by taking the modulus with
-    # sim.MAX_EVENTS_PER_FILE, which gives us zero-based "local" event IDs that
-    # we can use when indexing into event_times. Note that num_evids is actually
-    # an upper bound on the number of events, since there may be gaps due to
-    # events that didn't deposit any energy in the LAr. Such gaps are harmless.
-    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
-    if sim.IS_SPILL_SIM:
-        event_times = cp.arange(num_evids) * sim.SPILL_PERIOD
-    else:
-        event_times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
+    event_times = prep_event_times(tracks)
 
     vertices = maybe_set_vertex_times(vertices, event_times)
     mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
@@ -506,31 +495,14 @@ def run_simulation(input_filename,
         RangePop()
 
         # find the module that triggers
-        io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
         if light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1:
+            io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
             trig_module = np.argwhere(io_groups==fee.get_trig_io())[0][0] + 1 # module id (i_mod) counts from 1
 
         RangePush("run_simulation")
-        TPB = 256
-        BPG = max(ceil(tracks.shape[0] / TPB),1)
 
-        RangePush("quench_electrons")
-        # We calculate the number of electrons after recombination (quenching module)
-        # and the position and number of electrons after drifting (drifting module)
-        print("Quenching electrons..." , end="")
-        start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
-        end_quenching = time()
-        print(f" {end_quenching-start_quenching:.2f} s")
-        RangePop() # quench_electrons
-
-        RangePush("drift_electrons")
-        print("Drifting electrons...", end="")
-        start_drifting = time()
-        drifting.drift[BPG,TPB](tracks)
-        end_drifting = time()
-        print(f" {end_drifting-start_drifting:.2f} s")
-        RangePop() # drift_electrons
+        quenching.launch_quench(tracks, physics.BIRKS)
+        drifting.launch_drift(tracks)
 
         # Set up light simulation data objects and calculate the optical responses
         if light_simulated:

@@ -3,7 +3,10 @@ Module to implement the quenching of the ionized electrons
 through the detector
 """
 
-from math import log, isnan
+from math import ceil, log, isnan
+from time import time
+
+from cupy.cuda.nvtx import RangePush, RangePop # ty: ignore[unresolved-import]
 from numba import cuda
 
 from .consts import detector, physics, light
@@ -51,3 +54,16 @@ def quench(tracks, mode):
             
             tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
             tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
+
+def launch_quench(tracks, mode):
+    RangePush("quench_electrons")
+    print("Quenching electrons..." , end="")
+    start_quenching = time()
+
+    TPB = 256
+    BPG = max(ceil(tracks.shape[0] / TPB),1)
+    quench[BPG,TPB](tracks, physics.BIRKS)
+
+    end_quenching = time()
+    print(f" {end_quenching-start_quenching:.2f} s")
+    RangePop()

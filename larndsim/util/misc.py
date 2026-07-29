@@ -11,6 +11,7 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 import tqdm as tqdm_mod
 
+from larndsim import fee
 from larndsim.consts import sim
 
 
@@ -235,3 +236,17 @@ def maybe_set_mc_hdr_times(mc_hdr, vertices):
             raise ValueError("vertices and mc_hdr datasets have different number of vertices! The number should be the same.")
     return mc_hdr
 
+
+# Event IDs may have some offset (e.g. to make them globally unique within
+# an MC production), which we assume to be a multiple of
+# sim.MAX_EVENTS_PER_FILE. We remove this offset by taking the modulus with
+# sim.MAX_EVENTS_PER_FILE, which gives us zero-based "local" event IDs that
+# we can use when indexing into event_times. Note that num_evids is actually
+# an upper bound on the number of events, since there may be gaps due to
+# events that didn't deposit any energy in the LAr. Such gaps are harmless.
+def prep_event_times(tracks):
+    num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
+    if sim.IS_SPILL_SIM:
+        return cp.arange(num_evids) * sim.SPILL_PERIOD
+    else:
+        return fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP

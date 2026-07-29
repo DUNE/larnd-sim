@@ -3,8 +3,12 @@ Module to implement the propagation of the
 electrons towards the anode.
 """
 
-from math import exp, sqrt
+from math import ceil, exp, sqrt
+from time import time
+
+from cupy.cuda.nvtx import RangePush, RangePop # ty: ignore[unresolved-import]
 from numba import cuda
+
 from .consts import detector
 #from .consts.detector import TPC_BORDERS
 
@@ -58,3 +62,17 @@ def drift(tracks):
             track["t"] = drift_time + track["t0"]
             track["t_start"] = min(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
             track["t_end"] = max(drift_start, drift_end) / detector.V_DRIFT + track["t0"]
+
+
+def launch_drift(tracks):
+    RangePush("drift_electrons")
+    print("Drifting electrons...", end="")
+    start_drifting = time()
+
+    TPB = 256
+    BPG = max(ceil(tracks.shape[0] / TPB),1)
+    drift[BPG,TPB](tracks)
+
+    end_drifting = time()
+    print(f" {end_drifting-start_drifting:.2f} s")
+    RangePop() # drift_electrons
