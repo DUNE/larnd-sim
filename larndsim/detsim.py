@@ -6,7 +6,9 @@ on the pixels
 from math import pi, ceil, sqrt, erf, exp, log
 import cupy as cp
 import numba as nb
+import warnings
 
+from cupy.cuda.nvtx import RangePush, RangePop # ty: ignore[unresolved-import]
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32
 
@@ -279,6 +281,59 @@ def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_
             if counter < 0:
                 # The overflow_flag is for both overflow (too many segments for backtracking) and underflow (no backtracking the pixel is considered too far from the segments)
                 overflow_flag[pixel_index] = 1
+
+
+def launch_sum_pixel_signals(signals, tracks, pixel_index_map, track_pixel_map):
+    RangePush("sum_pixels_signals", 7)
+
+    # Here we combine the induced current on the same pixels by different tracks
+    TPB = (1,1,64)
+    BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
+    BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
+    BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
+    BPG = (BPG_X, BPG_Y, BPG_Z)
+
+    # Here inflate the signal_ticks by the track t0
+    # All the late segments have been removed in the loading stage
+    signals_ticks = signals.shape[2]
+    signals_ticks_t0 = signals_ticks + ceil(tracks['t0'].max() / detector.TIME_SAMPLING)
+    track_t0 = cp.array(tracks['t0']/detector.TIME_SAMPLING, dtype = int)
+
+    n_pixels = track_pixel_map.shape[0]
+    pixels_signals = cp.zeros((n_pixels, signals_ticks_t0))
+
+    # Note, track_pixel_map has shape (#unique pix, max tracks per pixel)
+    # num_backtrack[ipix] is the number of segments contributing to the pixel
+    num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
+    # pixels_tracks_signals is a jagged array of conceptual dimension
+    # (#ticks, #unique_pix, backtracked_segments)
+    # where the final axis (over segments) is jagged.
+    # Physically it's represented as a 1D array where the time index
+    # increments the slowest, followed by the pixel index, followed
+    # by the segment index (whose size depends on the pixel). See sum_pixel_signals.
+    pixels_tracks_signals = cp.zeros(signals_ticks_t0 * int(num_backtrack.sum()))
+    # offset_backtrack[ipix] is the total number of pixel<->segment
+    # pairs summed over pixels [0, 1, ..., ipix-1]. The kernel uses
+    # it to jump to the pixel's storage in pixels_tracks_signals.
+    # E.g.: num_backtrack = [2, 4, 3] => offset_backtrack = [0, 2, 6]
+    offset_backtrack = cp.cumsum(num_backtrack) - num_backtrack
+    overflow_flag = cp.zeros(n_pixels)
+
+    sum_pixel_signals[BPG,TPB](pixels_signals,
+                               signals,
+                               track_t0,
+                               pixel_index_map,
+                               track_pixel_map,
+                               pixels_tracks_signals,
+                               num_backtrack,
+                               offset_backtrack,
+                               overflow_flag)
+
+    if cp.any(overflow_flag):
+        warnings.warn(f"More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, {sim.MAX_TRACKS_PER_PIXEL}, "
+                        f"or no segments contributed to some pixels.")
+
+    RangePop()
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):

@@ -589,7 +589,6 @@ def run_simulation(input_filename,
 
         # We divide the sample in portions that can be processed by the GPU
         event_id_buffer = -1
-        i_batch = 0
         i_trig = 0
         sync_start = event_times[0] // (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) * (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) +  (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE)
         det_borders = module_borders
@@ -598,11 +597,9 @@ def run_simulation(input_filename,
         for ievd, batch_mask in tqdm(batching.TPCBatcher(all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
                                desc='Simulating batches...', ncols=80, smoothing=0):
             RangePush("setup_event_batch")
-            i_batch = i_batch+1
             # Grab segments from the current batch
             # If there are no segments in the batch, we still check if we need to generate null light signals
             track_subset = tracks[batch_mask]
-            #first_trk_id = np.argmax(batch_mask) # first track in batch
 
             # this relies on that batching is done in the order of events
             if ievd > event_id_buffer:
@@ -842,55 +839,13 @@ def run_simulation(input_filename,
 
                 TPB = 32
                 BPG = max(ceil(unique_pix.shape[0] / TPB),1)
-                detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
-                    unique_pix,
-                    neighboring_pixels,
-                    neighboring_radius,
-                    )
+                detsim.get_track_pixel_map2[BPG, TPB](
+                    track_pixel_map, unique_pix, neighboring_pixels, neighboring_radius)
                 RangePop()
 
-                RangePush("sum_pixels_signals", 7)
-                # Here we combine the induced current on the same pixels by different tracks
-                TPB = (1,1,64)
-                BPG_X = max(ceil(signals.shape[0] / TPB[0]),1)
-                BPG_Y = max(ceil(signals.shape[1] / TPB[1]),1)
-                BPG_Z = max(ceil(signals.shape[2] / TPB[2]),1)
-                BPG = (BPG_X, BPG_Y, BPG_Z)
-                # Here inflate the signal_ticks by the track t0
-                # All the late segments have been removed in the loading stage
-                signals_ticks_t0 = signals_ticks + ceil(selected_tracks['t0'].max() / detector.TIME_SAMPLING)
-                pixels_signals = cp.zeros((len(unique_pix), signals_ticks_t0))
-                # Note, track_pixel_map has shape (#unique pix, max tracks per pixel)
-                # num_backtrack[ipix] is the number of segments contributing to the pixel
-                num_backtrack = cp.sum(track_pixel_map != -1, axis=-1)
-                # pixels_tracks_signals is a jagged array of conceptual dimension
-                # (#ticks, #unique_pix, backtracked_segments)
-                # where the final axis (over segments) is jagged.
-                # Physically it's represented as a 1D array where the time index
-                # increments the slowest, followed by the pixel index, followed
-                # by the segment index (whose size depends on the pixel). See sum_pixel_signals.
-                pixels_tracks_signals = cp.zeros(signals_ticks_t0 * int(num_backtrack.sum()))
-                # offset_backtrack[ipix] is the total number of pixel<->segment
-                # pairs summed over pixels [0, 1, ..., ipix-1]. The kernel uses
-                # it to jump to the pixel's storage in pixels_tracks_signals.
-                # E.g.: num_backtrack = [2, 4, 3] => offset_backtrack = [0, 2, 6]
-                offset_backtrack = cp.cumsum(num_backtrack) - num_backtrack
-                overflow_flag = cp.zeros(len(unique_pix))
-
-                detsim.sum_pixel_signals[BPG,TPB](pixels_signals,
-                                                  signals,
-                                                  cp.array(selected_tracks['t0']/detector.TIME_SAMPLING, dtype = int),
-                                                  pixel_index_map,
-                                                  track_pixel_map,
-                                                  pixels_tracks_signals,
-                                                  num_backtrack,
-                                                  offset_backtrack,
-                                                  overflow_flag)
-                if cp.any(overflow_flag):
-                    warnings.warn(f"More segments per pixel than the set MAX_TRACKS_PER_PIXEL value, {sim.MAX_TRACKS_PER_PIXEL}, "
-                                    f"or no segments contributed to some pixels.")
-
-                RangePop()
+                pixels_signals, pixels_tracks_signals, num_backtrack, offset_backtrack = \
+                    detsim.launch_sum_pixel_signals(signals, selected_tracks,
+                                                    pixel_index_map, track_pixel_map)
 
                 # ~~~ Far-field signal contribution ~~~
                 if sim.FARFIELD_ENABLED:
@@ -918,7 +873,7 @@ def run_simulation(input_filename,
                             tracks=all_selected_tracks,
                             pixel_x=pixel_x[tpc_mask],
                             pixel_y=pixel_y[tpc_mask],
-                            n_ticks=signals_ticks_t0,
+                            n_ticks=pixels_signals.shape[1],
                             category=1,
                             voxel_cache=voxel_cache)
 
