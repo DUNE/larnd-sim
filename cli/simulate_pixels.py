@@ -417,7 +417,7 @@ def run_simulation(input_filename,
     # Reduce dataset if not all events are to be simulated, being careful of gaps
     if n_events:
         print(f'Selecting only the first {n_events} events for simulation.')
-        max_eventID = np.unique(vertices[sim.EVENT_SEPARATOR])[n_events-1]
+        max_eventID = np.unique(tracks[sim.EVENT_SEPARATOR])[n_events-1]
         segment_ids = segment_ids[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
         tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
 
