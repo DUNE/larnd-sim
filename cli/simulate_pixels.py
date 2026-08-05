@@ -1502,9 +1502,13 @@ def run_simulation(input_filename,
 
                         assert np.all(tpc_mask) # fsdcube
 
-                        ev2save, pix2save = 14, 1145
-                        if ievd == ev2save and pix2save in unique_pix:
-                            np.savez(f'ffe_dump.r{ff_induction.CHARGE_NEIGHBOR_RADIUS}.{ev2save}.{pix2save}.npz',
+                        from pathlib import Path
+                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.npz'
+                        bt_path.parent.mkdir(exist_ok=True)
+                        # ev2save, pix2save = 14, 1145
+                        # if ievd == ev2save and pix2save in unique_pix:
+                        if True:
+                            np.savez(bt_path,
                                      tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
                                      n_ticks=np.array([signals_ticks_t0]),
                                      pixels_tracks_signals=pixels_tracks_signals,
