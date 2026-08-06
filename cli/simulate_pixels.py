@@ -1558,11 +1558,12 @@ def run_simulation(input_filename,
             from pathlib import Path
             sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.{i_batch}.npz'
             sig_path.parent.mkdir(exist_ok=True)
-            np.savez(sig_path,
-                     pixels_near=np.concatenate(saved_pixels_near),
-                     signals_near=concat_pad_fast(saved_signals_near),
-                     mask_ff_plus=np.concatenate(saved_mask_ff_plus),
-                     signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
+            if saved_pixels_near:
+                np.savez(sig_path,
+                         pixels_near=np.concatenate(saved_pixels_near),
+                         signals_near=concat_pad_fast(saved_signals_near),
+                         mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                         signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
 
             # ~~~ Far-field-only induction pixels (not processed above) ~~~
             if sim.FARFIELD_ENABLED:
@@ -1632,13 +1633,14 @@ def run_simulation(input_filename,
                     from pathlib import Path
                     sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.{i_batch}.npz'
                     sig_path.parent.mkdir(exist_ok=True)
-                    np.savez(sig_path,
-                             pixels_near=np.concatenate(saved_pixels_near),
-                             signals_near=concat_pad_fast(saved_signals_near),
-                             mask_ff_plus=np.concatenate(saved_mask_ff_plus),
-                             signals_ff_plus=concat_pad_fast(saved_signals_ff_plus),
-                             pixels_ff_only=cp.asnumpy(induction_pix_ids),
-                             signals_ff_only=cp.asnumpy(pixels_signals))
+                    if saved_pixels_near:
+                        np.savez(sig_path,
+                                 pixels_near=np.concatenate(saved_pixels_near),
+                                 signals_near=concat_pad_fast(saved_signals_near),
+                                 mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                                 signals_ff_plus=concat_pad_fast(saved_signals_ff_plus),
+                                 pixels_ff_only=cp.asnumpy(induction_pix_ids),
+                                 signals_ff_only=cp.asnumpy(pixels_signals))
 
                     digitize_and_update(unique_eventIDs=unique_eventIDs,
                                         unique_pix=induction_pix_ids,
