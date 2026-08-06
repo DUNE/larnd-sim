@@ -1555,6 +1555,15 @@ def run_simulation(input_filename,
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
+            from pathlib import Path
+            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.npz'
+            sig_path.parent.mkdir(exist_ok=True)
+            np.savez(sig_path,
+                     pixels_near=np.concatenate(saved_pixels_near),
+                     signals_near=concat_pad_fast(saved_signals_near),
+                     mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                     signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
+
             # ~~~ Far-field-only induction pixels (not processed above) ~~~
             if sim.FARFIELD_ENABLED:
                 RangePush("far_field_induction_only", 2)
