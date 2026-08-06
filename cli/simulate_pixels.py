@@ -1503,7 +1503,7 @@ def run_simulation(input_filename,
                         assert np.all(tpc_mask) # fsdcube
 
                         from pathlib import Path
-                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.npz'
+                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_batch}.npz'
                         bt_path.parent.mkdir(exist_ok=True)
                         # ev2save, pix2save = 14, 1145
                         # if ievd == ev2save and pix2save in unique_pix:
@@ -1556,7 +1556,7 @@ def run_simulation(input_filename,
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
             from pathlib import Path
-            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.npz'
+            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.{i_batch}.npz'
             sig_path.parent.mkdir(exist_ok=True)
             np.savez(sig_path,
                      pixels_near=np.concatenate(saved_pixels_near),
@@ -1630,7 +1630,7 @@ def run_simulation(input_filename,
                     pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
 
                     from pathlib import Path
-                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.npz'
+                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.{i_batch}.npz'
                     sig_path.parent.mkdir(exist_ok=True)
                     np.savez(sig_path,
                              pixels_near=np.concatenate(saved_pixels_near),
