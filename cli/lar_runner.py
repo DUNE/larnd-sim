@@ -74,16 +74,18 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
     input_file = args.input if args.input else larnd_config['input_file']
     logger.info(f"Input edep-sim hdf5: {input_file}")
 
+    output_dir = larnd_config.get('output_dir', '.')
     output_file = args.output if args.output else larnd_config['output_file']
     base, ext = os.path.splitext(output_file) # Add hdf5 extension if not present
     if ext != ".hdf5":
         output_file += ".hdf5"
-    logger.info(f"Output filename: {output_file}")
+    output_path = os.path.join(output_dir, output_file)
+    logger.info(f"Output filename: {output_path}")
 
     default_seed = args.rand_seed if args.rand_seed else larnd_config.get('rng_seed', 321)
     compression = larnd_config.get('compression', None)
 
-    cmd = f"simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_file}"
+    cmd = f"simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_path}"
     cmd += f" --rand_seed {default_seed}"
 
     n_events = args.nevents if args.nevents else larnd_config.get('n_events', None)
@@ -104,9 +106,13 @@ def cmd_run(args: argparse.Namespace, config: str) -> int:
         return 0
     else:
         if args.force:
-            if os.path.exists(output_file):
-                logger.info(f"Deleting existing {output_file}")
-                os.remove(output_file)
+            if os.path.exists(output_path):
+                logger.info(f"Deleting existing {output_path}")
+                os.remove(output_path)
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Creating output dir: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True, mode=0o775)
 
         print(f"Complete command:\n {cmd}")
         ret = subprocess.run(cmd, shell=True, capture_output=False, text=True)
