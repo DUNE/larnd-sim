@@ -1,5 +1,23 @@
 """
 Signal calculation module for far field
+
+  consts.sim.FARFIELD_DIPOLE_MODE : str
+      'infinite_plane' (default/current behavior, dipole_dWdz -- two
+      infinite grounded planes, anode + cathode only) or 'box_lattice'
+      (image_lattice_dWdz -- adds grounded side-wall reflections).
+      Only affects calculate_ff_segments; calculate_ff_voxels is
+      unchanged and always uses dipole_dWdz.
+
+  consts.ff_induction.LATTICE_LX, LATTICE_LY : float
+      Box half-widths for the grounded side walls (x=+/-LATTICE_LX,
+      y=+/-LATTICE_LY), analogous to BOX_LX/BOX_LY in
+      hybrid_pixel_response_boxed.py.
+
+  consts.ff_induction.LATTICE_N_TERMS_XY : int
+      Number of side-wall image reflections per direction (total
+      (2*LATTICE_N_TERMS_XY+1)**2 lattice points evaluated per
+      cathode image). ff_induction.DIPOLE_N_TERMS is reused for the
+      cathode/z-image degree, same as in calculate_ff_segments.
 """
 
 from functools import lru_cache
@@ -235,8 +253,121 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            C = detector.RESPONSE_SAMPLING # scale to near-field reponse's time tick
+            C = ff_induction.DIPOLE_SCALE # scale to near-field reponse's time tick
             dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
+
+            total_current += -q_piece * detector.V_DRIFT * dWdz
+
+    output[p_idx, t_idx] = total_current
+
+
+@cuda.jit
+def calculate_ff_segments_box_lattice(
+    tracks: cpt.NDArray,
+    pixel_x: cpt.NDArray[cp.float32],
+    pixel_y: cpt.NDArray[cp.float32],
+    z_anode: float,
+    z_cathode: float,
+    output: cp.ndarray[tuple[int, int], cp.float32]
+):
+    """
+    CUDA kernel: Calculate far-field induced current using segments,
+    with the box-aware image-lattice far field (image_lattice_dWdz) in
+    place of the infinite-plane dipole (dipole_dWdz).
+
+    Identical to calculate_ff_segments() in every respect (exclusion
+    handling, segment splitting, drift geometry) except the per-piece
+    dW/dz calculation, which additionally reflects images off grounded
+    side walls at x=+/-ff_induction.LATTICE_LX, y=+/-ff_induction.LATTICE_LY
+    (see image_lattice_dWdz docstring). Selected via
+    sim.FARFIELD_DIPOLE_MODE = 'box_lattice' in launch_ffe_kernel().
+
+    Args:
+        tracks: structured track array (fields: x_start, y_start, z_start,
+            x_end, y_end, z_end, n_electrons, pixel_plane, ...)
+        pixel_x/y: (n_pixels,) array of x/y-positions of each pixel's center
+        z_anode/cathode: Drift coordinate of the anode/cathode
+        output: (n_pixels, n_ticks) array of current signals
+    """
+    p_idx, t_idx = cuda.grid(2)
+    n_pixels = pixel_x.shape[0]
+    n_ticks = output.shape[1]
+    if p_idx >= n_pixels or t_idx >= n_ticks:
+        return
+
+    x_pixel = pixel_x[p_idx]
+    y_pixel = pixel_y[p_idx]
+    t = t_idx * detector.TIME_SAMPLING
+    total_current = 0.0
+
+    n_segments = tracks.shape[0]
+    l = abs(z_cathode - z_anode)
+    exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+
+    for s_idx in range(n_segments):
+        segment = tracks[s_idx]
+        x0 = segment['x_start']
+        y0 = segment['y_start']
+        z0_seg = segment['z_start']
+        x1 = segment['x_end']
+        y1 = segment['y_end']
+        z1 = segment['z_end']
+
+        # skip before splitting into sub-pieces.
+        if exclude_radius > 0.0:
+            dx0 = abs(x0 - x_pixel)
+            dy0 = abs(y0 - y_pixel)
+            dx1 = abs(x1 - x_pixel)
+            dy1 = abs(y1 - y_pixel)
+            if max(dx0, dx1) <= exclude_radius and max(dy0, dy1) <= exclude_radius:
+                continue
+
+        vx = x1 - x0
+        vy = y1 - y0
+        vz = z1 - z0_seg
+        seg_len_sq = vx*vx + vy*vy + vz*vz
+        if seg_len_sq <= 1e-20:
+            continue
+        seg_len = math.sqrt(seg_len_sq)
+
+        n_split, step = 1, ff_induction.FAR_FIELD_SEGMENT_STEP_CM
+        if step > 0.0:
+            n_split = max(int(math.ceil(seg_len / step)), 1)
+
+        q_piece = segment['n_electrons'] / n_split
+
+        for i_split in range(n_split):
+            frac = (i_split + 0.5) / n_split
+            x = x0 + frac * vx
+            y = y0 + frac * vy
+            z_start_piece = z0_seg + frac * vz
+
+            # far-field exclusion radius
+            if exclude_radius > 0.0:
+                dx_xy = abs(x - x_pixel)
+                dy_xy = abs(y - y_pixel)
+                if dx_xy <= exclude_radius or dy_xy <= exclude_radius:
+                    continue
+
+            drift_distance = detector.V_DRIFT * t
+            if z_start_piece > z_anode:
+                z = z_start_piece - drift_distance
+                if z < z_anode:
+                    continue
+            else:
+                z = z_start_piece + drift_distance
+                if z > z_anode:
+                    continue
+
+            dx = x - x_pixel
+            dy = y - y_pixel
+            dz = z - z_anode
+
+            C = ff_induction.DIPOLE_SCALE # scale to near-field reponse's time tick
+            dWdz = C * image_lattice_dWdz(
+                dx, dy, dz, l,
+                ff_induction.LATTICE_LX, ff_induction.LATTICE_LY,
+                ff_induction.DIPOLE_N_TERMS, ff_induction.LATTICE_N_TERMS_XY)
 
             total_current += -q_piece * detector.V_DRIFT * dWdz
 
@@ -281,6 +412,58 @@ def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> floa
             term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
     # Total z-component of weighting field gradient (Eq. 3.21)
     return term0 + term_sum
+
+
+@nb.njit
+def image_lattice_dWdz(dx: float, dy: float, dz: float, l: float,
+                        Lx: float, Ly: float, n_terms_z: int,
+                        n_terms_xy: int) -> float:
+    """
+    Box-aware dipole field calculation: combines a cathode image series
+    with additional image reflections off grounded side walls at
+    x=+/-Lx, y=+/-Ly.
+
+    The pixel/dipole sits at the box center (x=y=0 in pixel-relative
+    coordinates), so reflecting off a wall pair a distance L away
+    generates images at x = 2*j*L for every integer j, with alternating
+    sign (-1)**j (j=0 recovers the un-reflected term). Combining
+    independent reflections off the x- and y-walls gives a 2D lattice
+    of images with sign (-1)**(j+k), applied to *every* z-image.
+
+    Args:
+        (dx, dy, dz): Vector from electron to pixel (test point
+            relative to the dipole), with the pixel taken as the box
+            center in x, y
+        l: Drift length (anode-cathode separation)
+        Lx, Ly: Box half-widths -- grounded walls at x=+/-Lx, y=+/-Ly
+        n_terms_z: Degree of the cathode image series (images at
+            dz + 2*n*l for n = -n_terms_z .. n_terms_z)
+        n_terms_xy: Degree of the side-wall image lattice in each of
+            x and y (total (2*n_terms_xy+1)**2 lattice points per
+            z-image)
+
+    Returns:
+        Calculated Shockley-Ramo weighting field for the current
+        induced on the pixel, including both cathode and side-wall
+        image reflections
+    """
+    total = 0.0
+    for j in range(-n_terms_xy, n_terms_xy + 1):
+        dx_j = dx - 2 * j * Lx
+        for k in range(-n_terms_xy, n_terms_xy + 1):
+            dy_k = dy - 2 * k * Ly
+            sign = 1.0 if (j + k) % 2 == 0 else -1.0
+
+            # Cathode (z) image series, linear 2*n*l spacing (matches
+            # far_field_image_lattice_potential), reflected off the
+            # same x/y wall lattice
+            for n in range(-n_terms_z, n_terms_z + 1):
+                dz_n = dz + 2 * n * l
+                r_sq = dx_j*dx_j + dy_k*dy_k + dz_n*dz_n
+                if r_sq > 1e-20:
+                    r = math.sqrt(r_sq)
+                    total += sign * (r_sq - 3.0*dz_n*dz_n) / (r_sq*r_sq*r)
+    return total
 
 
 def launch_ffe_kernel(
@@ -333,12 +516,12 @@ def launch_ffe_kernel(
             pixel_x, pixel_y, pixel_categories,
             z_anode, z_cathode, output)
 
-    def launch_segments():
+    def launch_segments(kernel):
         tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
         if len(tpc_tracks) == 0:
             return
 
-        calculate_ff_segments[BPG, TPB](
+        kernel[BPG, TPB](
             tpc_tracks,
             pixel_x, pixel_y,
             z_anode, z_cathode, output)
@@ -347,7 +530,14 @@ def launch_ffe_kernel(
         case 'voxels':
             launch_voxels()
         case 'segments':
-            launch_segments()
+            match sim.FARFIELD_DIPOLE_MODE:
+                case 'infinite_plane':
+                    launch_segments(calculate_ff_segments)
+                case 'box_lattice':
+                    launch_segments(calculate_ff_segments_box_lattice)
+                case _:
+                    e = f"Invalid farfield_dipole_mode '{sim.FARFIELD_DIPOLE_MODE}'"
+                    raise RuntimeError(e)
         case _:
             e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
             raise RuntimeError(e)

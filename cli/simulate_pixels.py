@@ -703,6 +703,14 @@ def run_simulation(input_filename,
         else:
             print("No far-field properties file specified; using default properties")
 
+        if farfield_properties:
+            print(f"Far-field properties file: {farfield_properties}")
+        else:
+            print("No far-field properties file specified; using default properties")
+
+        print("Dipole method:", sim.FARFIELD_DIPOLE_MODE)
+
+
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
 
