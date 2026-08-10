@@ -31,7 +31,7 @@ import h5py
 import numba as nb
 from numba.cuda import device_array, to_device
 from numba.cuda.random import create_xoroshiro128p_states
-from numba.core.errors import NumbaPerformanceWarning
+from numba.cuda.core.errors import NumbaPerformanceWarning
 
 from tqdm import tqdm
 
