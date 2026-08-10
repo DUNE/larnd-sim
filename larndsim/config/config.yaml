@@ -123,7 +123,7 @@ fsd_lut_fp16:
     <<: *fsd
     LIGHT_LUT: /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm_fp16.npz
 
-fsd_cube:
+fsd_cube: &fsd_cube
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsdcube.yaml
     DET_PROPERTIES:  fsd_cube.yaml
@@ -136,3 +136,29 @@ fsd_cube:
     LIGHT_DET_NOISE: FSD_v01_bin06_larndsim_noise.npy
     LIGHT_SIMULATED: False
     MOD2MOD_VARIATION: True
+
+### TEMPORARY FOR TESTING
+
+fsd_cube_prc0_r3_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc0.yaml
+  FARFIELD_PROPERTIES: ff_r3.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
+
+fsd_cube_prc0_r3_box:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc0.yaml
+  FARFIELD_PROPERTIES: ff_r3.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.box_lattice.yaml
+
+fsd_cube_prc0_r4_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc0.yaml
+  FARFIELD_PROPERTIES: ff_r4.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
+
+fsd_cube_prc0_r4_box:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc0.yaml
+  FARFIELD_PROPERTIES: ff_r4.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.box_lattice.yaml
