@@ -346,7 +346,7 @@ def calculate_ff_segments_box_lattice(
             if exclude_radius > 0.0:
                 dx_xy = abs(x - x_pixel)
                 dy_xy = abs(y - y_pixel)
-                if dx_xy <= exclude_radius or dy_xy <= exclude_radius:
+                if dx_xy <= exclude_radius and dy_xy <= exclude_radius:
                     continue
 
             drift_distance = detector.V_DRIFT * t
