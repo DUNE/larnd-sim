@@ -253,7 +253,8 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            C = ff_induction.DIPOLE_SCALE # scale to near-field reponse's time tick
+            C = ff_induction.DIPOLE_SCALE
+            C *= detector.RESPONSE_SAMPLING # scale to near-field reponse's time tick
             dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
 
             total_current += -q_piece * detector.V_DRIFT * dWdz
@@ -363,7 +364,8 @@ def calculate_ff_segments_box_lattice(
             dy = y - y_pixel
             dz = z - z_anode
 
-            C = ff_induction.DIPOLE_SCALE # scale to near-field reponse's time tick
+            C = ff_induction.DIPOLE_SCALE
+            C *= detector.RESPONSE_SAMPLING # scale to near-field reponse's time tick
             dWdz = C * image_lattice_dWdz(
                 dx, dy, dz, l,
                 ff_induction.LATTICE_LX, ff_induction.LATTICE_LY,
