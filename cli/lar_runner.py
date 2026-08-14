@@ -41,14 +41,15 @@ def build_larnd_cmd(larnd_config: dict, output_name: str = None) -> str:
     config = larnd_config['config']
     rng_seed = larnd_config['rng_seed']
     input_file = larnd_config['input_file']
+    output_dir = larnd_config.get('output_dir', '.')
     output_file = output_name if output_name else larnd_config['output_file']
 
     # Add hdf5 extension if not present
     base, ext = os.path.splitext(output_file)
     if ext != ".hdf5":
         output_file += ".hdf5"
-
-    larnd_sim_cmd = f" simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_file}"
+    output_path = os.path.join(output_dir, output_file)
+    larnd_sim_cmd = f" simulate_pixels.py {config} --input_filename {input_file} --output_filename {output_path}"
     larnd_sim_cmd += f" --rand_seed {rng_seed}"
 
     if larnd_config.get('n_events', None):
@@ -59,8 +60,8 @@ def build_larnd_cmd(larnd_config: dict, output_name: str = None) -> str:
 
     logger.info(f"Running larnd-sim with config: {config}")
     logger.info(f"Input edep-sim hdf5: {input_file}")
-    logger.info(f"Output larnd-sim filename: {output_file}")
-    return larnd_sim_cmd, output_file
+    logger.info(f"Output larnd-sim filename: {output_path}")
+    return larnd_sim_cmd, output_path
 
 def cmd_run(args: argparse.Namespace, config: str) -> int:
     """Handle the 'run' subcommand to run larnd-sim."""
