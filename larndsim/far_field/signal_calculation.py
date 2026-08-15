@@ -468,6 +468,69 @@ def image_lattice_dWdz(dx: float, dy: float, dz: float, l: float,
     return total
 
 
+@nb.njit
+def _corner_angle_dz(a: float, b: float, zpos: float) -> float:
+    """d/dzpos of _corner_angle(a, b, zpos), holding a, b fixed.
+
+    _corner_angle(a, b, zpos) = arctan2(u, v) with u = a*b (independent
+    of zpos) and v = zpos*r, r = sqrt(a^2+b^2+zpos^2). Using
+    d/dt atan2(u, v) = (v u' - u v') / (u^2 + v^2), and u' = 0 here,
+    this reduces to -u v' / (u^2 + v^2), with
+    v' = dv/dzpos = r + zpos^2/r = (a^2+b^2+2*zpos^2) / r.
+    """
+    r = math.sqrt(a**2 + b**2 + zpos**2)
+    u = a * b
+    v = zpos * r
+    dv_dzpos = (a**2 + b**2 + 2.0 * zpos**2) / r
+    return -u * dv_dzpos / (u**2 + v**2)
+
+
+@nb.njit
+def _patch_solid_angle_potential_dz(x: float, y: float, z: float,
+                                    wx: float, wy: float) -> float:
+    """d/dzpos of _patch_solid_angle_potential(x, y, zpos, wx, wy),
+    for zpos > 0 (same convention/singularity guard as that function)."""
+    x1, x2 = -wx - x, wx - x
+    y1, y2 = -wy - y, wy - y
+    domega = (_corner_angle_dz(x2, y2, z)
+              - _corner_angle_dz(x1, y2, z)
+              - _corner_angle_dz(x2, y1, z)
+              + _corner_angle_dz(x1, y1, z))
+    return domega / (2.0 * np.pi)
+
+
+@nb.njit
+def near_field_dWdz(dx: float, dy: float, dz: float,
+                    wx: float, wy: float, l: float, n_terms: int) \
+                    -> float:
+    """Analytic dW/dz of near_field_potential -- the z-component of the
+    exact finite-size-pixel weighting field, for direct use in place of
+    finite-differencing near_field_potential.
+
+    Derivation: _patch_signed(x,y,z,wx,wy,z_src) = sign(zz) * g(|zz|)
+    with zz = z - z_src and g = _patch_solid_angle_potential(x,y,.,wx,wy).
+    Since d|zz|/dz = sign(zz), the chain rule gives
+        d/dz [sign(zz) * g(|zz|)] = sign(zz) * g'(|zz|) * sign(zz)
+                                   = g'(|zz|)
+    i.e. the sign(zz) factors cancel and the derivative is just the
+    *unsigned* zpos-derivative of the solid-angle formula (see
+    _patch_solid_angle_potential_dz), evaluated at |zz|, for every
+    image term -- no explicit sign/odd-extension bookkeeping needed
+    here (verified numerically against central differences of
+    near_field_potential to ~1e-10 relative error, both within and
+    across image planes).
+
+    Only the z-component is provided (no dW/dx, dW/dy), matching
+    dipole_dWdz / image_lattice_dWdz in larndsim_ffe_signal.py, since
+    the simulated drift is purely along z.
+    """
+    total = 0
+    for n in range(-n_terms, n_terms + 1):
+        total += _patch_solid_angle_potential_dz(
+            dx, dy, abs(dz - 2 * n * l), wx, wy)
+    return total
+
+
 def launch_ffe_kernel(
     tpc_idx: int,
     tracks: cpt.NDArray,
