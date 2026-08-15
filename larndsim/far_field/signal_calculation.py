@@ -253,9 +253,13 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            C = ff_induction.DIPOLE_SCALE
+            # C = ff_induction.DIPOLE_SCALE
+            C = 1.
             C *= 0.01 # something something units
-            dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
+            # dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
+            pix_halfw = 0.18
+            dWdz = C * near_field_dWdz(dx, dy, dz, pix_halfw, pix_halfw, l,
+                                       ff_induction.DIPOLE_N_TERMS)
 
             total_current += -q_piece * detector.V_DRIFT * dWdz
 
