@@ -1312,6 +1312,7 @@ def run_simulation(input_filename,
             # Track all pixels processed in near-field batches for this event batch
             processed_pixels_event = cp.array([], dtype=cp.int32)
 
+            saved_pixels_near, saved_mask_ff_plus, saved_signals_near, saved_signals_ff_plus = [], [], [], []
             for start_pix, stop_pix in \
                     tqdm(pixel_ranges, delay=1,
                          desc='  Simulating event %i batches...' % ievd,
@@ -1509,6 +1510,19 @@ def run_simulation(input_filename,
 
                         assert np.all(tpc_mask) # fsdcube
 
+                        from pathlib import Path
+                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_batch}.npz'
+                        bt_path.parent.mkdir(exist_ok=True)
+                        # ev2save, pix2save = 14, 1145
+                        # if ievd == ev2save and pix2save in unique_pix:
+                        if True:
+                            np.savez(bt_path,
+                                     tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
+                                     n_ticks=np.array([signals_ticks_t0]),
+                                     pixels_tracks_signals=pixels_tracks_signals,
+                                     num_backtrack=num_backtrack,
+                                     track_pixel_map=track_pixel_map)
+
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
                             tracks=all_selected_tracks,
@@ -1518,10 +1532,17 @@ def run_simulation(input_filename,
                             category=1,
                             voxel_cache=voxel_cache)
 
+                        saved_pixels_near.append(cp.asnumpy(unique_pix))
+                        saved_signals_near.append(cp.asnumpy(pixels_signals))
+                        saved_mask_ff_plus.append(cp.asnumpy(tpc_mask))
+                        saved_signals_ff_plus.append(cp.asnumpy(ff_signals_tpc))
+
                         pixels_signals[tpc_mask, :] += ff_signals_tpc
 
                     RangePop()
                 
+                # np.savez(f'sig_{ievd}_{start_pix}_nf.npz', signals=pixels_signals, pixels=unique_pix)
+
                 RangePush("get_adc_values", 3)
 
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
@@ -1541,6 +1562,16 @@ def run_simulation(input_filename,
                 track_pixel_map[track_pixel_map != -1] = selected_tracks['segment_id'][track_pixel_map[track_pixel_map != -1].get()]
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
+
+            from pathlib import Path
+            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.{i_batch}.npz'
+            sig_path.parent.mkdir(exist_ok=True)
+            if saved_pixels_near:
+                np.savez(sig_path,
+                         pixels_near=np.concatenate(saved_pixels_near),
+                         signals_near=concat_pad_fast(saved_signals_near),
+                         mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                         signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
 
             # ~~~ Far-field-only induction pixels (not processed above) ~~~
             if sim.FARFIELD_ENABLED:
@@ -1606,6 +1637,18 @@ def run_simulation(input_filename,
                     num_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
                     offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
                     pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
+
+                    from pathlib import Path
+                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.{i_batch}.npz'
+                    sig_path.parent.mkdir(exist_ok=True)
+                    if saved_pixels_near:
+                        np.savez(sig_path,
+                                 pixels_near=np.concatenate(saved_pixels_near),
+                                 signals_near=concat_pad_fast(saved_signals_near),
+                                 mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                                 signals_ff_plus=concat_pad_fast(saved_signals_ff_plus),
+                                 pixels_ff_only=cp.asnumpy(induction_pix_ids),
+                                 signals_ff_only=cp.asnumpy(pixels_signals))
 
                     digitize_and_update(unique_eventIDs=unique_eventIDs,
                                         unique_pix=induction_pix_ids,
