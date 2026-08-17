@@ -1313,10 +1313,13 @@ def run_simulation(input_filename,
             processed_pixels_event = cp.array([], dtype=cp.int32)
 
             saved_pixels_near, saved_mask_ff_plus, saved_signals_near, saved_signals_ff_plus = [], [], [], []
+            i_pixbatch = -1
             for start_pix, stop_pix in \
                     tqdm(pixel_ranges, delay=1,
                          desc='  Simulating event %i batches...' % ievd,
                          leave=False, ncols=80):
+                i_pixbatch += 1
+
                 RangePush("setup_pixel_batch")
                 selected_pix = all_unique_pix[start_pix:stop_pix]
 
@@ -1511,17 +1514,14 @@ def run_simulation(input_filename,
                         assert np.all(tpc_mask) # fsdcube
 
                         from pathlib import Path
-                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_batch}.npz'
+                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_pixbatch}.npz'
                         bt_path.parent.mkdir(exist_ok=True)
-                        # ev2save, pix2save = 14, 1145
-                        # if ievd == ev2save and pix2save in unique_pix:
-                        if True:
-                            np.savez(bt_path,
-                                     tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
-                                     n_ticks=np.array([signals_ticks_t0]),
-                                     pixels_tracks_signals=pixels_tracks_signals,
-                                     num_backtrack=num_backtrack,
-                                     track_pixel_map=track_pixel_map)
+                        np.savez(bt_path,
+                                 tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
+                                 n_ticks=np.array([signals_ticks_t0]),
+                                 pixels_tracks_signals=pixels_tracks_signals,
+                                 num_backtrack=num_backtrack,
+                                 track_pixel_map=track_pixel_map)
 
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
@@ -1564,7 +1564,7 @@ def run_simulation(input_filename,
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
             from pathlib import Path
-            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.{i_batch}.npz'
+            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.npz'
             sig_path.parent.mkdir(exist_ok=True)
             if saved_pixels_near:
                 np.savez(sig_path,
@@ -1639,7 +1639,7 @@ def run_simulation(input_filename,
                     pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
 
                     from pathlib import Path
-                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.{i_batch}.npz'
+                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.npz'
                     sig_path.parent.mkdir(exist_ok=True)
                     if saved_pixels_near:
                         np.savez(sig_path,
