@@ -1541,8 +1541,6 @@ def run_simulation(input_filename,
 
                     RangePop()
                 
-                # np.savez(f'sig_{ievd}_{start_pix}_nf.npz', signals=pixels_signals, pixels=unique_pix)
-
                 RangePush("get_adc_values", 3)
 
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
