@@ -29,6 +29,7 @@ import fire
 import h5py
 
 import numba as nb
+from numba import cuda
 from numba.cuda import device_array, to_device
 from numba.cuda.random import create_xoroshiro128p_states
 from numba.cuda.core.errors import NumbaPerformanceWarning
@@ -213,11 +214,12 @@ def do_digitize_and_update(results_acc: dict[str, Any],
     adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
     current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES,
                                   sim.MAX_TRACKS_PER_PIXEL))
+    time_padding_val = 0
 
-    TPB = 4
-    BPG = ceil(pixels_signals.shape[0] / TPB)
-    rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed,
-                                         rng_states=rng_states)
+    # TPB = 4
+    # BPG = ceil(pixels_signals.shape[0] / TPB)
+    # rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed,
+                                         # rng_states=rng_states)
 
 
     if pixel_thresholds_lut is not None:
@@ -231,17 +233,143 @@ def do_digitize_and_update(results_acc: dict[str, Any],
         pixel_thresholds = cp.full(pixels_signals.shape[0], default_threshold)
 
 
-    fee.get_adc_values[BPG, TPB](pixels_signals,
-                                 pixels_tracks_signals,
-                                 num_backtrack,
-                                 offset_backtrack,
-                                 time_ticks,
-                                 integral_list,
-                                 adc_ticks_list,
-                                 0,
-                                 rng_states,
-                                 current_fractions,
-                                 pixel_thresholds)
+    # fee.get_adc_values[BPG, TPB](pixels_signals,
+    #                              pixels_tracks_signals,
+    #                              num_backtrack,
+    #                              offset_backtrack,
+    #                              time_ticks,
+    #                              integral_list,
+    #                              adc_ticks_list,
+    #                              0,
+    #                              rng_states,
+    #                              current_fractions,
+    #                              pixel_thresholds)
+
+    # Begin reworked get_adc_values
+    n_pixels = pixels_signals.shape[0]
+    n_ticks  = pixels_signals.shape[1]
+
+    TPB = 4 #[1, 4, 8, 16, 32, 64, 128, 256]
+    BPG = ceil(n_pixels / TPB)
+    rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed, rng_states=rng_states)
+
+    # Initialize the noise arrays to the GPU.
+    noise_uncorr = cuda.device_array(
+        (n_pixels, n_ticks), dtype=np.float32
+    )
+    noise_disc = cuda.device_array(
+        (n_pixels, n_ticks), dtype=np.float32
+    )
+    noise_reset = cuda.device_array(
+        (n_pixels, n_ticks), dtype=np.float32
+    )
+    periodic_reset_phase = cuda.device_array(
+        (n_pixels,), dtype=np.int32
+    )
+
+    # Populate the arrays with random numbers
+    fee.generate_noise[BPG, TPB](rng_states, noise_uncorr, noise_disc, noise_reset, periodic_reset_phase)
+
+    # Initialize signal charge array
+    signal_charge = cuda.device_array(
+        (n_pixels, n_ticks),
+        dtype=np.float32
+    )
+
+    TPB_2D = (16, 16)
+    BPG_2D = (
+        ceil(n_pixels / TPB_2D[0]),
+        ceil(n_ticks / TPB_2D[1]),
+    )
+
+    fee.integrate_signal[BPG_2D, TPB_2D](
+        pixels_signals,
+        signal_charge
+    )
+
+    # Tracks Accumulation
+    signal_charge_track = cuda.device_array(
+        (n_pixels, n_ticks, sim.MAX_TRACKS_PER_PIXEL),
+        dtype=np.float32
+    )
+
+    fee.integrate_signal_tracks[BPG_2D, TPB_2D](
+        pixels_tracks_signals,
+        num_backtrack,
+        offset_backtrack,
+        signal_charge_track
+    )
+
+    # ADC Window Discovery
+    # Init ADC state arrays.
+    adc_start = cuda.device_array(
+        (n_pixels, sim.MAX_ADC_VALUES),
+        dtype=np.int32
+    )
+
+    adc_end = cuda.device_array(
+        (n_pixels, sim.MAX_ADC_VALUES),
+        dtype=np.int32
+    )
+
+    adc_ticks_idx = cuda.device_array(
+        (n_pixels, sim.MAX_ADC_VALUES),
+        dtype=np.int32
+    )
+
+    adc_counts = cuda.device_array(
+        (n_pixels),
+        dtype=np.int32
+    )
+
+    adc_q_sum = cuda.device_array(
+        (n_pixels, sim.MAX_ADC_VALUES),
+        dtype=np.float64
+    )
+
+    adc_last_reset = cuda.device_array(
+        (n_pixels, sim.MAX_ADC_VALUES),
+        dtype=np.int32
+    )
+
+    threads = 128
+    blocks = ceil(n_pixels / threads)
+
+    fee.discover_adc_windows[blocks, threads](signal_charge,
+                                                  noise_uncorr,
+                                                  noise_disc,
+                                                  noise_reset,
+                                                  periodic_reset_phase,
+                                                  pixel_thresholds,
+                                                  adc_start,
+                                                  adc_end,
+                                                  adc_ticks_idx,
+                                                  adc_counts,
+                                                  adc_q_sum,
+                                                  adc_last_reset)
+
+    # Integrate Windows
+    threads = (16, 8)
+    blocks = (
+        ceil(n_pixels / threads[0]),
+        ceil(sim.MAX_ADC_VALUES / threads[1])
+    )
+
+    fee.integrate_windows[blocks, threads](signal_charge,
+                                               signal_charge_track,
+                                               num_backtrack,
+                                               adc_end,
+                                               adc_counts,
+                                               adc_ticks_idx,
+                                               adc_q_sum,
+                                               adc_last_reset,
+                                               integral_list,
+                                               adc_ticks_list,
+                                               current_fractions,
+                                               time_ticks,
+                                               time_padding_val,
+                                               periodic_reset_phase)
+    # End reworked get_adc_values
 
     if pixel_gains_lut is not None:
         pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
