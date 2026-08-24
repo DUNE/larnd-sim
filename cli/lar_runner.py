@@ -143,7 +143,8 @@ def cmd_nsys(args: argparse.Namespace, config: dict) -> int:
 
     if args.args:
         logger.info(f"Adding the following arguments {args.args}")
-        cmd += f" {args.args}"
+        for arg in args.args:
+            cmd += f" {arg}"
 
     lar_cmd, lar_output = build_larnd_cmd(larnd_config, output_name=output_file)
     cmd += lar_cmd
@@ -183,9 +184,8 @@ def cmd_ncu(args: argparse.Namespace, config: dict) -> int:
     else:
         kernels = kernels[0]
 
-    # Which invocation of the kernel to profile
-    num_invoc = ncu_config.get('invocation', 5)
-    cmd += f' --kernel-id "::regex:{kernels}:{num_invoc}"'
+    # Which kernels to profile using a regex to handle the mangled names from Numba
+    cmd += f' --kernel-name "regex:{kernels}"'
 
     if args.force:
         logger.info("Overwriting existing output files.")
