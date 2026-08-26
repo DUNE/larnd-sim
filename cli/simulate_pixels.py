@@ -201,8 +201,7 @@ class LArND_Sim:
                  config='2x2',
                  n_events=None,
                  rand_seed: int | None = None,
-                 compression=None,
-                 save_memory=None):
+                 compression=None):
         """
         Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -215,24 +214,38 @@ class LArND_Sim:
                 (all tracks).
             rand_seed (int, optional): the random number generator seed that can be set through 
                 a command-line
-            save_memory (string path, optional): if non-empty, this is used as a filename to 
-                store memory snapshot information
             compression (str, optional): enable file compression of the output HDF5 datasets. Defaults to None,
                 supported options are 'lzf' and 'gzip'
         """
-        RangePush("load_config")
         print(LOGO)
         print("**************************\nLOADING SETTINGS AND INPUT\n**************************")
 
+        self.input_filename = input_filename
         self.output_filename = output_filename
+        self.config = config
         self.compression = compression
 
-        if not os.path.exists(input_filename):
-            raise Exception(f'Input file {input_filename} does not exist.')
-        if os.path.exists(output_filename):
-            raise Exception(f'Output file {output_filename} already exists.')
+        self.check_files()
+        self.load_config()
+        self.print_config()
+        self.init_rng(rand_seed)
+        self.load_input(n_events)
+        self.cupaify_const_arrays()
 
-        cfg = get_config(config)
+        self.event_times, self.sync_start = prep_event_times(self.all_mod_tracks)
+
+        # output accumulators:
+        self.results_acc = defaultdict(list)
+        self.light_sim_dat_acc = list()
+
+    def check_files(self):
+        if not os.path.exists(self.input_filename):
+            raise Exception(f'Input file {self.input_filename} does not exist.')
+        if os.path.exists(self.output_filename):
+            raise Exception(f'Output file {self.output_filename} already exists.')
+
+    def load_config(self):
+        cfg = get_config(self.config)
         self.detector_properties = cfg['DET_PROPERTIES']
         self.simulation_properties = cfg['SIM_PROPERTIES']
         self.light_simulated = cfg.get('LIGHT_SIMULATED', True)
@@ -244,15 +257,28 @@ class LArND_Sim:
         self.pixel_gains_file = load_mod2mod_prop(cfg, 'PIXEL_GAINS_FILE')
         self.pixel_pedestals_file = load_mod2mod_prop(cfg, 'PIXEL_PEDESTALS_FILE')
 
+        # FIXME: these mod_ids start at 1 instead of 0
+        self.mod_ids = consts.detector.get_module_ids(self.detector_properties)
+        self.n_modules = len(self.mod_ids)
+
+        consts.light.set_light_properties(self.detector_properties)
+        consts.sim.set_simulation_properties(self.simulation_properties)
+
+        # We load detector properties to get detector.TPC_BORDERS
+        # For this purpose, it doesn't matter which pixel_layout to use
+        consts.detector.set_detector_properties(self.detector_properties, self.pixel_layout[0], geo_only=True)
+
         if self.light_simulated:
             self.light_lut_filename = load_mod2mod_prop(cfg, 'LIGHT_LUT')
             self.light_det_noise_filename = cfg['LIGHT_DET_NOISE']
 
+    def print_config(self):
         print("")
-        print("edep-sim input file:", input_filename)
-        print("larnd-sim output file:", output_filename)
+        print("edep-sim input file:", self.input_filename)
+        print("larnd-sim output file:", self.output_filename)
+        print("Config:", self.config)
         print("")
-        print("Compression:", compression)
+        print("Compression:", self.compression)
         print("Random seed:", self.rand_seed)
         print("Simulation properties file:", self.simulation_properties)
         print("Detector properties file:", self.detector_properties)
@@ -270,19 +296,7 @@ class LArND_Sim:
             print("Light LUT:", self.light_lut_filename)
             print("Light detector noise: ", self.light_det_noise_filename)
 
-        if save_memory:
-            print('Recording the process resource log:', save_memory)
-
-        # FIXME: these mod_ids start at 1 instead of 0
-        self.mod_ids = consts.detector.get_module_ids(self.detector_properties)
-        self.n_modules = len(self.mod_ids)
-
-        RangePop() # load_config
-
-        self.start_simulation = time()
-
-        RangePush("set_random_seed")
-        # set up random seed for larnd-sim
+    def init_rng(self, rand_seed):
         if rand_seed is None:
             self.rand_seed = int(time())
         else:
@@ -290,20 +304,13 @@ class LArND_Sim:
         cp.random.seed(self.rand_seed)
         # pre-allocate some random number states for custom kernels
         self.rng_states = maybe_create_rng_states(1024*256, seed=self.rand_seed)
-        RangePop()
 
-        RangePush("load_properties")
-
-        consts.light.set_light_properties(self.detector_properties)
-        consts.sim.set_simulation_properties(self.simulation_properties)
-
-        RangePop()                  # load_properties
-
+    def load_input(self, n_events):
         RangePush("load_hdf5_file")
         print("Loading track segments...")
         start_load = time()
         # First of all we load the edep-sim output
-        with h5py.File(input_filename, 'r') as f:
+        with h5py.File(self.input_filename, 'r') as f:
             tracks = np.array(f['segments'])
 
             tracks = maybe_add_t0(tracks)
@@ -331,60 +338,39 @@ class LArND_Sim:
             tracks = tracks[tracks[sim.EVENT_SEPARATOR] <= max_eventID]
 
             if trajectories:
-                self.trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
+                trajectories = trajectories[trajectories[sim.EVENT_SEPARATOR] <= max_eventID]
             if vertices:
-                self.vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
+                vertices = vertices[vertices[sim.EVENT_SEPARATOR] <= max_eventID]
             if mc_hdr:
-                self.mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
+                mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
             if mc_stack:
-                self.mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
+                mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
 
         tracks = maybe_add_n_photons(tracks)
         tracks = swap_coordinates(tracks)
+        vertices = maybe_set_vertex_times(vertices, self.event_times)
+        mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
+
+        self.all_mod_tracks = tracks
+        self.all_mod_segment_ids = segment_ids
+        self.segments_to_files = np.empty_like(tracks)
+
+        self.trajectories = trajectories
+        self.vertices = vertices
+        self.mc_hdr = mc_hdr
+        self.mc_stack = mc_stack
 
         RangePop()                  # load_hdf5_file
         end_load = time()
         print(f"Data preparation time: {end_load-start_load:.2f} s")
 
-        print("******************\nRUNNING SIMULATION\n******************")
-        RangePush("prep_simulation")
-        # Create a lookup table for event timestamps.
-
-        self.event_times, self.sync_start = prep_event_times(tracks)
-
-        vertices = maybe_set_vertex_times(vertices, self.event_times)
-        self.mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
-
-        # accumulate results for periodic file saving
-        self.results_acc = defaultdict(list)
-        self.light_sim_dat_acc = list()
-
-        # Allow module to module variance in the configuration files
-        # First copy all tracks and segment_ids
-        self.all_mod_tracks = tracks
-        self.all_mod_segment_ids = segment_ids
-        self.segments_to_files = np.empty_like(tracks)
-
-        # We load detector properties to get detector.TPC_BORDERS
-        # For this purpose, it doesn't matter which pixel_layout to use
-        consts.detector.set_detector_properties(self.detector_properties, self.pixel_layout[0], geo_only=True)
-
-        # Sub-select segments in active volumes and that's not too "late"
-        # TODO it seems the late signals are all very small, so it's current NOT simulated
-        # However, to correctly include this part, one needs to append it to pixels_signals and run get adc_values on it
-        # In that case it's possible to have multiple entries for the same pixel
-        print("Skipping non-active volumes..." , end="")
-        active_tracks_mask = active_volume.select_active_volume(self.all_mod_tracks, detector.TPC_BORDERS) # return indices of selected segments
-        print(f"{len(self.all_mod_tracks) - len(active_tracks_mask)} segments are removed due to the active volume cut.")
-
+    def cupaify_const_arrays(self):
         # We need to make cupy arrays of these and pass them to the kernels;
         # otherwise numba will try to use the GPU's "global constant" memory
         # which (at 64 kB) is not large enough for ND-LAr
         self.op_channel_efficiency = cp.array(light.OP_CHANNEL_EFFICIENCY)
         self.op_channel_to_tpc = cp.array(light.OP_CHANNEL_TO_TPC)
         self.light_gain = cp.array(light.LIGHT_GAIN)
-
-        RangePop()  # prep_simulation
 
     def init_module(self, i_mod):
         # FIXME: i_mod starts at 1 (see call to get_module_ids above)
@@ -480,14 +466,11 @@ class LArND_Sim:
                         light_simulated=self.light_simulated)
         self.i_trig += 1
 
-    def save_null_light_results(self, ievd: int, i_mod: int):
-        self.null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-        self.save_results(i_mod, light_only=True)
-        del self.null_light_results_acc['light_event_id']
-
     def maybe_save_null_light_results(self, ievd, i_mod):
         if self.light_simulated:
-            self.save_null_light_results(ievd, i_mod)
+            self.null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+            self.save_results(i_mod, light_only=True)
+            del self.null_light_results_acc['light_event_id']
             self.i_trig += 1
 
     def setup_event_batch(self, i_mod, ievd, batch_mask, is_new_event) -> bool:
@@ -1103,6 +1086,9 @@ class LArND_Sim:
         print(f"Elapsed time: {end_simulation-self.start_simulation:.2f} s")
 
     def run(self):
+        print("******************\nRUNNING SIMULATION\n******************")
+        self.start_simulation = time()
+
         for i_mod in self.mod_ids: # Conventional module counting starts from 1
             self.init_module(i_mod)
 
