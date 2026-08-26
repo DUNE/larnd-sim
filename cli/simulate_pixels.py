@@ -372,6 +372,7 @@ class LArND_Sim:
         if save_memory:
             print('Recording the process resource log:', save_memory)
 
+        # FIXME: these mod_ids start at 1 instead of 0
         self.mod_ids = consts.detector.get_module_ids(self.detector_properties)
         self.n_modules = len(self.mod_ids)
 
@@ -448,7 +449,7 @@ class LArND_Sim:
         RangePush("prep_simulation")
         # Create a lookup table for event timestamps.
 
-        self.event_times = prep_event_times(tracks)
+        self.event_times, self.sync_start = prep_event_times(tracks)
 
         vertices = maybe_set_vertex_times(vertices, self.event_times)
         self.mc_hdr = maybe_set_mc_hdr_times(mc_hdr, vertices)
@@ -483,244 +484,255 @@ class LArND_Sim:
 
         RangePop()  # prep_simulation
 
+    def init_module(self, i_mod):
+        # FIXME: i_mod starts at 1 (see call to get_module_ids above)
+        print(f'Simulating module {i_mod-1}')
+        reload_modules(self.detector_properties, self.pixel_layout, self.response_file, i_mod)
+
+        self.response = consts.detector.load_response(self.response_file[i_mod-1])
+        self.pixel_thresholds_lut = load_thresholds(self.pixel_thresholds_file, i_mod)
+        self.pixel_gains_lut = load_gains(self.pixel_gains_file, i_mod)
+        self.pixel_pedestals_lut = load_pedestals(self.pixel_pedestals_file, i_mod)
+
+        RangePush("load_segments_in_module")
+        self.module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+        module_tracks_mask = active_volume.select_active_volume(self.all_mod_tracks, self.module_borders)
+        self.tracks = self.all_mod_tracks[module_tracks_mask]
+        self.segment_ids = self.all_mod_segment_ids[module_tracks_mask]
+        RangePop()
+
+        # find the module that triggers
+        if light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1:
+            io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
+            self.trig_module = np.argwhere(io_groups==fee.get_trig_io())[0][0] + 1 # module id (i_mod) counts from 1
+
+        self.i_trig = 0
+
+    def load_light_info(self, i_mod):
+        RangePush("load_light_info")
+        n_light_channel = int(light.N_OP_CHANNEL/len(self.mod_ids))
+        self.light_sim_dat = np.zeros([len(self.tracks), n_light_channel],
+                                      dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
+        self.light_sim_dat['segment_id'] = self.segment_ids[..., np.newaxis]
+        self.track_light_voxel = np.zeros([len(self.tracks), 3], dtype='i4')
+
+        print("Calculating optical responses...", end="")
+        self.start_light_time = time()
+
+        light_lut = self.light_lut_filename[i_mod-1]
+
+        if i_mod == 1 or light_lut != self.light_lut_filename[i_mod-2]:
+            lut = np.load(light_lut)['arr']
+
+            # check if the light LUT matches with the number of optical channels
+            # lut (x, y, z, n_op_ch) for one TPC
+            # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
+            warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
+            if warn_n_op_ch:
+                warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
+
+            # clip LUT so that no voxel contains 0 visibility
+            mask = lut['vis'] > 0
+            lut['vis'][~mask] = lut['vis'][mask].min()
+
+            # get length of the t0 time profile
+            self.t0_profile_length = lut['time_dist'].shape[-1]
+
+            self.lut = to_device(lut)
+
+        light_noise = cp.load(self.light_det_noise_filename)
+
+        if light_noise.shape[0] == self.n_modules * n_light_channel:
+            self.light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+        else:
+            assert light_noise.shape[0] >= n_light_channel
+            self.light_noise = light_noise[:n_light_channel]
+            warnings.warn(f"Light noise file {self.light_det_noise_filename} does not span all modules. " +
+                            f"Using noise from first {n_light_channel} channels for all modules.")
+        RangePop() # load_light_info
+
+    def calc_light_inc(self):
+        RangePush('calculate_light_incidence')
+        TPB = 256
+        BPG = max(ceil(self.tracks.shape[0] / TPB),1)
+        lightLUT.calculate_light_incidence[BPG,TPB](self.tracks, self.lut,
+                                                    self.light_sim_dat, self.track_light_voxel,
+                                                    self.op_channel_efficiency, self.op_channel_to_tpc)
+        RangePop()
+
+        self.light_sim_dat_acc.append(self.light_sim_dat)
+        self.null_light_results_acc = prep_null_light_results(self.light_noise)
+
+        print(f" {time()-self.start_light_time:.2f} s")
+
+    # TODO: Move body of do_save_results here
+    def save_results(self, *args, **kwargs):
+        do_save_results(*args, **kwargs,
+                        output_filename=self.output_filename,
+                        compression=self.compression,
+                        bad_channels=self.bad_channels)
+
+    # TODO: ditto
+    def digitize_and_update(self, *args, **kwargs):
+        do_digitize_and_update(*args, **kwargs,
+                               results_acc=self.results_acc,
+                               pixel_thresholds_lut=self.pixel_thresholds_lut,
+                               pixel_gains_lut=self.pixel_gains_lut,
+                               pixel_pedestals_lut=self.pixel_pedestals_lut,
+                               rand_seed=self.rand_seed,
+                               rng_states=self.rng_states)
+
+    def save_null_light_results(self, ievd: int, i_trig: int, i_mod: int):
+        self.null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
+        self.save_results(self.event_times, self.null_light_results_acc, i_trig, i_mod, light_only=True)
+        del self.null_light_results_acc['light_event_id']
+
+    def maybe_save_null_light_results(self, ievd, i_mod):
+        if self.light_simulated:
+            self.save_null_light_results(ievd, self.i_trig, i_mod)
+            self.i_trig += 1
+
+    def setup_event_batch(self, i_mod, ievd, batch_mask, is_new_event) -> bool:
+        "Returns True if there's anything to process"
+        this_event_time = [self.event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
+        if is_new_event:
+            # forward sync packets
+            if this_event_time[0] - self.sync_start >= 0: # this is duplicate to "is_new_event"
+                sync_times = cp.arange(self.sync_start, this_event_time[0]+1, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) #us
+                #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
+                sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
+                if len(sync_times) > 0:
+                    fee.export_sync_to_hdf5(self.output_filename, ievd, sync_times_export, i_mod, compression=self.compression)
+                    self.sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
+            # beam trigger is only forwarded to one specific pacman (defined in fee)
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == self.trig_module or i_mod == -1):
+                fee.export_timestamp_trigger_to_hdf5(self.output_filename, [ievd], this_event_time, i_mod, compression=self.compression)
+
+        if np.sum(batch_mask) == 0:
+            self.maybe_save_null_light_results(ievd, i_mod)
+            return False
+
+        self.prepare_pixels(batch_mask)
+
+        if not self.all_active_pixels.shape[1] or not self.all_neighboring_pixels.shape[1]:
+            self.maybe_save_null_light_results(ievd, i_mod)
+            return False
+
+        self.get_pixels()
+
+        if not self.all_unique_pix.shape[0]:
+            self.maybe_save_null_light_results(ievd, i_mod)
+            return False
+
+        return True
+
+    def prepare_pixels(self, batch_mask):
+        RangePush("event_id_map")
+        track_subset = self.tracks[batch_mask]
+        event_ids = track_subset[sim.EVENT_SEPARATOR]
+        self.unique_eventIDs = np.unique(event_ids)
+        RangePop()
+
+        # Filter out tracks with invalid pixel_plane (outside TPCs)
+        valid_plane_mask = track_subset['pixel_plane'] != detector.DEFAULT_PLANE_INDEX
+        self.all_selected_tracks = track_subset[valid_plane_mask]
+
+        # Create combined mask for light simulation arrays that are indexed by batch_mask
+        # We need indices into the full tracks array for light data
+        batch_indices = np.where(batch_mask)[0]
+        valid_batch_indices = batch_indices[valid_plane_mask]
+        valid_batch_mask = np.zeros_like(batch_mask, dtype=bool)
+        valid_batch_mask[valid_batch_indices] = True
+
+        # We find the pixels intersected by the projection of the tracks on
+        # the anode plane using the Bresenham's algorithm. We also take into
+        # account the neighboring pixels, due to the transverse diffusion of the charges.
+        RangePush("max_pixels")
+        TPB = 128
+        BPG = max(ceil(self.all_selected_tracks.shape[0] / TPB),1)
+        all_max_pixels = np.array([0])
+        pixels_from_track.max_pixels[BPG,TPB](self.all_selected_tracks, all_max_pixels)
+        RangePop()
+
+        # This formula tries to estimate the maximum number of pixels which can have
+        # a current induced on them.
+        all_max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*all_max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
+        all_max_neighboring_pixels = np.clip([all_max_neighboring_pixels], all_max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the all_max_neighboring_pixels by the total number of pixels in a TPC
+
+        self.all_active_pixels = cp.full((self.all_selected_tracks.shape[0], all_max_pixels[0]), -1, dtype=np.int32)
+        self.all_neighboring_pixels = cp.full((self.all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
+        self.all_neighboring_radius = cp.full((self.all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
+        self.all_n_pixels_list = cp.zeros(shape=(self.all_selected_tracks.shape[0]))
+
+    def get_pixels(self):
+        RangePush("get_pixels", 7)
+        TPB = 128
+        BPG = max(ceil(self.all_selected_tracks.shape[0] / TPB),1)
+        pixels_from_track.get_pixels[BPG,TPB](self.all_selected_tracks,
+                                              self.all_active_pixels,
+                                              self.all_neighboring_pixels,
+                                              self.all_neighboring_radius,
+                                              self.all_n_pixels_list)
+        RangePop()
+
+        RangePush("unique_pix")
+        shapes = self.all_neighboring_pixels.shape
+        joined = self.all_neighboring_pixels.reshape(shapes[0] * shapes[1])
+        all_unique_pix = cp.unique(joined)
+        self.all_unique_pix = all_unique_pix[(all_unique_pix != -1)]
+        RangePop()
+
+        RangePush("invert_array_map")
+        # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
+        self.assmap_pix2seg = invert_array_map(self.all_neighboring_pixels,self.all_unique_pix)
+        RangePop() # invert_array_map
+
+    def maybe_farfield_precompute(self):
+        # ~~~ Precompute far-field helper data once per event batch ~~~
+        RangePush("event_farfield_precompute")
+        self.classification_cache: dict[int, PixelClassificationResult] = {}
+        self.voxel_cache: dict[int, VoxelDict] = {}
+        if sim.FARFIELD_ENABLED:
+            self.classification_cache = \
+                pixel_classifier.get_classification_cache(self.all_selected_tracks)
+            if sim.FARFIELD_MODE == 'voxels':
+                self.voxel_cache = voxelization.get_voxel_cache(self.all_selected_tracks)
+        RangePop()
+
     def run(self):
         # Convention module counting start from 1
         # Loop over all modules
         for i_mod in self.mod_ids:
-            print(f'Simulating module {i_mod-1}')
-            reload_modules(self.detector_properties, self.pixel_layout, self.response_file, i_mod)
-
-            response = consts.detector.load_response(self.response_file[i_mod-1])
-            pixel_thresholds_lut = load_thresholds(self.pixel_thresholds_file, i_mod)
-            pixel_gains_lut = load_gains(self.pixel_gains_file, i_mod)
-            pixel_pedestals_lut = load_pedestals(self.pixel_pedestals_file, i_mod)
-
-            RangePush("load_segments_in_module")
-            module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
-            module_tracks_mask = active_volume.select_active_volume(self.all_mod_tracks, module_borders)
-            tracks = self.all_mod_tracks[module_tracks_mask]
-            segment_ids = self.all_mod_segment_ids[module_tracks_mask]
-            RangePop()
-
-            # find the module that triggers
-            if light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1:
-                io_groups = np.array(list(consts.detector.MODULE_TO_IO_GROUPS.values()))
-                trig_module = np.argwhere(io_groups==fee.get_trig_io())[0][0] + 1 # module id (i_mod) counts from 1
+            self.init_module(i_mod)
 
             RangePush("run_simulation")
 
-            quenching.launch_quench(tracks, physics.BIRKS)
-            drifting.launch_drift(tracks)
+            quenching.launch_quench(self.tracks, physics.BIRKS)
+            drifting.launch_drift(self.tracks)
 
             # Set up light simulation data objects and calculate the optical responses
             if self.light_simulated:
-                RangePush("load_light_info")
-                n_light_channel = int(light.N_OP_CHANNEL/len(self.mod_ids))
-                light_sim_dat = np.zeros([len(tracks), n_light_channel],
-                                        dtype=[('segment_id', 'u4'), ('n_photons_det','f4'),('t0_det','f4')])
-                light_sim_dat['segment_id'] = segment_ids[..., np.newaxis]
-                track_light_voxel = np.zeros([len(tracks), 3], dtype='i4')
+                self.load_light_info(i_mod)
+                self.calc_light_inc()
+                
+            segment_ids_arr = cp.asarray(self.segment_ids)
 
-                print("Calculating optical responses...", end="")
-                start_light_time = time()
-
-                light_lut = self.light_lut_filename[i_mod-1]
-
-                if i_mod == 1 or light_lut != self.light_lut_filename[i_mod-2]:
-                    lut = np.load(light_lut)['arr']
-
-                    # check if the light LUT matches with the number of optical channels
-                    # lut (x, y, z, n_op_ch) for one TPC
-                    # n_light_channel is for one module or all modules depending if the mod2mod_variation is enabled
-                    warn_n_op_ch = (n_light_channel != lut.shape[3]*2)
-                    if warn_n_op_ch:
-                        warnings.warn("The light LUT has different number of optical channels than we expected in one TPC!")
-
-                    # clip LUT so that no voxel contains 0 visibility
-                    mask = lut['vis'] > 0
-                    lut['vis'][~mask] = lut['vis'][mask].min()
-
-                    # get length of the t0 time profile
-                    t0_profile_length = lut['time_dist'].shape[-1]
-
-                    lut = to_device(lut)
-
-                light_noise = cp.load(self.light_det_noise_filename)
-
-                if light_noise.shape[0] == self.n_modules * n_light_channel:
-                    light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
-                else:
-                    assert light_noise.shape[0] >= n_light_channel
-                    light_noise = light_noise[:n_light_channel]
-                    warnings.warn(f"Light noise file {self.light_det_noise_filename} does not span all modules. " +
-                                    f"Using noise from first {n_light_channel} channels for all modules.")
-                RangePop() # load_light_info
-
-                RangePush('calculate_light_incidence')
-                TPB = 256
-                BPG = max(ceil(tracks.shape[0] / TPB),1)
-                lightLUT.calculate_light_incidence[BPG,TPB](tracks, lut, light_sim_dat, track_light_voxel,
-                                                            self.op_channel_efficiency, self.op_channel_to_tpc)
-                RangePop()
-
-                self.light_sim_dat_acc.append(light_sim_dat)
-
-                if self.light_simulated:
-                    null_light_results_acc = prep_null_light_results(light_noise)
-
-                print(f" {time()-start_light_time:.2f} s")
-
-            # HACK: Define nested functions to pass some of our locals
-            # TODO: Write a class. With instance variables.
-            def save_results(*args, **kwargs):
-                do_save_results(*args, **kwargs,
-                                output_filename=self.output_filename,
-                                compression=self.compression,
-                                bad_channels=self.bad_channels)
-
-            def digitize_and_update(*args, **kwargs):
-                do_digitize_and_update(*args, **kwargs,
-                                    results_acc=self.results_acc,
-                                    pixel_thresholds_lut=pixel_thresholds_lut,
-                                    pixel_gains_lut=pixel_gains_lut,
-                                    pixel_pedestals_lut=pixel_pedestals_lut,
-                                    rand_seed=self.rand_seed,
-                                    rng_states=self.rng_states)
-
-            if self.light_simulated:
-                def save_null_light_results(ievd: int, i_trig: int, i_mod: int):
-                    null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-                    save_results(self.event_times, null_light_results_acc, i_trig, i_mod, light_only=True)
-                    del null_light_results_acc['light_event_id']
-
-            segment_ids_arr = cp.asarray(segment_ids)
-
-            # We divide the sample in portions that can be processed by the GPU
-            event_id_buffer = -1
-            i_trig = 0
-            sync_start = self.event_times[0] // (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) * (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) +  (detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE)
-            det_borders = module_borders
             # Batching is carried out by simulating detector response with selected segments from X number of tpcs per event
             # X is set by "sim.EVENT_BATCH_SIZE" and can be any number
-            for ievd, batch_mask in tqdm(batching.TPCBatcher(self.all_mod_tracks, tracks, sim.EVENT_SEPARATOR, tpc_batch_size=sim.EVENT_BATCH_SIZE, tpc_borders=det_borders),
-                                desc='Simulating batches...', ncols=80, smoothing=0):
-                RangePush("setup_event_batch")
-                # Grab segments from the current batch
-                # If there are no segments in the batch, we still check if we need to generate null light signals
-                track_subset = tracks[batch_mask]
+            batcher = batching.TPCBatcher(
+                self.all_mod_tracks, self.tracks, sim.EVENT_SEPARATOR,
+                tpc_batch_size=sim.EVENT_BATCH_SIZE,
+                tpc_borders=self.module_borders)
 
-                # this relies on that batching is done in the order of events
-                if ievd > event_id_buffer:
-                    is_new_event = True
-                    event_id_buffer = ievd
-                else:
-                    is_new_event = False
-                this_event_time = [self.event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
-                if is_new_event:
-                    # forward sync packets
-                    if this_event_time[0] - sync_start >= 0: # this is duplicate to "is_new_event"
-                        sync_times = cp.arange(sync_start, this_event_time[0]+1, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) #us
-                        #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
-                        sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
-                        if len(sync_times) > 0:
-                            fee.export_sync_to_hdf5(self.output_filename, ievd, sync_times_export, i_mod, compression=self.compression)
-                            sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
-                    # beam trigger is only forwarded to one specific pacman (defined in fee)
-                    if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == trig_module or i_mod == -1):
-                        fee.export_timestamp_trigger_to_hdf5(self.output_filename, [ievd], this_event_time, i_mod, compression=self.compression)
-
-                # generate light waveforms for null signal in the module
-                # so we can have light waveforms in this case (if the whole detector is triggered together)
-                if len(track_subset) == 0:
-                    if self.light_simulated:
-                        save_null_light_results(ievd, i_trig, i_mod)
-                        i_trig += 1
-                    # Nothing to simulate for charge readout?
-                    RangePop() # setup_event_batch
-                    continue
-                RangePop() # setup_event_batch
-
-                RangePush("event_id_map")
-                event_ids = track_subset[sim.EVENT_SEPARATOR]
-                unique_eventIDs = np.unique(event_ids)
-                RangePop()
-
-                # Filter out tracks with invalid pixel_plane (outside TPCs)
-                valid_plane_mask = track_subset['pixel_plane'] != detector.DEFAULT_PLANE_INDEX
-                all_selected_tracks = track_subset[valid_plane_mask]
-
-                # Create combined mask for light simulation arrays that are indexed by batch_mask
-                # We need indices into the full tracks array for light data
-                batch_indices = np.where(batch_mask)[0]
-                valid_batch_indices = batch_indices[valid_plane_mask]
-                valid_batch_mask = np.zeros_like(batch_mask, dtype=bool)
-                valid_batch_mask[valid_batch_indices] = True
-
-                # We find the pixels intersected by the projection of the tracks on
-                # the anode plane using the Bresenham's algorithm. We also take into
-                # account the neighboring pixels, due to the transverse diffusion of the charges.
-                RangePush("max_pixels")
-                TPB = 128
-                BPG = max(ceil(all_selected_tracks.shape[0] / TPB),1)
-                all_max_pixels = np.array([0])
-                pixels_from_track.max_pixels[BPG,TPB](all_selected_tracks, all_max_pixels)
-                RangePop()
-
-                # This formula tries to estimate the maximum number of pixels which can have
-                # a current induced on them.
-                all_max_neighboring_pixels = (2*detector.MAX_RADIUS+1)*all_max_pixels[0]+(1+2*detector.MAX_RADIUS)*detector.MAX_RADIUS*2
-                all_max_neighboring_pixels = np.clip([all_max_neighboring_pixels], all_max_neighboring_pixels, detector.N_PIXELS[0]*detector.N_PIXELS[1])[0] # limiting the all_max_neighboring_pixels by the total number of pixels in a TPC
-
-                all_active_pixels = cp.full((all_selected_tracks.shape[0], all_max_pixels[0]), -1, dtype=np.int32)
-                all_neighboring_pixels = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
-                all_neighboring_radius = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
-                all_n_pixels_list = cp.zeros(shape=(all_selected_tracks.shape[0]))
-
-                if not all_active_pixels.shape[1] or not all_neighboring_pixels.shape[1]:
-                    if self.light_simulated:
-                        save_null_light_results(ievd, i_trig, i_mod)
-                        i_trig += 1
+            for ievd, batch_mask, is_new_event in tqdm(batcher, desc='Simulating batches...', ncols=80, smoothing=0):
+                non_empty = self.setup_event_batch(i_mod, ievd, batch_mask, is_new_event)
+                if not non_empty:
                     continue
 
-                RangePush("get_pixels", 7)
-                pixels_from_track.get_pixels[BPG,TPB](all_selected_tracks,
-                                                    all_active_pixels,
-                                                    all_neighboring_pixels,
-                                                    all_neighboring_radius,
-                                                    all_n_pixels_list)
-                RangePop()
+                self.maybe_farfield_precompute()
 
-                RangePush("unique_pix")
-                shapes = all_neighboring_pixels.shape
-                joined = all_neighboring_pixels.reshape(shapes[0] * shapes[1])
-                all_unique_pix = cp.unique(joined)
-                all_unique_pix = all_unique_pix[(all_unique_pix != -1)]
-                RangePop()
-
-                if not all_unique_pix.shape[0]:
-                    if self.light_simulated:
-                        save_null_light_results(ievd, i_trig, i_mod)
-                        i_trig += 1 # add to the trigger counter
-                    continue
-
-                RangePush("invert_array_map")
-                # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
-                assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
-                RangePop() # invert_array_map
-
-                # ~~~ Precompute far-field helper data once per event batch ~~~
-                RangePush("event_farfield_precompute")
-                classification_cache: dict[int, PixelClassificationResult] = {}
-                voxel_cache: dict[int, VoxelDict] = {}
-                if sim.FARFIELD_ENABLED:
-                    classification_cache = \
-                        pixel_classifier.get_classification_cache(all_selected_tracks)
-                    if sim.FARFIELD_MODE == 'voxels':
-                        voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
-                RangePop()
-
-                pixel_ranges = batching.subbatch_pixel_ranges(assmap_pix2seg,
-                                                            sim.SEGMENT_BATCH_SIZE)
+                pixel_ranges = batching.subbatch_pixel_ranges(self.assmap_pix2seg,
+                                                              sim.SEGMENT_BATCH_SIZE)
 
                 # Track all pixels processed in near-field batches for this event batch
                 processed_pixels_event = cp.array([], dtype=cp.int32)
@@ -730,14 +742,14 @@ class LArND_Sim:
                             desc='  Simulating event %i batches...' % ievd,
                             leave=False, ncols=80):
                     RangePush("setup_pixel_batch")
-                    selected_pix = all_unique_pix[start_pix:stop_pix]
+                    selected_pix = self.all_unique_pix[start_pix:stop_pix]
 
-                    selected_track_idcs = np.unique(assmap_pix2seg[start_pix:stop_pix])
+                    selected_track_idcs = np.unique(self.assmap_pix2seg[start_pix:stop_pix])
                     selected_track_idcs = selected_track_idcs[selected_track_idcs != -1]
                     if selected_track_idcs.size == 0:
                         continue
                     selected_track_idcs = to_device(selected_track_idcs)
-                    selected_tracks = all_selected_tracks[selected_track_idcs]
+                    selected_tracks = self.all_selected_tracks[selected_track_idcs]
                     RangePop() # setup_pixel_batch
 
                     # We find the pixels intersected by the projection of the tracks on
@@ -1086,11 +1098,11 @@ class LArND_Sim:
                 RangePush('save_results', 1)
                 if len(self.results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
                     if len(self.results_acc['event_id']) > 0 and len(np.concatenate(self.results_acc['event_id'], axis=0)) > 0:
-                        save_results(self.event_times, self.results_acc, i_trig, i_mod, light_only=False)
-                        i_trig += 1 # add to the trigger counter
+                        save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=False)
+                        self.i_trig += 1 # add to the trigger counter
                     elif len(self.results_acc['light_event_id']) > 0 and len(np.concatenate(self.results_acc['light_event_id'], axis=0)) > 0:
-                        save_results(self.event_times, self.results_acc, i_trig, i_mod, light_only=True)
-                        i_trig += 1 # add to the trigger counter
+                        save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=True)
+                        self.i_trig += 1 # add to the trigger counter
                     self.results_acc = defaultdict(list) # reinitialize after each save_results
                 RangePop() # save_results
 
@@ -1099,11 +1111,11 @@ class LArND_Sim:
             RangePush('save_results_final')
             # Always save results after last iteration
             if len(self.results_acc['event_id']) > 0 and len(np.concatenate(self.results_acc['event_id'], axis=0)) > 0:
-                save_results(self.event_times, self.results_acc, i_trig, i_mod, light_only=False)
-                i_trig += 1 # add to the trigger counter
+                save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=False)
+                self.i_trig += 1 # add to the trigger counter
             elif len(self.results_acc['light_event_id']) > 0 and len(np.concatenate(self.results_acc['light_event_id'], axis=0)) > 0:
-                save_results(self.event_times, self.results_acc, i_trig, i_mod, light_only=True)
-                i_trig += 1 # add to the trigger counter
+                save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=True)
+                self.i_trig += 1 # add to the trigger counter
             self.results_acc = defaultdict(list) # reinitialize after each save_results
             RangePop() # save_results_final
 

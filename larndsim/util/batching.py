@@ -44,6 +44,10 @@ class TPCBatcher(TrackSegmentBatcher):
         if self._curr_tpc >= self.tpc_borders.shape[0]:
             self._curr_event += 1
             self._curr_tpc = 0
+            is_new_event = True
+        else:
+            is_first_iter = self._curr_event == 0 and self._curr_tpc == 0
+            is_new_event = is_first_iter
             
         # if all events have been simulated, stop
         if self._curr_event >= len(self._events):
@@ -65,7 +69,7 @@ class TPCBatcher(TrackSegmentBatcher):
         mask = mask & tpc_mask
         self._simulated = self._simulated | mask
 
-        return self._events[self._curr_event], mask
+        return self._events[self._curr_event], mask, is_new_event
 
 
 def subbatch_pixel_ranges(assmap_pix2seg: cp.ndarray, seg_batch_size: int) \

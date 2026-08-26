@@ -12,7 +12,7 @@ import numpy.lib.recfunctions as rfn
 import tqdm as tqdm_mod
 
 from larndsim import fee
-from larndsim.consts import sim
+from larndsim.consts import detector, sim
 
 
 LOGO = r"""
@@ -247,6 +247,11 @@ def maybe_set_mc_hdr_times(mc_hdr, vertices):
 def prep_event_times(tracks):
     num_evids = (tracks[sim.EVENT_SEPARATOR].max() % sim.MAX_EVENTS_PER_FILE) + 1
     if sim.IS_SPILL_SIM:
-        return cp.arange(num_evids) * sim.SPILL_PERIOD
+        times = cp.arange(num_evids) * sim.SPILL_PERIOD
     else:
-        return fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
+        times = fee.gen_event_times(num_evids) # change non-beam event time offset with detector.NON_BEAM_EVENT_GAP
+
+    reset_time = detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
+    sync_start = (times[0] // reset_time * reset_time) + reset_time
+
+    return times, sync_start
