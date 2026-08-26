@@ -567,31 +567,26 @@ class LArND_Sim:
 
         print(f" {time()-self.start_light_time:.2f} s")
 
-    # TODO: Move body of do_save_results here
-    def save_results(self, *args, **kwargs):
-        do_save_results(*args, **kwargs,
+    def save_results(self, i_mod, light_only):
+        do_save_results(event_times=self.event_times,
+                        results=self.results_acc,
+                        i_trig=self.i_trig,
+                        i_mod=i_mod,
+                        light_only=light_only,
                         output_filename=self.output_filename,
                         compression=self.compression,
-                        bad_channels=self.bad_channels)
+                        bad_channels=self.bad_channels,
+                        light_simulated=self.light_simulated)
+        self.i_trig += 1
 
-    # TODO: ditto
-    def digitize_and_update(self, *args, **kwargs):
-        do_digitize_and_update(*args, **kwargs,
-                               results_acc=self.results_acc,
-                               pixel_thresholds_lut=self.pixel_thresholds_lut,
-                               pixel_gains_lut=self.pixel_gains_lut,
-                               pixel_pedestals_lut=self.pixel_pedestals_lut,
-                               rand_seed=self.rand_seed,
-                               rng_states=self.rng_states)
-
-    def save_null_light_results(self, ievd: int, i_trig: int, i_mod: int):
+    def save_null_light_results(self, ievd: int, i_mod: int):
         self.null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-        self.save_results(self.event_times, self.null_light_results_acc, i_trig, i_mod, light_only=True)
+        self.save_results(i_mod, light_only=True)
         del self.null_light_results_acc['light_event_id']
 
     def maybe_save_null_light_results(self, ievd, i_mod):
         if self.light_simulated:
-            self.save_null_light_results(ievd, self.i_trig, i_mod)
+            self.save_null_light_results(ievd, i_mod)
             self.i_trig += 1
 
     def setup_event_batch(self, i_mod, ievd, batch_mask, is_new_event) -> bool:
@@ -867,15 +862,19 @@ class LArND_Sim:
     def digitize(self):
         RangePush("get_adc_values", 3)
 
-        # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization
-        # FIXME: yuck
-        self.digitize_and_update(unique_eventIDs=self.unique_eventIDs,
-                                 unique_pix=self.unique_pix,
-                                 pixels_signals=self.pixels_signals,
-                                 pixels_tracks_signals=self.pixels_tracks_signals,
-                                 num_backtrack=self.num_backtrack,
-                                 offset_backtrack=self.offset_backtrack,
-                                 max_signal_time=self.max_signal_time)
+        do_digitize_and_update(results_acc=self.results_acc,
+                               unique_eventIDs=self.unique_eventIDs,
+                               unique_pix=self.unique_pix,
+                               pixels_signals=self.pixels_signals,
+                               pixels_tracks_signals=self.pixels_tracks_signals,
+                               num_backtrack=self.num_backtrack,
+                               offset_backtrack=self.offset_backtrack,
+                               max_signal_time=self.max_signal_time,
+                               pixel_thresholds_lut=self.pixel_thresholds_lut,
+                               pixel_gains_lut=self.pixel_gains_lut,
+                               pixel_pedestals_lut=self.pixel_pedestals_lut,
+                               rand_seed=self.rand_seed,
+                               rng_states=self.rng_states)
 
         # Accumulate pixels processed via near-field path for this event batch
         self.processed_pixels_event = cp.unique(cp.concatenate([self.processed_pixels_event, self.unique_pix]))
@@ -954,13 +953,19 @@ class LArND_Sim:
             offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
             pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
 
-            self.digitize_and_update(unique_eventIDs=self.unique_eventIDs,
-                                     unique_pix=induction_pix_ids,
-                                     pixels_signals=pixels_signals,
-                                     pixels_tracks_signals=pixels_tracks_signals,
-                                     num_backtrack=num_backtrack,
-                                     offset_backtrack=offset_backtrack,
-                                     max_signal_time=self.max_signal_time)
+            do_digitize_and_update(results_acc=self.results_acc,
+                                   unique_eventIDs=self.unique_eventIDs,
+                                   unique_pix=induction_pix_ids,
+                                   pixels_signals=pixels_signals,
+                                   pixels_tracks_signals=pixels_tracks_signals,
+                                   num_backtrack=num_backtrack,
+                                   offset_backtrack=offset_backtrack,
+                                   max_signal_time=self.max_signal_time,
+                                   pixel_thresholds_lut=self.pixel_thresholds_lut,
+                                   pixel_gains_lut=self.pixel_gains_lut,
+                                   pixel_pedestals_lut=self.pixel_pedestals_lut,
+                                   rand_seed=self.rand_seed,
+                                   rng_states=self.rng_states)
 
             dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
             self.results_acc['traj_pixel_map'].append(dummy_map)
@@ -1061,15 +1066,15 @@ class LArND_Sim:
         self.results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
         self.results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-    def do_save(self, i_mod, final=False):
+    def save(self, i_mod, final=False):
         RangePush('save_results', 1)
         if final or len(self.results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
-            if len(self.results_acc['event_id']) > 0 and len(np.concatenate(self.results_acc['event_id'], axis=0)) > 0:
-                self.save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=False)
-                self.i_trig += 1 # add to the trigger counter
-            elif len(self.results_acc['light_event_id']) > 0 and len(np.concatenate(self.results_acc['light_event_id'], axis=0)) > 0:
-                self.save_results(self.event_times, self.results_acc, self.i_trig, i_mod, light_only=True)
-                self.i_trig += 1 # add to the trigger counter
+            if len(self.results_acc['event_id']) > 0 \
+               and len(np.concatenate(self.results_acc['event_id'], axis=0)) > 0:
+                self.save_results(i_mod, light_only=False)
+            elif len(self.results_acc['light_event_id']) > 0 \
+                 and len(np.concatenate(self.results_acc['light_event_id'], axis=0)) > 0:
+                self.save_results(i_mod, light_only=True)
             self.results_acc = defaultdict(list) # reinitialize after each save_results
         RangePop() # save_results
 
@@ -1100,15 +1105,21 @@ class LArND_Sim:
             if self.light_simulated:
                 # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
                 for i_mod in self.mod_ids:
-                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}', data=self.light_sim_dat_acc[i_mod-1], compression=self.compression)
+                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}',
+                                               data=self.light_sim_dat_acc[i_mod-1],
+                                               compression=self.compression)
             if self.trajectories:
-                output_file.create_dataset("trajectories", data=self.trajectories, compression=self.compression)
+                output_file.create_dataset("trajectories", data=self.trajectories,
+                                           compression=self.compression)
             if self.vertices:
-                output_file.create_dataset("vertices", data=self.vertices, compression=self.compression)
+                output_file.create_dataset("vertices", data=self.vertices,
+                                           compression=self.compression)
             if self.mc_hdr:
-                output_file.create_dataset("mc_hdr", data=self.mc_hdr, compression=self.compression)
+                output_file.create_dataset("mc_hdr", data=self.mc_hdr,
+                                           compression=self.compression)
             if self.mc_stack:
-                output_file.create_dataset("mc_stack", data=self.mc_stack, compression=self.compression)
+                output_file.create_dataset("mc_stack", data=self.mc_stack,
+                                           compression=self.compression)
 
     def save_metadata(self):
         with h5py.File(self.output_filename, 'a') as output_file:
@@ -1174,10 +1185,10 @@ class LArND_Sim:
                 if self.light_simulated:
                     self.run_light_sim()
 
-                self.do_save(i_mod)
+                self.save(i_mod)
                 # End loop over batches (events, either TPC-by-TPC or whole-module)
             RangePop()                      # run_simulation
-            self.do_save(i_mod, final=True)
+            self.save(i_mod, final=True)
             # End loop over modules
 
         if self.light_simulated:
