@@ -39,105 +39,6 @@ from larndsim.util.cuda_dict import CudaDict
 from larndsim.util.misc import *
 
 
-def do_digitize_and_update(results_acc: dict[str, Any],
-                           unique_eventIDs: npt.NDArray[np.int64],
-                           unique_pix: cpt.NDArray[cp.int32],
-                           pixels_signals: cp.ndarray[tuple[int, int], cp.float64],
-                           pixels_tracks_signals: cpt.NDArray[cp.float32],
-                           num_backtrack: cpt.NDArray[cp.float32],
-                           offset_backtrack: cpt.NDArray[cp.float32],
-                           max_signal_time: float,
-                           pixel_thresholds_lut: Optional[CudaDict],
-                           pixel_gains_lut: Optional[CudaDict],
-                           pixel_pedestals_lut: Optional[CudaDict],
-                           rand_seed: int,
-                           rng_states: cpt.NDArray,
-):
-    """
-    Helper function for calling get_adc_values and updating the results.
-
-    TODO: Wrap `run_simulation` in a class so that we can use instance variables
-    instead of a million arguments.
-
-    Args:
-        results_acc: Dict with the keys expected by `save_results`
-        unique_eventIDs: (n_events,) array of unique event IDs
-        unique_pix: (n_pixels,) array of unique pixel IDs
-        pixels_signals: (n_pixels,n_ticks) array of summed signals on each pixel
-        pixels_tracks_signals: (n_ticks, n_pixels, n_backtracks) jagged array
-            (represented as a 1D array) of signals on each pixel for each
-            backtracked edep-sim segment
-        num_backtrack: (len(pixels_tracks_signals),) array of the count of
-            backtracked segments for each (pixel, tick)
-        offset_backtrack: (len(pixels_tracks_signals),) cumulative sum of
-            num_backtrack
-        pixel_thresholds_lut: Look-up table for pixel thresholds
-        pixel_gains_lut: Look-up table for pixel gains
-        pixel_pedestals_lut:  Look-up table for pixel pedestals
-        max_signal_time: Longest possible signal in this batch
-        rand_seed: Random seed
-        rng_states: Result of e.g. create_xoroshiro128p_states
-
-    """
-    from larndsim.consts import detector, sim
-
-    time_ticks = cp.arange(0, len(unique_eventIDs) * max_signal_time,
-                           detector.TIME_SAMPLING)
-    integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
-    adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
-    current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES,
-                                  sim.MAX_TRACKS_PER_PIXEL))
-
-    TPB = 4
-    BPG = ceil(pixels_signals.shape[0] / TPB)
-    rng_states = maybe_create_rng_states(int(TPB * BPG), seed=rand_seed,
-                                         rng_states=rng_states)
-
-
-    if pixel_thresholds_lut is not None:
-        pixel_thresholds_lut.tpb = 128
-        pixel_thresholds_lut.bpg = ceil(pixels_signals.shape[0]
-                                        / pixel_thresholds_lut.tpb)
-        pixel_thresholds = \
-            pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
-    else:
-        default_threshold = detector.DISCRIMINATION_THRESHOLD * consts.units.e
-        pixel_thresholds = cp.full(pixels_signals.shape[0], default_threshold)
-
-
-    fee.get_adc_values[BPG, TPB](pixels_signals,
-                                 pixels_tracks_signals,
-                                 num_backtrack,
-                                 offset_backtrack,
-                                 time_ticks,
-                                 integral_list,
-                                 adc_ticks_list,
-                                 0,
-                                 rng_states,
-                                 current_fractions,
-                                 pixel_thresholds)
-
-    if pixel_gains_lut is not None:
-        pixel_gains = cp.array(pixel_gains_lut[unique_pix.ravel()])
-        gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-    else:
-        gain_list = detector.GAIN
-
-    if pixel_pedestals_lut is not None:
-        pixel_pedestals = cp.array(pixel_pedestals_lut[unique_pix.ravel()])
-        pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
-    else:
-        pedestal_list = detector.V_PEDESTAL
-
-    adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
-
-    adc_event_ids = np.full(adc_list.shape, unique_eventIDs[0]) # FIXME: only works if looping on a single event
-
-    results_acc['event_id'].append(adc_event_ids)
-    results_acc['adc_tot'].append(adc_list)
-    results_acc['adc_tot_ticks'].append(adc_ticks_list)
-    results_acc['unique_pix'].append(unique_pix)
-    results_acc['current_fractions'].append(current_fractions)
 
 
 def do_save_results(
@@ -823,7 +724,86 @@ class LArND_Sim:
             detsim.launch_sum_pixel_signals(self.signals, self.selected_tracks,
                                             pixel_index_map, self.track_pixel_map)
 
-    def maybe_compute_neighbor_ffe(self):
+    def digitize_and_update(self,
+                            unique_pix: cpt.NDArray[cp.int32],
+                            pixels_signals: cp.ndarray[tuple[int, int], cp.float64],
+                            pixels_tracks_signals: cpt.NDArray[cp.float32],
+                            num_backtrack: cpt.NDArray[cp.float32],
+                            offset_backtrack: cpt.NDArray[cp.float32],
+    ):
+        """
+        Helper function for calling get_adc_values and updating the results.
+
+        Args:
+            unique_pix: (n_pixels,) array of unique pixel IDs
+            pixels_signals: (n_pixels,n_ticks) array of summed signals on each pixel
+            pixels_tracks_signals: (n_ticks, n_pixels, n_backtracks) jagged array
+                (represented as a 1D array) of signals on each pixel for each
+                backtracked edep-sim segment
+            num_backtrack: (len(pixels_tracks_signals),) array of the count of
+                backtracked segments for each (pixel, tick)
+            offset_backtrack: (len(pixels_tracks_signals),) cumulative sum of
+                num_backtrack
+        """
+        time_ticks = cp.arange(0, len(self.unique_eventIDs) * self.max_signal_time,
+                            detector.TIME_SAMPLING)
+        integral_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+        adc_ticks_list = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES))
+        current_fractions = cp.zeros((pixels_signals.shape[0], sim.MAX_ADC_VALUES,
+                                    sim.MAX_TRACKS_PER_PIXEL))
+
+        TPB = 4
+        BPG = ceil(pixels_signals.shape[0] / TPB)
+        rng_states = maybe_create_rng_states(int(TPB * BPG), seed=self.rand_seed,
+                                            rng_states=self.rng_states)
+
+
+        if self.pixel_thresholds_lut is not None:
+            self.pixel_thresholds_lut.tpb = 128
+            self.pixel_thresholds_lut.bpg = ceil(pixels_signals.shape[0]
+                                            / self.pixel_thresholds_lut.tpb)
+            pixel_thresholds = \
+                self.pixel_thresholds_lut[unique_pix.ravel()].reshape(unique_pix.shape)
+        else:
+            default_threshold = detector.DISCRIMINATION_THRESHOLD * consts.units.e
+            pixel_thresholds = cp.full(pixels_signals.shape[0], default_threshold)
+
+
+        fee.get_adc_values[BPG, TPB](pixels_signals,
+                                    pixels_tracks_signals,
+                                    num_backtrack,
+                                    offset_backtrack,
+                                    time_ticks,
+                                    integral_list,
+                                    adc_ticks_list,
+                                    0,
+                                    rng_states,
+                                    current_fractions,
+                                    pixel_thresholds)
+
+        if self.pixel_gains_lut is not None:
+            pixel_gains = cp.array(self.pixel_gains_lut[unique_pix.ravel()])
+            gain_list = pixel_gains[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+        else:
+            gain_list = detector.GAIN
+
+        if self.pixel_pedestals_lut is not None:
+            pixel_pedestals = cp.array(self.pixel_pedestals_lut[unique_pix.ravel()])
+            pedestal_list = pixel_pedestals[:, cp.newaxis] * cp.ones((1, sim.MAX_ADC_VALUES)) # makes array the same shape as integral_list
+        else:
+            pedestal_list = detector.V_PEDESTAL
+
+        adc_list = fee.digitize(integral_list, gain_list, pedestal_list)
+
+        adc_event_ids = np.full(adc_list.shape, self.unique_eventIDs[0]) # FIXME: only works if looping on a single event
+
+        self.results_acc['event_id'].append(adc_event_ids)
+        self.results_acc['adc_tot'].append(adc_list)
+        self.results_acc['adc_tot_ticks'].append(adc_ticks_list)
+        self.results_acc['unique_pix'].append(unique_pix)
+        self.results_acc['current_fractions'].append(current_fractions)
+
+    def maybe_compute_hybrid_ffe(self):
         if not sim.FARFIELD_ENABLED:
             return
 
@@ -859,22 +839,14 @@ class LArND_Sim:
 
         RangePop()
 
-    def digitize(self):
+    def digitize_active_pix(self):
         RangePush("get_adc_values", 3)
 
-        do_digitize_and_update(results_acc=self.results_acc,
-                               unique_eventIDs=self.unique_eventIDs,
-                               unique_pix=self.unique_pix,
-                               pixels_signals=self.pixels_signals,
-                               pixels_tracks_signals=self.pixels_tracks_signals,
-                               num_backtrack=self.num_backtrack,
-                               offset_backtrack=self.offset_backtrack,
-                               max_signal_time=self.max_signal_time,
-                               pixel_thresholds_lut=self.pixel_thresholds_lut,
-                               pixel_gains_lut=self.pixel_gains_lut,
-                               pixel_pedestals_lut=self.pixel_pedestals_lut,
-                               rand_seed=self.rand_seed,
-                               rng_states=self.rng_states)
+        self.digitize_and_update(unique_pix=self.unique_pix,
+                                 pixels_signals=self.pixels_signals,
+                                 pixels_tracks_signals=self.pixels_tracks_signals,
+                                 num_backtrack=self.num_backtrack,
+                                 offset_backtrack=self.offset_backtrack)
 
         # Accumulate pixels processed via near-field path for this event batch
         self.processed_pixels_event = cp.unique(cp.concatenate([self.processed_pixels_event, self.unique_pix]))
@@ -953,19 +925,11 @@ class LArND_Sim:
             offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
             pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
 
-            do_digitize_and_update(results_acc=self.results_acc,
-                                   unique_eventIDs=self.unique_eventIDs,
-                                   unique_pix=induction_pix_ids,
-                                   pixels_signals=pixels_signals,
-                                   pixels_tracks_signals=pixels_tracks_signals,
-                                   num_backtrack=num_backtrack,
-                                   offset_backtrack=offset_backtrack,
-                                   max_signal_time=self.max_signal_time,
-                                   pixel_thresholds_lut=self.pixel_thresholds_lut,
-                                   pixel_gains_lut=self.pixel_gains_lut,
-                                   pixel_pedestals_lut=self.pixel_pedestals_lut,
-                                   rand_seed=self.rand_seed,
-                                   rng_states=self.rng_states)
+            self.digitize_and_update(unique_pix=induction_pix_ids,
+                                     pixels_signals=pixels_signals,
+                                     pixels_tracks_signals=pixels_tracks_signals,
+                                     num_backtrack=num_backtrack,
+                                     offset_backtrack=offset_backtrack)
 
             dummy_map = cp.full((len(induction_pix_ids), sim.MAX_TRACKS_PER_PIXEL), -1, dtype=cp.int32)
             self.results_acc['traj_pixel_map'].append(dummy_map)
@@ -1177,8 +1141,8 @@ class LArND_Sim:
 
                     self.call_tracks_current_mc()
                     self.call_sum_pixel_signals()
-                    self.maybe_compute_neighbor_ffe()
-                    self.digitize()
+                    self.maybe_compute_hybrid_ffe()
+                    self.digitize_active_pix()
                     self.maybe_compute_exclusive_ffe_and_digitize()
                     # End loop over sub-batches (pixels)
 
