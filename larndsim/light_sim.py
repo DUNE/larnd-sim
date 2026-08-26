@@ -3,6 +3,8 @@ Module that simulates smearing effects of the light incident on each
 photodetector
 """
 
+from collections import defaultdict
+
 import numba as nb
 
 from numba import cuda
@@ -10,6 +12,7 @@ from numba import float32
 
 import numpy as np
 import cupy as cp
+from cupy.cuda.nvtx import RangePush, RangePop # ty: ignore[unresolved-import]
 from math import ceil, floor, exp, sqrt, sin
 
 import h5py
@@ -818,3 +821,47 @@ def export_merged_light_trig_to_hdf5(tracks, event_times, output_filename, compr
     light_event_times = light_event_id * sim.SPILL_PERIOD if sim.IS_SPILL_SIM else event_times.get() # us
 
     export_light_trig_to_hdf5(light_event_id, light_start_times, light_trigger_idx, light_op_channel_idx, output_filename, light_event_times, compression=compression)
+
+
+def prep_null_light_results(light_noise):
+    null_light_results_acc = defaultdict(list)
+    trigger_idx = cp.array([0], dtype=int)
+    # FIXME: mod2mod_var?
+    op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
+    op_channel = cp.array(op_channel)
+    trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
+    digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
+
+    n_light_det = op_channel.shape[0]
+    n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
+
+    light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
+    #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
+    light_response_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
+    light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
+
+    RangePush('light_sim_triggers')
+    TPB = (1,1,64)
+    BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
+            max(ceil(len(op_channel) / TPB[1]),1),
+            max(ceil(digit_samples / TPB[2]),1))
+    light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = \
+        sim_triggers(BPG, TPB, light_response, op_channel, light_response_true_track_id,
+                     light_response_true_photons, trigger_idx, trigger_op_channel_idx,
+                     digit_samples, light_noise)
+    RangePop()
+
+    light_t_start = 0
+    trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
+
+    #null_light_results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
+    null_light_results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
+    null_light_results_acc['light_trigger_idx'].append(trigger_idx)
+    null_light_results_acc['trigger_type'].append(trigger_type)
+    null_light_results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
+    null_light_results_acc['light_waveforms'].append(light_digit_signal)
+    null_light_results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
+    null_light_results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
+
+    return null_light_results_acc
+

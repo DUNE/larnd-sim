@@ -2,20 +2,23 @@
 Module that simulates the front-end electronics (triggering, ADC)
 """
 
-import numpy as np
-import cupy as cp
-import h5py
-import yaml
+from math import exp, floor
+from typing import Any, Optional
 import warnings
 
+import cupy as cp
+import cupy.typing as cpt
+import h5py
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_normal_float32, xoroshiro128p_uniform_float32
-from math import exp, floor
+import numpy as np
+import yaml
 
 from larpix.packet import Packet_v2, Packet_v3, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
 from larpix.format import hdf5format
 
+from . import light_sim
 from .pixels_from_track import id2pixel
 
 from .consts.units import mV, e
@@ -711,3 +714,114 @@ def get_adc_values(pixels_signals,
                 continue
 
             ic += 1
+
+
+def do_save_results(
+    event_times: cpt.NDArray[cp.float64],
+    results: dict[str, Any],
+    i_trig: int,
+    i_mod: int,
+    light_only: bool,
+    output_filename: str,
+    compression: Optional[str],
+    bad_channels: dict[str, list[int]],
+    light_simulated: bool,
+):
+    """
+    Save the accumulated results of the simulation.
+
+    `results` keys for the charge simulation:
+        - event_id: event id for each hit
+        - adc_tot: adc value for each hit
+        - adc_tot_ticks: timestamp for each hit
+        - track_pixel_map: map from track to active pixels
+        - unique_pix: all unique pixels (per track?)
+        - current_fractions: fraction of charge associated with each true track
+
+        For the light simulation (in addition to all above keys):
+        - light_event_id: event_id for each light trigger
+        - light_start_time: simulation start time for event
+        - light_trigger_idx: time tick at which each trigger occurs
+        - light_op_channel_idx: optical channel id for each waveform
+        - light_waveforms: waveforms of each light trigger
+        - light_waveforms_true_track_id: true track ids for each tick in each
+              waveform
+        - light_waveforms_true_photons: equivalent pe for each track at each
+              tick in each waveform
+
+    Note:
+        Can't handle empty inputs
+
+    Args:
+        event_times: (n_events,) array of event timestamps
+        results: Dictionary of accumulated results (see below)
+        i_trig: Index of light trigger (if any)
+        i_mod: Detector module being simulated
+        light_only: Whether only light data is to be saved
+        output_filename: Output filename
+        compression: Optional file compression mode (e.g. 'lzf', 'gzip')
+        bad_channels: Optional dict with list of bad channels for each chip key
+        light_simulated: Whether the light sim is enabled
+    """
+    from larndsim.consts import detector, light, sim
+
+    for key in list(results.keys()):
+        if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
+            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
+
+    uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
+    uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
+
+    if not light_only:
+        if light_simulated:
+            # prep arrays for embedded triggers in charge data stream
+            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
+            if light.LIGHT_TRIG_MODE == 1:
+                light_trigger_modules = np.array(results['trigger_type'])
+            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
+            light_trigger_event_ids = results['light_event_id']
+        else:
+            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
+            light_trigger_modules = np.ones(len(uniq_events))
+            light_trigger_times = np.zeros_like(uniq_event_times)
+            light_trigger_event_ids = uniq_events
+
+        export_to_hdf5(results['event_id'],
+                       results['adc_tot'],
+                       results['adc_tot_ticks'],
+                       results['unique_pix'],
+                       results['current_fractions'],
+                       results['track_pixel_map'],
+                       results['traj_pixel_map'],
+                       output_filename, # defined earlier in script
+                       uniq_event_times,
+                       light_trigger_times=light_trigger_times,
+                       light_trigger_event_id=light_trigger_event_ids,
+                       light_trigger_modules=light_trigger_modules,
+                       bad_channels=bad_channels, # defined earlier in script
+                       i_mod=i_mod,
+                       compression=compression)
+
+    if light_simulated and len(results['light_event_id']):
+        if light.LIGHT_TRIG_MODE == 0:
+            light_sim.export_to_hdf5(results['light_event_id'],
+                                     results['light_start_time'],
+                                     results['light_trigger_idx'],
+                                     results['light_op_channel_idx'],
+                                     results['light_waveforms'],
+                                     output_filename,
+                                     uniq_event_times,
+                                     results['light_waveforms_true_track_id'],
+                                     results['light_waveforms_true_photons'],
+                                     i_trig,
+                                     i_mod,
+                                     compression=compression)
+        elif light.LIGHT_TRIG_MODE == 1:
+            light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
+                                                results['light_waveforms'],
+                                                output_filename,
+                                                results['light_waveforms_true_track_id'],
+                                                results['light_waveforms_true_photons'],
+                                                i_trig,
+                                                i_mod,
+                                                compression=compression)

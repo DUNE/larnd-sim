@@ -39,159 +39,6 @@ from larndsim.util.cuda_dict import CudaDict
 from larndsim.util.misc import *
 
 
-def do_save_results(
-    event_times: cpt.NDArray[cp.float64],
-    results: dict[str, Any],
-    i_trig: int,
-    i_mod: int,
-    light_only: bool,
-    output_filename: str,
-    compression: Optional[str],
-    bad_channels: dict[str, list[int]],
-    light_simulated: bool,
-):
-    """
-    Save the accumulated results of the simulation.
-
-    `results` keys for the charge simulation:
-        - event_id: event id for each hit
-        - adc_tot: adc value for each hit
-        - adc_tot_ticks: timestamp for each hit
-        - track_pixel_map: map from track to active pixels
-        - unique_pix: all unique pixels (per track?)
-        - current_fractions: fraction of charge associated with each true track
-
-        For the light simulation (in addition to all above keys):
-        - light_event_id: event_id for each light trigger
-        - light_start_time: simulation start time for event
-        - light_trigger_idx: time tick at which each trigger occurs
-        - light_op_channel_idx: optical channel id for each waveform
-        - light_waveforms: waveforms of each light trigger
-        - light_waveforms_true_track_id: true track ids for each tick in each
-              waveform
-        - light_waveforms_true_photons: equivalent pe for each track at each
-              tick in each waveform
-
-    Note:
-        Can't handle empty inputs
-
-    Args:
-        event_times: (n_events,) array of event timestamps
-        results: Dictionary of accumulated results (see below)
-        i_trig: Index of light trigger (if any)
-        i_mod: Detector module being simulated
-        light_only: Whether only light data is to be saved
-        output_filename: Output filename
-        compression: Optional file compression mode (e.g. 'lzf', 'gzip')
-        bad_channels: Optional dict with list of bad channels for each chip key
-        light_simulated: Whether the light sim is enabled
-    """
-    from larndsim.consts import detector, light, sim
-
-    for key in list(results.keys()):
-        if isinstance(results[key], list) and len(results[key]) > 0: # we may have empty lists (e.g. for event_id) when light_only
-            results[key] = np.concatenate([cp.asnumpy(arr) for arr in results[key]], axis=0)
-
-    uniq_events = cp.asnumpy(np.unique(results['event_id'])) if not light_only else cp.asnumpy(np.unique(results['light_event_id']))
-    uniq_event_times = cp.asnumpy(event_times[uniq_events % sim.MAX_EVENTS_PER_FILE])
-
-    if not light_only:
-        if light_simulated:
-            # prep arrays for embedded triggers in charge data stream
-            light_trigger_modules = np.array([detector.TPC_TO_MODULE[tpc] for tpc in light.OP_CHANNEL_TO_TPC[results['light_op_channel_idx']][:,0]])
-            if light.LIGHT_TRIG_MODE == 1:
-                light_trigger_modules = np.array(results['trigger_type'])
-            light_trigger_times = results['light_start_time'] + results['light_trigger_idx'] * light.LIGHT_TICK_SIZE
-            light_trigger_event_ids = results['light_event_id']
-        else:
-            # prep arrays for embedded triggers in charge data stream (each event triggers once at perfect t0)
-            light_trigger_modules = np.ones(len(uniq_events))
-            light_trigger_times = np.zeros_like(uniq_event_times)
-            light_trigger_event_ids = uniq_events
-
-        fee.export_to_hdf5(results['event_id'],
-                           results['adc_tot'],
-                           results['adc_tot_ticks'],
-                           results['unique_pix'],
-                           results['current_fractions'],
-                           results['track_pixel_map'],
-                           results['traj_pixel_map'],
-                           output_filename, # defined earlier in script
-                           uniq_event_times,
-                           light_trigger_times=light_trigger_times,
-                           light_trigger_event_id=light_trigger_event_ids,
-                           light_trigger_modules=light_trigger_modules,
-                           bad_channels=bad_channels, # defined earlier in script
-                           i_mod=i_mod,
-                           compression=compression)
-
-    if light_simulated and len(results['light_event_id']):
-        if light.LIGHT_TRIG_MODE == 0:
-            light_sim.export_to_hdf5(results['light_event_id'],
-                                     results['light_start_time'],
-                                     results['light_trigger_idx'],
-                                     results['light_op_channel_idx'],
-                                     results['light_waveforms'],
-                                     output_filename,
-                                     uniq_event_times,
-                                     results['light_waveforms_true_track_id'],
-                                     results['light_waveforms_true_photons'],
-                                     i_trig,
-                                     i_mod,
-                                     compression=compression)
-        elif light.LIGHT_TRIG_MODE == 1:
-            light_sim.export_light_wvfm_to_hdf5(results['light_event_id'],
-                                                results['light_waveforms'],
-                                                output_filename,
-                                                results['light_waveforms_true_track_id'],
-                                                results['light_waveforms_true_photons'],
-                                                i_trig,
-                                                i_mod,
-                                                compression=compression)
-
-
-def prep_null_light_results(light_noise):
-    null_light_results_acc = defaultdict(list)
-    trigger_idx = cp.array([0], dtype=int)
-    # FIXME: mod2mod_var?
-    op_channel = light.TPC_TO_OP_CHANNEL[:2].ravel()
-    op_channel = cp.array(op_channel)
-    trigger_op_channel_idx = cp.repeat(np.expand_dims(op_channel, axis=0), len(trigger_idx), axis=0)
-    digit_samples = ceil(round(light.LIGHT_TRIG_WINDOW[1] + light.LIGHT_TRIG_WINDOW[0], 3) / light.LIGHT_DIGIT_SAMPLE_SPACING)
-
-    n_light_det = op_channel.shape[0]
-    n_light_ticks = int((light.LIGHT_WINDOW[1] + light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
-
-    light_response = cp.zeros((n_light_det,n_light_ticks), dtype='f4')
-    #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
-    light_response_true_track_id = cp.full((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), -1, dtype='i8')
-    light_response_true_photons = cp.zeros((n_light_det, n_light_ticks, sim.MAX_MC_TRUTH_IDS), dtype='f8')
-
-    RangePush('light_sim_triggers')
-    TPB = (1,1,64)
-    BPG = (max(ceil(trigger_idx.shape[0] / TPB[0]),1),
-            max(ceil(len(op_channel) / TPB[1]),1),
-            max(ceil(digit_samples / TPB[2]),1))
-    light_digit_signal, light_digit_signal_true_track_id, light_digit_signal_true_photons = light_sim.sim_triggers(
-        BPG, TPB, light_response, op_channel, light_response_true_track_id, light_response_true_photons, trigger_idx, trigger_op_channel_idx,
-        digit_samples, light_noise)
-    RangePop()
-
-    light_t_start = 0
-    trigger_type = cp.full(trigger_idx.shape[0], light.LIGHT_TRIG_MODE, dtype = int)
-
-    #null_light_results_acc['light_event_id'].append(cp.full(trigger_idx.shape[0], ievd)) # FIXME: only works if looping on a single event
-    null_light_results_acc['light_start_time'].append(cp.full(trigger_idx.shape[0], light_t_start))
-    null_light_results_acc['light_trigger_idx'].append(trigger_idx)
-    null_light_results_acc['trigger_type'].append(trigger_type)
-    null_light_results_acc['light_op_channel_idx'].append(trigger_op_channel_idx)
-    null_light_results_acc['light_waveforms'].append(light_digit_signal)
-    null_light_results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
-    null_light_results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
-
-    return null_light_results_acc
-
-
 class LArND_Sim:
     def __init__(self,
                  input_filename,
@@ -448,20 +295,20 @@ class LArND_Sim:
         RangePop()
 
         self.light_sim_dat_acc.append(self.light_sim_dat)
-        self.null_light_results_acc = prep_null_light_results(self.light_noise)
+        self.null_light_results_acc = light_sim.prep_null_light_results(self.light_noise)
 
         print(f" {time()-self.start_light_time:.2f} s")
 
     def save_results(self, light_only):
-        do_save_results(event_times=self.event_times,
-                        results=self.results_acc,
-                        i_trig=self.i_trig,
-                        i_mod=self.i_mod,
-                        light_only=light_only,
-                        output_filename=self.output_filename,
-                        compression=self.compression,
-                        bad_channels=self.bad_channels,
-                        light_simulated=self.light_simulated)
+        fee.do_save_results(event_times=self.event_times,
+                            results=self.results_acc,
+                            i_trig=self.i_trig,
+                            i_mod=self.i_mod,
+                            light_only=light_only,
+                            output_filename=self.output_filename,
+                            compression=self.compression,
+                            bad_channels=self.bad_channels,
+                            light_simulated=self.light_simulated)
         self.i_trig += 1
 
     def maybe_save_null_light_results(self, ievd):
