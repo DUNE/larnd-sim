@@ -39,8 +39,6 @@ from larndsim.util.cuda_dict import CudaDict
 from larndsim.util.misc import *
 
 
-
-
 def do_save_results(
     event_times: cpt.NDArray[cp.float64],
     results: dict[str, Any],
@@ -372,18 +370,18 @@ class LArND_Sim:
         self.op_channel_to_tpc = cp.array(light.OP_CHANNEL_TO_TPC)
         self.light_gain = cp.array(light.LIGHT_GAIN)
 
-    def init_module(self, i_mod):
+    def init_module(self):
         # FIXME: i_mod starts at 1 (see call to get_module_ids above)
-        print(f'Simulating module {i_mod-1}')
-        reload_modules(self.detector_properties, self.pixel_layout, self.response_file, i_mod)
+        print(f'Simulating module {self.i_mod-1}')
+        reload_modules(self.detector_properties, self.pixel_layout, self.response_file, self.i_mod)
 
-        self.response = consts.detector.load_response(self.response_file[i_mod-1])
-        self.pixel_thresholds_lut = load_thresholds(self.pixel_thresholds_file, i_mod)
-        self.pixel_gains_lut = load_gains(self.pixel_gains_file, i_mod)
-        self.pixel_pedestals_lut = load_pedestals(self.pixel_pedestals_file, i_mod)
+        self.response = consts.detector.load_response(self.response_file[self.i_mod-1])
+        self.pixel_thresholds_lut = load_thresholds(self.pixel_thresholds_file, self.i_mod)
+        self.pixel_gains_lut = load_gains(self.pixel_gains_file, self.i_mod)
+        self.pixel_pedestals_lut = load_pedestals(self.pixel_pedestals_file, self.i_mod)
 
         RangePush("load_segments_in_module")
-        self.module_borders = detector.TPC_BORDERS[(i_mod-1)*2: i_mod*2]
+        self.module_borders = detector.TPC_BORDERS[(self.i_mod-1)*2: self.i_mod*2]
         module_tracks_mask = active_volume.select_active_volume(self.all_mod_tracks, self.module_borders)
         self.tracks = self.all_mod_tracks[module_tracks_mask]
         self.segment_ids = self.all_mod_segment_ids[module_tracks_mask]
@@ -397,7 +395,7 @@ class LArND_Sim:
 
         self.i_trig = 0
 
-    def load_light_info(self, i_mod):
+    def load_light_info(self):
         RangePush("load_light_info")
         n_light_channel = int(light.N_OP_CHANNEL/len(self.mod_ids))
         self.light_sim_dat = np.zeros([len(self.tracks), n_light_channel],
@@ -408,9 +406,9 @@ class LArND_Sim:
         print("Calculating optical responses...", end="")
         self.start_light_time = time()
 
-        light_lut = self.light_lut_filename[i_mod-1]
+        light_lut = self.light_lut_filename[self.i_mod-1]
 
-        if i_mod == 1 or light_lut != self.light_lut_filename[i_mod-2]:
+        if self.i_mod == 1 or light_lut != self.light_lut_filename[self.i_mod-2]:
             lut = np.load(light_lut)['arr']
 
             # check if the light LUT matches with the number of optical channels
@@ -432,7 +430,7 @@ class LArND_Sim:
         light_noise = cp.load(self.light_det_noise_filename)
 
         if light_noise.shape[0] == self.n_modules * n_light_channel:
-            self.light_noise = light_noise[n_light_channel*(i_mod-1):n_light_channel*i_mod]
+            self.light_noise = light_noise[n_light_channel*(self.i_mod-1):n_light_channel*self.i_mod]
         else:
             assert light_noise.shape[0] >= n_light_channel
             self.light_noise = light_noise[:n_light_channel]
@@ -454,11 +452,11 @@ class LArND_Sim:
 
         print(f" {time()-self.start_light_time:.2f} s")
 
-    def save_results(self, i_mod, light_only):
+    def save_results(self, light_only):
         do_save_results(event_times=self.event_times,
                         results=self.results_acc,
                         i_trig=self.i_trig,
-                        i_mod=i_mod,
+                        i_mod=self.i_mod,
                         light_only=light_only,
                         output_filename=self.output_filename,
                         compression=self.compression,
@@ -466,14 +464,14 @@ class LArND_Sim:
                         light_simulated=self.light_simulated)
         self.i_trig += 1
 
-    def maybe_save_null_light_results(self, ievd, i_mod):
+    def maybe_save_null_light_results(self, ievd):
         if self.light_simulated:
             self.null_light_results_acc['light_event_id'].append(cp.full(1, ievd)) # one event
-            self.save_results(i_mod, light_only=True)
+            self.save_results(light_only=True)
             del self.null_light_results_acc['light_event_id']
             self.i_trig += 1
 
-    def setup_event_batch(self, i_mod, ievd, batch_mask, is_new_event) -> bool:
+    def setup_event_batch(self, ievd, batch_mask, is_new_event) -> bool:
         "Returns True if there's anything to process"
         this_event_time = [self.event_times[ievd % sim.MAX_EVENTS_PER_FILE]]
         if is_new_event:
@@ -483,26 +481,26 @@ class LArND_Sim:
                 #PSS Sync also resets the timestamp in the PACMAN controller, so all of the timestamps in the packs should read 1e7 (for PPS)
                 sync_times_export = cp.full( sync_times.shape, detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE) 
                 if len(sync_times) > 0:
-                    fee.export_sync_to_hdf5(self.output_filename, ievd, sync_times_export, i_mod, compression=self.compression)
+                    fee.export_sync_to_hdf5(self.output_filename, ievd, sync_times_export, self.i_mod, compression=self.compression)
                     self.sync_start = sync_times[-1] + detector.CLOCK_RESET_PERIOD * detector.CLOCK_CYCLE
             # beam trigger is only forwarded to one specific pacman (defined in fee)
-            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (i_mod == self.trig_module or i_mod == -1):
-                fee.export_timestamp_trigger_to_hdf5(self.output_filename, [ievd], this_event_time, i_mod, compression=self.compression)
+            if (light.LIGHT_TRIG_MODE == 0 or light.LIGHT_TRIG_MODE == 1) and (self.i_mod == self.trig_module or self.i_mod == -1):
+                fee.export_timestamp_trigger_to_hdf5(self.output_filename, [ievd], this_event_time, self.i_mod, compression=self.compression)
 
         if np.sum(batch_mask) == 0:
-            self.maybe_save_null_light_results(ievd, i_mod)
+            self.maybe_save_null_light_results(ievd)
             return False
 
         self.prepare_all_pixels(batch_mask)
 
         if not self.all_active_pixels.shape[1] or not self.all_neighboring_pixels.shape[1]:
-            self.maybe_save_null_light_results(ievd, i_mod)
+            self.maybe_save_null_light_results(ievd)
             return False
 
         self.get_pixels()
 
         if not self.all_unique_pix.shape[0]:
-            self.maybe_save_null_light_results(ievd, i_mod)
+            self.maybe_save_null_light_results(ievd)
             return False
 
         # Track all pixels processed in near-field batches for this event batch
@@ -1013,15 +1011,15 @@ class LArND_Sim:
         self.results_acc['light_waveforms_true_track_id'].append(light_digit_signal_true_track_id)
         self.results_acc['light_waveforms_true_photons'].append(light_digit_signal_true_photons)
 
-    def save(self, i_mod, final=False):
+    def save(self, final=False):
         RangePush('save_results', 1)
         if final or len(self.results_acc['event_id']) >= sim.WRITE_BATCH_SIZE:
             if len(self.results_acc['event_id']) > 0 \
                and len(np.concatenate(self.results_acc['event_id'], axis=0)) > 0:
-                self.save_results(i_mod, light_only=False)
+                self.save_results(light_only=False)
             elif len(self.results_acc['light_event_id']) > 0 \
                  and len(np.concatenate(self.results_acc['light_event_id'], axis=0)) > 0:
-                self.save_results(i_mod, light_only=True)
+                self.save_results(light_only=True)
             self.results_acc = defaultdict(list) # reinitialize after each save_results
         RangePop() # save_results
 
@@ -1051,9 +1049,9 @@ class LArND_Sim:
 
             if self.light_simulated:
                 # It seems unnecessary to store (all tracks, all channels) given the modules are light tight
-                for i_mod in self.mod_ids:
-                    output_file.create_dataset(f'light_dat/light_dat_module{i_mod-1}',
-                                               data=self.light_sim_dat_acc[i_mod-1],
+                for self.i_mod in self.mod_ids:
+                    output_file.create_dataset(f'light_dat/light_dat_module{self.i_mod-1}',
+                                               data=self.light_sim_dat_acc[self.i_mod-1],
                                                compression=self.compression)
             if self.trajectories:
                 output_file.create_dataset("trajectories", data=self.trajectories,
@@ -1089,8 +1087,8 @@ class LArND_Sim:
         print("******************\nRUNNING SIMULATION\n******************")
         self.start_simulation = time()
 
-        for i_mod in self.mod_ids: # Conventional module counting starts from 1
-            self.init_module(i_mod)
+        for self.i_mod in self.mod_ids: # Conventional module counting starts from 1
+            self.init_module()
 
             RangePush("run_simulation")
 
@@ -1098,7 +1096,7 @@ class LArND_Sim:
             drifting.launch_drift(self.tracks)
 
             if self.light_simulated:
-                self.load_light_info(i_mod)
+                self.load_light_info()
                 self.calc_light_inc()
                 
             batcher = batching.TPCBatcher(
@@ -1108,7 +1106,7 @@ class LArND_Sim:
 
             for ievd, batch_mask, is_new_event in \
                     tqdm(batcher, desc='Simulating batches...', ncols=80, smoothing=0):
-                non_empty = self.setup_event_batch(i_mod, ievd, batch_mask, is_new_event)
+                non_empty = self.setup_event_batch(ievd, batch_mask, is_new_event)
                 if not non_empty:
                     continue
 
@@ -1135,10 +1133,10 @@ class LArND_Sim:
                 if self.light_simulated:
                     self.run_light_sim()
 
-                self.save(i_mod)
+                self.save()
                 # End loop over batches (events, either TPC-by-TPC or whole-module)
             RangePop()                      # run_simulation
-            self.save(i_mod, final=True)
+            self.save(final=True)
             # End loop over modules
 
         if self.light_simulated:
