@@ -87,8 +87,6 @@ class LArND_Sim:
         self.load_input(n_events)
         self.cupyify_const_arrays()
 
-        self.event_times, self.sync_start = prep_event_times(self.all_mod_tracks)
-
         # output accumulators:
         self.results_acc = defaultdict(list)
         self.light_sim_dat_acc = list()
@@ -262,6 +260,8 @@ class LArND_Sim:
                 mc_hdr = mc_hdr[mc_hdr[sim.EVENT_SEPARATOR] <= max_eventID]
             if mc_stack:
                 mc_stack = mc_stack[mc_stack[sim.EVENT_SEPARATOR] <= max_eventID]
+
+        self.event_times, self.sync_start = prep_event_times(tracks)
 
         tracks = maybe_add_n_photons(tracks)
         tracks = swap_coordinates(tracks)
