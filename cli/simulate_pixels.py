@@ -39,6 +39,16 @@ from larndsim.util.cuda_dict import CudaDict
 from larndsim.util.misc import *
 
 
+def main():
+    maybe_disable_cupy_mempool()
+    configure_warnings()
+
+    RangePush("simulate_pixels")
+    app = fire.Fire(LArND_Sim)
+    app.run()
+    RangePop()
+
+
 class LArND_Sim:
     def __init__(self,
                  input_filename,
@@ -82,6 +92,68 @@ class LArND_Sim:
         # output accumulators:
         self.results_acc = defaultdict(list)
         self.light_sim_dat_acc = list()
+
+    def run(self):
+        print("******************\nRUNNING SIMULATION\n******************")
+        self.start_simulation = time()
+
+        for self.i_mod in self.mod_ids: # Conventional module counting starts from 1
+            self.init_module()
+
+            RangePush("run_simulation")
+
+            quenching.launch_quench(self.tracks, physics.BIRKS)
+            drifting.launch_drift(self.tracks)
+
+            if self.light_simulated:
+                self.load_light_info()
+                self.calc_light_inc()
+
+            batcher = batching.TPCBatcher(
+                self.all_mod_tracks, self.tracks, sim.EVENT_SEPARATOR,
+                tpc_batch_size=sim.EVENT_BATCH_SIZE,
+                tpc_borders=self.module_borders)
+
+            for ievd, batch_mask, is_new_event in \
+                    tqdm(batcher, desc='Simulating batches...', ncols=80, smoothing=0):
+                non_empty = self.setup_event_batch(ievd, batch_mask, is_new_event)
+                if not non_empty:
+                    continue
+
+                self.maybe_farfield_precompute()
+
+                pixel_ranges = batching.subbatch_pixel_ranges(self.assmap_pix2seg,
+                                                              sim.SEGMENT_BATCH_SIZE)
+
+                for start_pix, stop_pix in \
+                        tqdm(pixel_ranges, delay=1,
+                             desc='  Simulating event %i batches...' % ievd,
+                             leave=False, ncols=80):
+                    non_empty = self.prepare_subbatch_pixels(start_pix, stop_pix)
+                    if not non_empty:
+                        continue
+
+                    self.call_tracks_current_mc()
+                    self.call_sum_pixel_signals()
+                    self.maybe_compute_hybrid_ffe()
+                    self.digitize_active_pix()
+                    self.maybe_compute_exclusive_ffe_and_digitize()
+                    # End loop over sub-batches (pixels)
+
+                if self.light_simulated:
+                    self.run_light_sim()
+
+                self.save()
+                # End loop over batches (events, either TPC-by-TPC or whole-module)
+            RangePop()                      # run_simulation
+            self.save(final=True)
+            # End loop over modules
+
+        if self.light_simulated:
+            self.finalize_light_output()
+        self.save_truth()
+        self.save_metadata()
+        self.bye()
 
     def check_files(self):
         if not os.path.exists(self.input_filename):
@@ -930,79 +1002,6 @@ class LArND_Sim:
         end_simulation = time()
         print(f"Elapsed time: {end_simulation-self.start_simulation:.2f} s")
 
-    def run(self):
-        print("******************\nRUNNING SIMULATION\n******************")
-        self.start_simulation = time()
-
-        for self.i_mod in self.mod_ids: # Conventional module counting starts from 1
-            self.init_module()
-
-            RangePush("run_simulation")
-
-            quenching.launch_quench(self.tracks, physics.BIRKS)
-            drifting.launch_drift(self.tracks)
-
-            if self.light_simulated:
-                self.load_light_info()
-                self.calc_light_inc()
-                
-            batcher = batching.TPCBatcher(
-                self.all_mod_tracks, self.tracks, sim.EVENT_SEPARATOR,
-                tpc_batch_size=sim.EVENT_BATCH_SIZE,
-                tpc_borders=self.module_borders)
-
-            for ievd, batch_mask, is_new_event in \
-                    tqdm(batcher, desc='Simulating batches...', ncols=80, smoothing=0):
-                non_empty = self.setup_event_batch(ievd, batch_mask, is_new_event)
-                if not non_empty:
-                    continue
-
-                self.maybe_farfield_precompute()
-
-                pixel_ranges = batching.subbatch_pixel_ranges(self.assmap_pix2seg,
-                                                              sim.SEGMENT_BATCH_SIZE)
-
-                for start_pix, stop_pix in \
-                        tqdm(pixel_ranges, delay=1,
-                             desc='  Simulating event %i batches...' % ievd,
-                             leave=False, ncols=80):
-                    non_empty = self.prepare_subbatch_pixels(start_pix, stop_pix)
-                    if not non_empty:
-                        continue
-
-                    self.call_tracks_current_mc()
-                    self.call_sum_pixel_signals()
-                    self.maybe_compute_hybrid_ffe()
-                    self.digitize_active_pix()
-                    self.maybe_compute_exclusive_ffe_and_digitize()
-                    # End loop over sub-batches (pixels)
-
-                if self.light_simulated:
-                    self.run_light_sim()
-
-                self.save()
-                # End loop over batches (events, either TPC-by-TPC or whole-module)
-            RangePop()                      # run_simulation
-            self.save(final=True)
-            # End loop over modules
-
-        if self.light_simulated:
-            self.finalize_light_output()
-        self.save_truth()
-        self.save_metadata()
-        self.bye()
-
-
-def main():
-    maybe_disable_cupy_mempool()
-    configure_warnings()
-
-    RangePush("simulate_pixels")
-    app = fire.Fire(LArND_Sim)
-    app.run()
-    RangePop()
-
 
 if __name__ == "__main__":
     main()
-    
