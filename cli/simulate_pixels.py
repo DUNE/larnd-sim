@@ -85,7 +85,7 @@ class LArND_Sim:
         self.print_config()
         self.init_rng(rand_seed)
         self.load_input(n_events)
-        self.cupaify_const_arrays()
+        self.cupyify_const_arrays()
 
         self.event_times, self.sync_start = prep_event_times(self.all_mod_tracks)
 
@@ -281,7 +281,7 @@ class LArND_Sim:
         end_load = time()
         print(f"Data preparation time: {end_load-start_load:.2f} s")
 
-    def cupaify_const_arrays(self):
+    def cupyify_const_arrays(self):
         # We need to make cupy arrays of these and pass them to the kernels;
         # otherwise numba will try to use the GPU's "global constant" memory
         # which (at 64 kB) is not large enough for ND-LAr
