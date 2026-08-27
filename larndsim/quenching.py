@@ -33,8 +33,9 @@ def quench(tracks, mode):
         tracks[itrk]["n_photons"]   = 0
 
         # if this isn't a gamma or neutron, calculate charge/light
+        # allow for the edge case of dE/dx == 0 for other particles
         pdg = tracks[itrk]["pdg_id"]
-        if dEdx > 0 and pdg != 22 and pdg != 2112:
+        if pdg != 22 and pdg != 2112:
             recomb = 0
             if mode == physics.BOX:
                 # Baller, 2013 JINST 8 P08005
@@ -48,6 +49,6 @@ def quench(tracks, mode):
 
             if isnan(recomb):
                 raise RuntimeError("Invalid recombination value")
-            
+
             tracks[itrk]["n_electrons"] = recomb * dE / physics.W_ION
             tracks[itrk]["n_photons"]   = (dE/light.W_PH - tracks[itrk]["n_electrons"]) * light.SCINT_PRESCALE
