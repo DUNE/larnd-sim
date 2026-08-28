@@ -15,7 +15,7 @@ module0:
 2x2_no_modvar: &2x2main
     SIM_PROPERTIES:  2x2_NuMI_sim_no_modvar.yaml
     DET_PROPERTIES:  2x2_no_modvar.yaml
-    PIXEL_LAYOUT:    multi_tile_layout-2.4.16.yaml
+    PIXEL_LAYOUT:    multi_tile_layout-2.4.16_v4.yaml
     RESPONSE:        response_44_v2a_full.npz
     # Path to light LUT at NERSC
     # Web portal: https://portal.nersc.gov/project/dune/data/2x2/simulation/larndsim_data/light_LUT/
