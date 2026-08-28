@@ -72,6 +72,9 @@ RESPONSE_BIN_SIZE = None
 RESPONSE_MAX_TIME = None
 #: The maximum radius to consider the neighbouring charge response
 MAX_RADIUS = 2
+RESPONSE_NX = None
+RESPONSE_NY = None
+RESPONSE_XY = None
 #: The step size to chop up segments :math:`cm`
 #: MIN_STEP_SIZE should be comparable to the smallest bin size in x,y,t of the response file
 #: The bin size in x, y is ~0.04 cm (1/10 of a pixel size),
@@ -264,6 +267,9 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global TPC_TO_MODULE
     global RESPONSE_SAMPLING
     global RESPONSE_BIN_SIZE
+    global RESPONSE_NX
+    global RESPONSE_NY
+    global RESPONSE_XY
     global MAX_RADIUS
     global MIN_STEP_SIZE
     global TPC_OFFSETS
@@ -478,12 +484,15 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME
+    global RESPONSE_NX
+    global RESPONSE_NY
+    global RESPONSE_XY
 
     # load the charge response for the full drift length
     # shape it to be consistent with detector drift length
     # by either pad or chop the values at the beginning (the side further away from the cathode)
     f_res = cp.load(response_file)
-    response = f_res['response']
+    response = f_res['response'].astype(cp.float32)
     res_drift_length = float(f_res['drift_length'])
     drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
 
@@ -495,5 +504,8 @@ def load_response(response_file):
         warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses a drift_length of {res_drift_length} cm; The response drift_length is too short, pad {abs(drift_ticks_diff)} 0s at the beginning (close to the readout).')
 
     RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
+    RESPONSE_NX = response.shape[0]
+    RESPONSE_NY = response.shape[1]
+    RESPONSE_XY = np.sqrt(response.shape[0]**2 + response.shape[1]**2, dtype=np.float32)
 
     return response
