@@ -316,43 +316,37 @@ def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
                 if imap < track_pixel_map.shape[1]:
                     track_pixel_map[index][imap] = itrk
 
-@cuda.jit
-def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
-    """
-    This kernel fills a 2D array which contains, for each unique pixel,
-    an array with the track indices associated to that pixel.
-    Summary of the different get_track_pixel_map
-    get_track_pixel_map, fills track_pixel_map without distance ranking
-    get_track_pixel_map3, fills track_pixel_map ranked by distances of unit pixel pitch
-    """
-    # index of unique_pix array
-    index = cuda.grid(1)
-    if index >= unique_pix.shape[0]:
-        return
-    upix = unique_pix[index]
-
-    for target_dist in detector.NEIGHBORING_PIX_DIST:
-
-        for itrk in range(pixels.shape[0]):
-
-            for ipix in range(pixels.shape[1]):
-                pID  = pixels[itrk][ipix]
-                dist = distances[itrk][ipix]
-
-                if (upix == pID):
-                    if abs(dist - target_dist) < 1E-6:
-                        imap = 0
-                        #while imap < track_pixel_map.shape[1] and track_pixel_map[index][imap] != -1 and track_pixel_map[index][imap] != itrk:
-                        while imap < track_pixel_map.shape[1]:
-                            if track_pixel_map[index][imap] == itrk:
-                                imap = -1
-                                break
-                            if track_pixel_map[index][imap] == -1:
-                                break
-                            else:
-                                imap += 1
-
-                        if (imap >= 0) and (imap < track_pixel_map.shape[1]):
-                            track_pixel_map[index][imap] = itrk
-
-                    break
+# ---------------------------------------------------------------------------
+# LEGACY IMPLEMENTATION (kept for correctness comparison and profiling)
+#
+# @cuda.jit
+# def get_track_pixel_map2(track_pixel_map, unique_pix, pixels, distances):
+#     """Build the pixel-to-track map by scanning all input entries per pixel."""
+#     index = cuda.grid(1)
+#     if index >= unique_pix.shape[0]:
+#         return
+#     upix = unique_pix[index]
+#
+#     for target_dist in detector.NEIGHBORING_PIX_DIST:
+#         for itrk in range(pixels.shape[0]):
+#             for ipix in range(pixels.shape[1]):
+#                 pID = pixels[itrk][ipix]
+#                 dist = distances[itrk][ipix]
+#                 if upix == pID:
+#                     if abs(dist - target_dist) < 1E-6:
+#                         imap = 0
+#                         while imap < track_pixel_map.shape[1]:
+#                             if track_pixel_map[index][imap] == itrk:
+#                                 imap = -1
+#                                 break
+#                             if track_pixel_map[index][imap] == -1:
+#                                 break
+#                             imap += 1
+#                         if 0 <= imap < track_pixel_map.shape[1]:
+#                             track_pixel_map[index][imap] = itrk
+#                     break
+#
+# The active replacement is the lookup-table implementation in
+# ``cli/simulate_pixels.py``. It directly fills ``track_pixel_map`` from the
+# pixel-to-segment association map, so no replacement CUDA kernel is needed
+# here.

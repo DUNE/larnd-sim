@@ -141,7 +141,25 @@ def _invert_array_map_inner(in_map, pix_id2idx, curr_idx, out_map):
             out_map[pix_idx][curr_idx[pix_idx]]=seg_idx
             curr_idx[pix_idx] += 1
 
-def invert_array_map(in_map,pix_set):
+# Lookup-table optimization: preserve the neighbor radius alongside each
+# pixel-to-segment association, so track_pixel_map can be built directly
+# without launching get_track_pixel_map2 to rescan all tracks.
+@nb.njit
+def _invert_array_map_with_values_inner(in_map, values, pix_id2idx,
+                                        curr_idx, out_map, out_values):
+    """Invert a pixel map and carry one value for every association."""
+    for seg_idx in range(in_map.shape[0]):
+        ass = in_map[seg_idx]
+        for pix_idx_in_seg, pixid in enumerate(ass):
+            if pixid < 0:
+                break
+            pix_idx = pix_id2idx[pixid.item()]
+            slot = curr_idx[pix_idx]
+            out_map[pix_idx][slot] = seg_idx
+            out_values[pix_idx][slot] = values[seg_idx][pix_idx_in_seg]
+            curr_idx[pix_idx] += 1
+
+def invert_array_map(in_map, pix_set, values=None):
     '''
     Invert the map of unique segment id => a set of unique pixel IDs to a map of unique
     pixel index => a set of segment indexes (not IDs).
@@ -149,8 +167,13 @@ def invert_array_map(in_map,pix_set):
     Args:
         in_map  (:obj:`numpy.ndarray`): 2D array where segment index => list of pixel IDs
         pix_set (:obj:`numpy.ndarray`): 1D array containing all unique pixel IDs
+        values (cupy.ndarray, optional): Per-entry values aligned with
+            ``in_map``. When supplied, they are inverted alongside the
+            segment indices.
+
     Returns:
-        ndarray: 2D array where pixel index => list of segment index
+        ndarray or tuple[ndarray, ndarray]: Pixel index => segment indices;
+        with ``values``, also returns the matching per-association values.
     '''
     pixids,counts=cp.unique(in_map[in_map>=0].flatten(),return_counts=True)
 
@@ -161,8 +184,15 @@ def invert_array_map(in_map,pix_set):
 
     mymap=np.full(shape=(pix_set.shape[0],counts.max().item()),fill_value=-1,dtype=int)
     curr_idx=np.zeros(shape=(len(pix_id2idx),),dtype=int)
-    _invert_array_map_inner(in_map.get(), pix_id2idx, curr_idx, mymap)
-    return cp.array(mymap)
+    in_map_host = in_map.get()
+    if values is None:
+        _invert_array_map_inner(in_map_host, pix_id2idx, curr_idx, mymap)
+        return cp.array(mymap)
+
+    value_map = np.full(mymap.shape, np.inf, dtype=values.dtype)
+    _invert_array_map_with_values_inner(in_map_host, values.get(), pix_id2idx,
+                                        curr_idx, mymap, value_map)
+    return cp.array(mymap), cp.array(value_map)
 
 
 def do_digitize_and_update(results_acc: dict[str, Any],
@@ -1265,7 +1295,11 @@ def run_simulation(input_filename,
 
             RangePush("invert_array_map")
             # global pixel ID -> [segment IDs] (fixed-size; padded w/ -1)
-            assmap_pix2seg = invert_array_map(all_neighboring_pixels,all_unique_pix)
+            # This is the reusable global pixel ID -> global segment-index
+            # lookup.  Retain radius too so later pixel batches can preserve
+            # closest-neighbor-first backtracking without rescanning tracks.
+            assmap_pix2seg, assmap_pix2dist = invert_array_map(
+                all_neighboring_pixels, all_unique_pix, all_neighboring_radius)
             RangePop() # invert_array_map
 
             # ~~~ Precompute far-field helper data once per event batch ~~~
@@ -1406,13 +1440,43 @@ def run_simulation(input_filename,
                 max_segments_to_trace = sim.MAX_TRACKS_PER_PIXEL
                 track_pixel_map = cp.full((unique_pix.shape[0], max_segments_to_trace), -1)
 
-                TPB = 32
-                BPG = max(ceil(unique_pix.shape[0] / TPB),1)
-                detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
-                    unique_pix,
-                    neighboring_pixels,
-                    neighboring_radius,
-                    )
+                # -----------------------------------------------------------------
+                # LEGACY LAUNCH (kept as a reference for correctness and profiling)
+                #
+                # TPB = 32
+                # BPG = max(ceil(unique_pix.shape[0] / TPB), 1)
+                # detsim.get_track_pixel_map2[BPG, TPB](track_pixel_map,
+                #     unique_pix,
+                #     neighboring_pixels,
+                #     neighboring_radius)
+
+                # LOOKUP-TABLE OPTIMIZATION (active): assmap_pix2seg already
+                # contains exactly the global segments associated with each
+                # selected pixel. Sort only that short list by radius, then map
+                # its global segment indices to the local selected_tracks indices.
+                # This eliminates the full track-by-neighbor search entirely.
+                pixel_associations = assmap_pix2seg[start_pix:stop_pix]
+                pixel_association_distances = assmap_pix2dist[start_pix:stop_pix]
+                association_order = cp.argsort(pixel_association_distances,
+                                                axis=1, kind='stable')
+                sorted_associations = cp.take_along_axis(pixel_associations,
+                                                          association_order,
+                                                          axis=1)
+                n_association_slots = min(max_segments_to_trace,
+                                          sorted_associations.shape[1])
+                local_track_lookup = cp.full(all_selected_tracks.shape[0], -1,
+                                             dtype=track_pixel_map.dtype)
+                selected_track_idcs_cp = cp.asarray(selected_track_idcs)
+                local_track_lookup[selected_track_idcs_cp] = cp.arange(
+                    selected_track_idcs_cp.shape[0], dtype=track_pixel_map.dtype)
+                selected_associations = sorted_associations[:, :n_association_slots]
+                valid_associations = selected_associations >= 0
+                safe_associations = cp.where(valid_associations,
+                                             selected_associations, 0)
+                track_pixel_map[:, :n_association_slots] = cp.where(
+                    valid_associations,
+                    local_track_lookup[safe_associations],
+                    -1)
                 RangePop()
 
                 RangePush("sum_pixels_signals", 7)
