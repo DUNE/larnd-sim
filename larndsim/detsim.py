@@ -3,12 +3,13 @@ Module that calculates the current induced by edep-sim track segments
 on the pixels
 """
 
-from math import pi, ceil, sqrt, erf, exp, log
+from math import pi, ceil, sqrt, erf, exp, log, cos, sin
+import numpy as np
 import cupy as cp
 import numba as nb
 
-from numba import cuda
-from numba.cuda.random import xoroshiro128p_normal_float32
+from numba import cuda, uint32, uint64, int32, int64, float32, float64
+from numba.cuda.random import xoroshiro128p_normal_float32, rotl, uint64_to_unit_float32
 
 from .consts import detector
 from .consts import sim
@@ -101,8 +102,44 @@ def overlapping_segment(x, y, start, end, radius):
 
     return new_start, new_end, skip
 
-# @cuda.jit
-@cuda.jit(max_registers=128,  fastmath=True)
+TWO_PI_FLOAT32 = np.float32(2 * pi)
+
+@nb.njit
+def xoroshiro128p_step_register(s0, s1):
+    """
+    Advances a single step of the xoroshiro128+ algorithm entirely in registers.
+    """
+    result = int64(s0 + s1)
+    s1 ^= s0
+    s0 = uint64(rotl(s0, uint32(55))) ^ s1 ^ (s1 << uint32(14))
+    s1 = uint64(rotl(s1, uint32(36)))
+    return s0, s1, result
+
+@nb.njit
+def generate_two_gaussians_float32(s0, s1):
+    """
+    Generates TWO independent Gaussian float32 values from the provided s0 and s1
+    registers, returning the updated states along with both normal numbers.
+    """
+    s0, s1, res1 = xoroshiro128p_step_register(s0, s1)
+    u1 = uint64_to_unit_float32(res1)
+
+    s0, s1, res2 = xoroshiro128p_step_register(s0, s1)
+    u2 = uint64_to_unit_float32(res2)
+
+    # Box-muller transform based on Numba source code
+    z0 = sqrt(-float32(2.0) * log(u1)) * cos(TWO_PI_FLOAT32 * u2)
+    z1 = sqrt(-float32(2.0) * log(u1)) * sin(TWO_PI_FLOAT32 * u2)
+
+    # Rearrange math to reuse calculations
+    # radius = sqrt(-float32(2.0) * log(u1))
+    # theta = TWO_PI_FLOAT32 * u2
+    # z0 = radius * cos(theta)
+    # z1 = radius * sin(theta)
+
+    return s0, s1, z0, z1
+
+@cuda.jit(max_registers=128,  fastmath=True, lineinfo=True)
 def tracks_current_mc(signals, pixels, tracks, response, rng_states):
     """
     This CUDA kernel calculates the charge induced on the pixels by the input tracks using a
@@ -178,6 +215,10 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
             nstep = max(round(subsegment_length / detector.MIN_STEP_SIZE), 1)
             step = subsegment_length / nstep # refine step size
 
+            rng_idx = itrk * npix * nt + ipix * nt + it
+            rng_s0 = rng_states[rng_idx]['s0']
+            rng_s1 = rng_states[rng_idx]['s1']
+
             charge = t["n_electrons"] * (subsegment_length/length) / nstep
             total_current = 0
             for istep in range(nstep):
@@ -185,7 +226,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 y = subsegment_start[1] + step * (istep + 0.5) * direction[1]
                 z = subsegment_start[2] + step * (istep + 0.5) * direction[2]
 
-                z += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[2]
+                rng_s0, rng_s1, r1, _ = generate_two_gaussians_float32(rng_s0, rng_s1)
+                z += r1 * sigmas[2]
 
                 # find how much to shift the time for anode (collection time)
                 # detector.TPC_BORDERS[t["pixel_plane"]][2][0] is anode
@@ -193,8 +235,10 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 # equivalent to detector.DRIFT_LENGTH - abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1])
                 shift_t_collect = abs(z - detector.TPC_BORDERS[t["pixel_plane"]][2][1]) / detector.V_DRIFT
 
-                x += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[0]
-                y += xoroshiro128p_normal_float32(rng_states, itrk * npix * nt + ipix * nt + it ) * sigmas[1]
+                rng_s0, rng_s1, r2, r3 = generate_two_gaussians_float32(rng_s0, rng_s1)
+                x += r2 * sigmas[0]
+                y += r3 * sigmas[1]
+
                 x_dist = abs(x_p - x)
                 y_dist = abs(y_p - y)
 
@@ -210,6 +254,8 @@ def tracks_current_mc(signals, pixels, tracks, response, rng_states):
                 # (shift_t_collect) shifts the readout to the corresponding position 
                 total_current += charge * get_closest_waveform(x_dist, y_dist, this_time + shift_t_collect, response)
 
+            rng_states[rng_idx]['s0'] = rng_s0
+            rng_states[rng_idx]['s1'] = rng_s1
             signals[itrk,ipix,it] = total_current
 
 @cuda.jit
