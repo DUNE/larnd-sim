@@ -10,6 +10,11 @@ import yaml
 from collections import defaultdict
 from larpix.packet import Packet_v2, Packet_v3
 
+# optional backends for loading and
+# manipulating LUT objects
+backends = {'cupy': cp,
+            'numpy': np}
+
 # LArPix settings for Packet data structure
 LARPIX_REGISTRY = {
     2: {"packet_version": Packet_v2,
@@ -192,10 +197,13 @@ def electron_mobility(efield, temperature):
 
     return mu
 
-def load_detector_properties(config_keyword):
+def load_detector_properties(config_keyword, **kwargs):
     from ..config import get_config
     cfg = get_config(config_keyword)
-    set_detector_properties(cfg['DET_PROPERTIES'],cfg['PIXEL_LAYOUT'])
+    set_detector_properties(cfg['DET_PROPERTIES'],
+                            cfg['PIXEL_LAYOUT'],
+                            response_file = cfg['RESPONSE'],
+                            **kwargs)
 
 def get_n_modules(detprop_file):
     """
@@ -227,7 +235,7 @@ def set_multi_properties(bucket, n_mod, i_module, message=""):
         prop = float(bucket[i_module-1])
     return prop
 
-def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False):
+def set_detector_properties(detprop_file, pixel_file, response_file=None, i_module=-1, geo_only=False, use_backend = 'cupy'):
     """
     The function loads the detector properties and
     the pixel geometry YAML files and stores the constants
@@ -242,6 +250,8 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                         i_module < 0 means all module share the same detector configuration.
     """
 
+    lib = backends[use_backend]
+    
     global PIXEL_PITCH
     global TPC_BORDERS
     global PIXEL_CONNECTION_DICT
@@ -399,7 +409,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                     response_file = response_file[0]
                 else:
                     response_file = response_file[i_module-1]
-            response = cp.load(response_file)
+            response = lib.load(response_file)
             RESPONSE_SAMPLING = float(response['time_tick'])
             RESPONSE_BIN_SIZE = float(response['bin_size'])
             MAX_RADIUS = int(response['response'].shape[0] * RESPONSE_BIN_SIZE // PIXEL_PITCH) # assuming y,z in the response file has the symmetry
@@ -476,13 +486,15 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
                 NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
         NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
 
-def load_response(response_file):
+def load_response(response_file, use_backend = 'cupy'):
     global RESPONSE_MAX_TIME
+
+    lib = backends[use_backend]
 
     # load the charge response for the full drift length
     # shape it to be consistent with detector drift length
     # by either pad or chop the values at the beginning (the side further away from the cathode)
-    f_res = cp.load(response_file)
+    f_res = lib.load(response_file)
     response = f_res['response']
     res_drift_length = float(f_res['drift_length'])
     drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
@@ -491,9 +503,9 @@ def load_response(response_file):
         response = response[:, :, drift_ticks_diff:]
         warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drift_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
     elif drift_ticks_diff < 0: # response is too short, pad
-        response = cp.pad(response, ((0, 0), (0, 0), (abs(drift_ticks_diff), 0)))
+        response = lib.pad(response, ((0, 0), (0, 0), (abs(drift_ticks_diff), 0)))
         warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses a drift_length of {res_drift_length} cm; The response drift_length is too short, pad {abs(drift_ticks_diff)} 0s at the beginning (close to the readout).')
 
-    RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
+    RESPONSE_MAX_TIME = float(lib.max(lib.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
 
     return response
