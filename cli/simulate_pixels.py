@@ -278,8 +278,8 @@ def do_digitize_and_update(results_acc: dict[str, Any],
 
     TPB_2D = (16, 16)
     BPG_2D = (
-        ceil(n_pixels / TPB_2D[0]),
         ceil(n_ticks / TPB_2D[1]),
+        ceil(n_pixels / TPB_2D[0]),
     )
 
     fee.integrate_signal[BPG_2D, TPB_2D](

@@ -8,9 +8,9 @@ import h5py
 import yaml
 import warnings
 
-from numba import cuda
+from numba import cuda, float32, int32
 from numba.cuda.random import xoroshiro128p_normal_float32, xoroshiro128p_uniform_float32
-from math import exp, floor
+from math import exp, floor, ceil
 
 from larpix.packet import Packet_v2, Packet_v3, TimestampPacket, TriggerPacket, SyncPacket, PacketCollection
 from larpix.key import Key
@@ -609,7 +609,33 @@ def generate_noise(
             * detector.RESET_NOISE_CHARGE * units.e
         )
 
-# --- Phase 3a: Signal Extraction ---
+TIME_SAMPLING = float32(0.1)   # µs
+CONV_WINDOW   = int32(10 * detector.BUFFER_RISETIME / detector.TIME_SAMPLING)
+# ---------------------------------------------------------------------------
+# Constant-memory weight table
+#
+# WEIGHTS[k] = TIME_SAMPLING * exp(-k) * (1 - exp(-1))  for k in 0..10
+#
+# TIME_SAMPLING is folded in here so the inner loop is a single FMA:
+#   q += WEIGHTS[k] * pixels_signals[jc, ip]
+#
+# cuda.const.array_like() places this in GPU __constant__ memory.
+# ---------------------------------------------------------------------------
+_WEIGHTS_HOST = np.array([
+    0.0632120559,   # k= 0, offset=  0
+    0.0232544158,   # k= 1, offset= -1
+    0.0085548215,   # k= 2, offset= -2
+    0.0031471429,   # k= 3, offset= -3
+    0.0011577692,   # k= 4, offset= -4
+    0.0004259195,   # k= 5, offset= -5
+    0.0001566870,   # k= 6, offset= -6
+    0.0000576419,   # k= 7, offset= -7
+    0.0000212053,   # k= 8, offset= -8
+    0.0000078010,   # k= 9, offset= -9
+    0.0000028698,   # k=10, offset=-10
+], dtype=np.float32)
+
+
 @cuda.jit
 def integrate_signal(
     pixels_signals,
@@ -628,16 +654,15 @@ def integrate_signal(
         signal_charge (:obj:`numpy.ndarray`): Output; integrated charge
             per pixel per tick. Shape (n_pixels, n_ticks).
     """
-    ip, ic = cuda.grid(2)
+    ic, ip = cuda.grid(2)
+    WEIGHTS = cuda.const.array_like(_WEIGHTS_HOST)
 
     if ip >= pixels_signals.shape[0]:
         return
     if ic >= pixels_signals.shape[1]:
         return
 
-    curre = pixels_signals[ip]
-
-    q = 0.0
+    q = float32(0.0)
 
     # NOTE (Issue 4 — accepted difference): The original kernel uses
     # conv_start = max(last_reset, ...) to bound the convolution window at
@@ -648,20 +673,15 @@ def integrate_signal(
     # the last reset that the original would have excluded. The exponential
     # weighting heavily attenuates these distant contributions.
     if detector.BUFFER_RISETIME > 0:
-        conv_start = max(
-            0,
-            int(ic - 10 * detector.BUFFER_RISETIME / detector.TIME_SAMPLING)
-        )
-        for jc in range(conv_start, ic + 1):
-            if jc >= curre.shape[0]:
+        conv_start = max(0, ic - CONV_WINDOW)
+        for k in range(CONV_WINDOW + 1):
+            jc = ic - k
+            if jc < conv_start:
                 break
+            q = cuda.fma(WEIGHTS[k], pixels_signals[ip, jc], q)
 
-            w = exp((jc - ic) * detector.TIME_SAMPLING / detector.BUFFER_RISETIME) * \
-                (1.0 - exp(-detector.TIME_SAMPLING / detector.BUFFER_RISETIME))
-
-            q += curre[jc] * detector.TIME_SAMPLING * w
     else:
-        q = curre[ic] * detector.TIME_SAMPLING
+        q = pixels_signals[ip, ic] * TIME_SAMPLING
 
     signal_charge[ip, ic] = q
 
@@ -690,7 +710,8 @@ def integrate_signal_tracks(
             charge per pixel per tick per track.
             Shape (n_pixels, n_ticks, MAX_TRACKS_PER_PIXEL).
     """
-    ip, ic = cuda.grid(2)
+    ic, ip = cuda.grid(2)
+    WEIGHTS = cuda.const.array_like(_WEIGHTS_HOST)
 
     if ip >= num_backtrack.shape[0]:
         return
@@ -705,8 +726,9 @@ def integrate_signal_tracks(
     total_backtracks = offset_backtrack[-1] + num_backtrack[-1]
     #total_backtracks = num_backtrack.sum() <- numba no likey
 
+    conv_start = max(0, ic - CONV_WINDOW)
     for itrk in range(ntrks):
-        q = 0.0
+        q = float32(0.0)
 
         # NOTE (Issue 4 — accepted difference): Same conv_start bound
         # difference as integrate_signal. See comment there for details.
@@ -716,17 +738,16 @@ def integrate_signal_tracks(
                 int(ic - 10 * detector.BUFFER_RISETIME / detector.TIME_SAMPLING)
             )
 
-            for jc in range(conv_start, ic + 1):
+            for k in range(CONV_WINDOW + 1):
+                jc = ic - k
+                if jc < conv_start:
+                    break
                 idx = total_backtracks * jc + off + itrk
-
-                w = exp((jc - ic) * detector.TIME_SAMPLING / detector.BUFFER_RISETIME) * \
-                    (1.0 - exp(-detector.TIME_SAMPLING / detector.BUFFER_RISETIME))
-
-                q += pixels_signals_tracks[idx] * detector.TIME_SAMPLING * w
+                q = cuda.fma(WEIGHTS[k], pixels_signals_tracks[idx], q)
 
         else:
             idx = total_backtracks * ic + off + itrk
-            q = pixels_signals_tracks[idx] * detector.TIME_SAMPLING
+            q = pixels_signals_tracks[idx] * TIME_SAMPLING
 
         signal_charge_track[ip, ic, itrk] = q
 
