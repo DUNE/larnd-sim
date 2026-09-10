@@ -127,7 +127,8 @@ fsd_cube: &fsd_cube
     SIM_PROPERTIES:  cosmic_sim.yaml
     PIXEL_LAYOUT:    multi_tile_layout-3.0.40_fsdcube.yaml
     DET_PROPERTIES:  fsd_cube.yaml
-    RESPONSE:        /dvs_ro/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_fsdcube_v2d_full_25x25pixel_250Vcm.npz
+    #RESPONSE:        /dvs_ro/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_fsdcube_v2d_full_25x25pixel_250Vcm.npz
+    RESPONSE:        /global/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_fsdcube_v2d_full_9x9pixel_250Vcm.npz
     PIXEL_THRESHOLDS_FILE: [thresholds_fsdcube.npz]
     PIXEL_THRESHOLDS_ID: [0]
     PIXEL_PEDESTALS_FILE: [pedestals_fsdcube.npz]
