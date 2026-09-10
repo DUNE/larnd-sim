@@ -162,3 +162,27 @@ fsd_cube_prc0_r4_box:
   DET_PROPERTIES: fsd_cube_prc0.yaml
   FARFIELD_PROPERTIES: ff_r4.yaml
   SIM_PROPERTIES: cosmic_sim.ffe_segments.box_lattice.yaml
+
+fsd_cube_prc2_r3_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc2.yaml
+  FARFIELD_PROPERTIES: ff_r3.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
+
+fsd_cube_prc2_r4_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc2.yaml
+  FARFIELD_PROPERTIES: ff_r4.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
+
+fsd_cube_prc16_r3_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc16.yaml
+  FARFIELD_PROPERTIES: ff_r3.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
+
+fsd_cube_prc16_r4_plane:
+  <<: *fsd_cube
+  DET_PROPERTIES: fsd_cube_prc16.yaml
+  FARFIELD_PROPERTIES: ff_r4.yaml
+  SIM_PROPERTIES: cosmic_sim.ffe_segments.infinite_plane.yaml
