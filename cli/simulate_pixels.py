@@ -1639,8 +1639,8 @@ def run_simulation(input_filename,
                 light_sample_inc_scint_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                 scint_model = np.zeros(n_light_ticks, dtype=np.float32)
                 light_sim.scintillation_array(scint_model)
-                light_sim.calc_scintillation_effect[BPG, TPB](
-                    light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
+                light_sim.calc_scintillation_effect(
+                    BPG, TPB, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint,
                     light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model)
 
                 light_sample_inc_disc = cp.zeros_like(light_sample_inc)
@@ -1655,8 +1655,8 @@ def run_simulation(input_filename,
                 light_response_true_photons = cp.zeros_like(light_sample_inc_true_photons)
                 sipm_response = np.zeros(n_light_ticks, dtype=np.float32)
                 light_sim.sipm_response_array(sipm_response) #precalculate the sipm_response
-                light_sim.calc_light_detector_response[BPG, TPB](
-                    light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
+                light_sim.calc_light_detector_response(
+                    BPG, TPB, light_sample_inc_disc, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons,
                     light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response)
                 #light_response += cp.array(light_sim.gen_light_detector_noise(light_response.shape, light_noise[op_channel.get()]))
                 RangePop()

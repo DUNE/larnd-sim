@@ -160,15 +160,55 @@ def scintillation_array(scint_model):
         p3 = (1 - light.SINGLET_FRACTION) * exp(-time_tick * light.LIGHT_TICK_SIZE / light.TAU_T) * (1 - exp(-light.LIGHT_TICK_SIZE / light.TAU_T))
         scint_model[time_tick] = p1 + p3
 
-@cuda.jit
-def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
+
+def _convolution_kernel_length(kernel):
+    conv_ticks = int(ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0]) / light.LIGHT_TICK_SIZE))
+    return min(kernel.shape[0], conv_ticks + 1)
+
+
+def _fft_convolve_time_axis(signal, kernel, output, scale=None):
     """
-    Applies a smearing effect due to the liquid argon scintillation time profile using
-    a two decay component scintillation model.
+    Accumulates a causal linear convolution along the time axis using an FFT,
+    element-wise frequency-domain multiplication, and inverse FFT.
+    """
+    nticks = signal.shape[-1]
+    kernel_length = min(_convolution_kernel_length(kernel), nticks)
+    if signal.size == 0 or nticks == 0 or kernel_length <= 0:
+        return
+
+    kernel_gpu = cp.asarray(kernel[:kernel_length], dtype=signal.dtype)
+    nfft = nticks + kernel_length - 1
+    signal_fft = cp.fft.rfft(signal, n=nfft, axis=-1)
+    signal_fft *= cp.fft.rfft(kernel_gpu, n=nfft)
+    convolved = cp.fft.irfft(signal_fft, n=nfft, axis=-1)[..., :nticks]
+    if scale is not None:
+        convolved *= scale
+    output += convolved
+
+
+def calc_scintillation_effect(BPG, TPB, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
+    """
+    Applies a smearing effect due to the liquid argon scintillation time profile
+    with FFT-based convolution for the signal and a CUDA kernel for MC truth.
+    """
+    _fft_convolve_time_axis(light_sample_inc, scint_model, light_sample_inc_scint)
+    _calc_scintillation_effect_truth[BPG, TPB](
+        light_sample_inc,
+        light_sample_inc_true_track_id,
+        light_sample_inc_true_photons,
+        light_sample_inc_scint_true_track_id,
+        light_sample_inc_scint_true_photons,
+        scint_model,
+    )
+
+
+@cuda.jit
+def _calc_scintillation_effect_truth(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_sample_inc_scint_true_track_id, light_sample_inc_scint_true_photons, scint_model):
+    """
+    Propagates MC truth through the liquid argon scintillation time profile.
 
     Args:
         light_sample_inc(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, light incident on each detector
-        light_sample_inc_scint(:obj:`numpy.ndarray`): output array, shape `(ndet, ntick)`, light incident on each detector after accounting for scintillation time
     """
     idet,itick = cuda.grid(2)
 
@@ -180,7 +220,6 @@ def calc_scintillation_effect(light_sample_inc, light_sample_inc_true_track_id, 
                 if light_sample_inc[idet,jtick] == 0:
                     continue
                 tick_weight = scint_model[itick-jtick]
-                light_sample_inc_scint[idet,itick] += tick_weight * light_sample_inc[idet,jtick]
 
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
@@ -333,24 +372,41 @@ def sipm_response_array(sipm_response):
             sipm_response[time_tick] = interp(time_tick * light.LIGHT_TICK_SIZE / light.IMPULSE_TICK_SIZE, light.IMPULSE_MODEL, 0, 0)
         sipm_response /= light.IMPULSE_TICK_SIZE/light.LIGHT_TICK_SIZE
 
-@cuda.jit
-def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
+def calc_light_detector_response(BPG, TPB, light_sample_inc, light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response, light_response_true_track_id, light_response_true_photons, light_gain, sipm_response):
     """
-    Simulates the SiPM response and digit
+    Simulates the SiPM response and digit with FFT-based convolution for the
+    signal and a CUDA kernel for MC truth.
 
     Args:
         light_sample_inc(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, PE produced on each SiPM at each time tick
         light_response(:obj:`numpy.ndarray`): shape `(ndet, ntick)`, ADC value at each time tick
     """
+    light_gain = cp.asarray(
+        light_gain[:light_sample_inc.shape[0]], dtype=light_response.dtype
+    )[:, cp.newaxis]
+    _fft_convolve_time_axis(light_sample_inc, sipm_response, light_response, light_gain)
+    _calc_light_detector_response_truth[BPG, TPB](
+        light_sample_inc_true_track_id,
+        light_sample_inc_true_photons,
+        light_response_true_track_id,
+        light_response_true_photons,
+        sipm_response,
+    )
+
+
+@cuda.jit
+def _calc_light_detector_response_truth(light_sample_inc_true_track_id, light_sample_inc_true_photons, light_response_true_track_id, light_response_true_photons, sipm_response):
+    """
+    Propagates MC truth through the SiPM response.
+    """
     idet,itick = cuda.grid(2)
 
-    if idet < light_sample_inc.shape[0]:
-        if itick < light_sample_inc.shape[1]:
+    if idet < light_sample_inc_true_track_id.shape[0]:
+        if itick < light_sample_inc_true_track_id.shape[1]:
             conv_ticks = ceil((light.LIGHT_WINDOW[1] - light.LIGHT_WINDOW[0])/light.LIGHT_TICK_SIZE)
 
             for jtick in range(max(itick - conv_ticks, 0), itick+1):
                 tick_weight = sipm_response[itick-jtick]
-                light_response[idet,itick] += light_gain[idet] * tick_weight * light_sample_inc[idet,jtick]
 
                 # loop over convolution tick truth
                 for itrue in range(light_sample_inc_true_track_id.shape[-1]):
@@ -361,10 +417,11 @@ def calc_light_detector_response(light_sample_inc, light_sample_inc_true_track_i
                         continue
 
                     # loop over current tick truth
+                    track_id = light_sample_inc_true_track_id[idet,jtick,itrue]
                     for jtrue in range(light_response_true_track_id.shape[-1]):
                         # apply convolution if convolution tick matches or if available truth slot
-                        if light_sample_inc_true_track_id[idet,itick,jtrue] == light_sample_inc_true_track_id[idet,itick,itrue] or light_sample_inc_true_track_id[idet,itick,jtrue] == -1:
-                            light_response_true_track_id[idet,itick,jtrue] = light_sample_inc_true_track_id[idet,itick,itrue]
+                        if light_response_true_track_id[idet,itick,jtrue] == track_id or light_response_true_track_id[idet,itick,jtrue] == -1:
+                            light_response_true_track_id[idet,itick,jtrue] = track_id
                             light_response_true_photons[idet,itick,jtrue] += tick_weight * light_sample_inc_true_photons[idet,jtick,itrue]
                             break
 
