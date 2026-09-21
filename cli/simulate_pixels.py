@@ -1505,6 +1505,7 @@ def run_simulation(input_filename,
                                     offset_backtrack=offset_backtrack,
                                     max_signal_time=max_signal_time)
 
+                RangePop()
                 # Accumulate pixels processed via near-field path for this event batch
                 processed_pixels_event = cp.unique(cp.concatenate([processed_pixels_event, unique_pix]))
                 traj_pixel_map = cp.full(track_pixel_map.shape,-1)
