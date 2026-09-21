@@ -170,8 +170,7 @@ def export_to_hdf5(event_id_list,
 
         tile_x = int(pix_x//detector.N_PIXELS_PER_TILE[0])
         tile_y = int(pix_y//detector.N_PIXELS_PER_TILE[1])
-        anode_id = 0 if plane_id % 2 == 0 else 1
-        tile_id = detector.TILE_MAP[anode_id][tile_x][tile_y]
+        tile_id = detector.TILE_MAP[plane_id][tile_x][tile_y]
 
         for iadc, adc in enumerate(adcs):
             t = ts[iadc]
