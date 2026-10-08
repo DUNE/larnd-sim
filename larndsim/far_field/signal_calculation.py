@@ -174,7 +174,7 @@ def calculate_ff_segments(
 
     n_segments = tracks.shape[0]
     l = abs(z_cathode - z_anode)
-    exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
+    exclude_radius = (0.5 + ff_induction.CHARGE_NEIGHBOR_RADIUS) * detector.PIXEL_PITCH
 
     for s_idx in range(n_segments):
         segment = tracks[s_idx]
@@ -218,7 +218,7 @@ def calculate_ff_segments(
             if exclude_radius > 0.0:
                 dx_xy = abs(x - x_pixel)
                 dy_xy = abs(y - y_pixel)
-                if dx_xy <= exclude_radius or dy_xy <= exclude_radius:
+                if dx_xy <= exclude_radius and dy_xy <= exclude_radius:
                     continue
 
             drift_distance = detector.V_DRIFT * t
@@ -235,7 +235,7 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            C = detector.RESPONSE_SAMPLING # scale to near-field reponse's time tick
+            C = ff_induction.DIPOLE_SCALE
             dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
 
             total_current += -q_piece * detector.V_DRIFT * dWdz
@@ -333,23 +333,28 @@ def launch_ffe_kernel(
             pixel_x, pixel_y, pixel_categories,
             z_anode, z_cathode, output)
 
-    def launch_segments():
+    def launch_segments(kernel):
         tpc_tracks = tracks[tracks['pixel_plane'] == tpc_idx]
         if len(tpc_tracks) == 0:
             return
 
-        calculate_ff_segments[BPG, TPB](
+        kernel[BPG, TPB](
             tpc_tracks,
             pixel_x, pixel_y,
             z_anode, z_cathode, output)
 
-    match sim.FARFIELD_MODE:
+    match ff_induction.FARFIELD_MODE:
         case 'voxels':
             launch_voxels()
         case 'segments':
-            launch_segments()
+            match ff_induction.FARFIELD_SIGNAL_MODEL:
+                case 'infinite_plane':
+                    launch_segments(calculate_ff_segments)
+                case _:
+                    e = f"Invalid farfield_signal_model '{ff_induction.FARFIELD_SIGNAL_MODEL}'"
+                    raise RuntimeError(e)
         case _:
-            e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
+            e = f"Invalid farfield_mode '{ff_induction.FARFIELD_MODE}'"
             raise RuntimeError(e)
 
     return output

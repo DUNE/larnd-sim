@@ -13,6 +13,7 @@ CONFIG_DIR = dict(
     SIM_PROPERTIES=f'{MODULE_DIR}/simulation_properties/',
     PIXEL_LAYOUT=f'{MODULE_DIR}/pixel_layouts/',
     DET_PROPERTIES=f'{MODULE_DIR}/detector_properties/',
+    FARFIELD_PROPERTIES=f'{MODULE_DIR}/farfield_properties',
     RESPONSE=f'{MODULE_DIR}/bin',
     LIGHT_LUT=f'{MODULE_DIR}/bin',
     LIGHT_DET_NOISE=f'{MODULE_DIR}/bin',
@@ -31,7 +32,7 @@ def test_configs():
     for cfg_name,cfg_map in CONFIG_MAP.items():
 
         for key in CONFIG_DIR.keys():
-            if key == 'PIXEL_THRESHOLDS_FILE' or key == 'PIXEL_PEDESTALS_FILE':
+            if key in ['PIXEL_THRESHOLDS_FILE','PIXEL_PEDESTALS_FILE', 'FARFIELD_PROPERTIES']:
                 # Don't throw an error for optional keys
                 continue
             if not key in cfg_map.keys():
