@@ -1497,8 +1497,6 @@ def run_simulation(input_filename,
                         if not np.any(tpc_mask):
                             continue
 
-                        assert np.all(tpc_mask) # fsdcube
-
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
                             tracks=all_selected_tracks,
