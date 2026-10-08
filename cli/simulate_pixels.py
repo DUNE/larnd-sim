@@ -375,17 +375,6 @@ def do_save_results(
                                                 compression=compression)
 
 
-def concat_pad_fast(arrays):
-    max_cols = max(a.shape[1] for a in arrays)
-    total_rows = sum(a.shape[0] for a in arrays)
-    out = np.zeros((total_rows, max_cols), dtype=arrays[0].dtype)
-    row = 0
-    for a in arrays:
-        out[row:row + a.shape[0], :a.shape[1]] = a
-        row += a.shape[0]
-    return out
-
-
 def run_simulation(input_filename,
                    output_filename,
                    config='2x2',
