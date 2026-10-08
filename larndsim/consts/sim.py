@@ -40,7 +40,6 @@ MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
 FARFIELD_ENABLED = False
 FARFIELD_MODE = 'segments'      # 'segments' or 'voxels'; latter unvalidated
-# Far-field model to use ('infinite_plane', 'box_lattice')
 FARFIELD_SIGNAL_MODEL = 'infinite_plane'
 
 def set_simulation_properties(simprop_file):
@@ -107,7 +106,7 @@ def set_simulation_properties(simprop_file):
                             f"must be one of {options}")
 
     FARFIELD_SIGNAL_MODEL = simprop.get('farfield_signal_model', FARFIELD_SIGNAL_MODEL)
-    options = ['infinite_plane', 'box_lattice']
+    options = ['infinite_plane']
     if FARFIELD_SIGNAL_MODEL not in options:
         raise RuntimeError(f"Invalid farfield_signal_model {FARFIELD_SIGNAL_MODEL}; " +
                             f"must be one of {options}")

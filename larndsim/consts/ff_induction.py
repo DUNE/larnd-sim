@@ -41,18 +41,10 @@ INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 # How many terms to include in the z-dipole expansion
 DIPOLE_N_TERMS = 5
 
-# Normalization constant for dipole; found emperically
+# Normalization constant for dipole; found empirically
 # ~1.50 for infinite-plane dipole
-# ~1.38 for lattice dipole
 DIPOLE_SCALE = 1.5
 
-# Detector half-width in X/Y for the lattice image calculation
-# FIXME: Should use geometry info rather than (FSD Cube) values specified here
-LATTICE_LX = 23.80              # cm
-LATTICE_LY = 14.90              # cm
-
-# Number of X/Y terms to include in the dipole expansion
-LATTICE_N_TERMS_XY = 10
 
 def set_ff_induction_properties(ffprop_file: str):
     """Load far-field induction properties.
@@ -70,9 +62,6 @@ def set_ff_induction_properties(ffprop_file: str):
     global INDUCTION_SIGNAL_THRESHOLD
     global DIPOLE_N_TERMS
     global DIPOLE_SCALE
-    global LATTICE_LX
-    global LATTICE_LY
-    global LATTICE_N_TERMS_XY
 
     with open(ffprop_file) as df:
         ffprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -87,6 +76,3 @@ def set_ff_induction_properties(ffprop_file: str):
     INDUCTION_SIGNAL_THRESHOLD = ffprop.get('induction_signal_threshold', INDUCTION_SIGNAL_THRESHOLD)
     DIPOLE_N_TERMS = ffprop.get('dipole_n_terms', DIPOLE_N_TERMS)
     DIPOLE_SCALE = ffprop.get('dipole_scale', DIPOLE_SCALE)
-    LATTICE_LX = ffprop.get('lattice_lx', LATTICE_LX)
-    LATTICE_LY = ffprop.get('lattice_ly', LATTICE_LY)
-    LATTICE_N_TERMS_XY = ffprop.get('lattice_n_terms_xy', LATTICE_N_TERMS_XY)

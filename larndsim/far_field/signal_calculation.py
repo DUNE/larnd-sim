@@ -1,23 +1,5 @@
 """
 Signal calculation module for far field
-
-  consts.sim.FARFIELD_SIGNAL_MODEL : str
-      'infinite_plane' (default/current behavior, dipole_dWdz -- two
-      infinite grounded planes, anode + cathode only) or 'box_lattice'
-      (image_lattice_dWdz -- adds grounded side-wall reflections).
-      Only affects calculate_ff_segments; calculate_ff_voxels is
-      unchanged and always uses dipole_dWdz.
-
-  consts.ff_induction.LATTICE_LX, LATTICE_LY : float
-      Box half-widths for the grounded side walls (x=+/-LATTICE_LX,
-      y=+/-LATTICE_LY), analogous to BOX_LX/BOX_LY in
-      hybrid_pixel_response_boxed.py.
-
-  consts.ff_induction.LATTICE_N_TERMS_XY : int
-      Number of side-wall image reflections per direction (total
-      (2*LATTICE_N_TERMS_XY+1)**2 lattice points evaluated per
-      cathode image). ff_induction.DIPOLE_N_TERMS is reused for the
-      cathode/z-image degree, same as in calculate_ff_segments.
 """
 
 from functools import lru_cache
@@ -253,125 +235,8 @@ def calculate_ff_segments(
             dy = y - y_pixel
             dz = z - z_anode
 
-            # C = ff_induction.DIPOLE_SCALE
-            # dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
-            pix_halfw = 0.18
-            dWdz = near_field_dWdz(dx, dy, dz, pix_halfw, pix_halfw, l,
-                                   ff_induction.DIPOLE_N_TERMS)
-
-            total_current += -q_piece * detector.V_DRIFT * dWdz
-
-    output[p_idx, t_idx] = total_current
-
-
-@cuda.jit
-def calculate_ff_segments_box_lattice(
-    tracks: cpt.NDArray,
-    pixel_x: cpt.NDArray[cp.float32],
-    pixel_y: cpt.NDArray[cp.float32],
-    z_anode: float,
-    z_cathode: float,
-    output: cp.ndarray[tuple[int, int], cp.float32]
-):
-    """
-    CUDA kernel: Calculate far-field induced current using segments,
-    with the box-aware image-lattice far field (image_lattice_dWdz) in
-    place of the infinite-plane dipole (dipole_dWdz).
-
-    Identical to calculate_ff_segments() in every respect (exclusion
-    handling, segment splitting, drift geometry) except the per-piece
-    dW/dz calculation, which additionally reflects images off grounded
-    side walls at x=+/-ff_induction.LATTICE_LX, y=+/-ff_induction.LATTICE_LY
-    (see image_lattice_dWdz docstring). Selected via
-    sim.FARFIELD_SIGNAL_MODEL = 'box_lattice' in launch_ffe_kernel().
-
-    Args:
-        tracks: structured track array (fields: x_start, y_start, z_start,
-            x_end, y_end, z_end, n_electrons, pixel_plane, ...)
-        pixel_x/y: (n_pixels,) array of x/y-positions of each pixel's center
-        z_anode/cathode: Drift coordinate of the anode/cathode
-        output: (n_pixels, n_ticks) array of current signals
-    """
-    p_idx, t_idx = cuda.grid(2)
-    n_pixels = pixel_x.shape[0]
-    n_ticks = output.shape[1]
-    if p_idx >= n_pixels or t_idx >= n_ticks:
-        return
-
-    x_pixel = pixel_x[p_idx]
-    y_pixel = pixel_y[p_idx]
-    t = t_idx * detector.TIME_SAMPLING
-    total_current = 0.0
-
-    n_segments = tracks.shape[0]
-    l = abs(z_cathode - z_anode)
-    exclude_radius = ff_induction.CHARGE_NEIGHBOR_RADIUS * detector.PIXEL_PITCH
-
-    for s_idx in range(n_segments):
-        segment = tracks[s_idx]
-        x0 = segment['x_start']
-        y0 = segment['y_start']
-        z0_seg = segment['z_start']
-        x1 = segment['x_end']
-        y1 = segment['y_end']
-        z1 = segment['z_end']
-
-        # skip before splitting into sub-pieces.
-        if exclude_radius > 0.0:
-            dx0 = abs(x0 - x_pixel)
-            dy0 = abs(y0 - y_pixel)
-            dx1 = abs(x1 - x_pixel)
-            dy1 = abs(y1 - y_pixel)
-            if max(dx0, dx1) <= exclude_radius and max(dy0, dy1) <= exclude_radius:
-                continue
-
-        vx = x1 - x0
-        vy = y1 - y0
-        vz = z1 - z0_seg
-        seg_len_sq = vx*vx + vy*vy + vz*vz
-        if seg_len_sq <= 1e-20:
-            continue
-        seg_len = math.sqrt(seg_len_sq)
-
-        n_split, step = 1, ff_induction.FAR_FIELD_SEGMENT_STEP_CM
-        if step > 0.0:
-            n_split = max(int(math.ceil(seg_len / step)), 1)
-
-        q_piece = segment['n_electrons'] / n_split
-
-        for i_split in range(n_split):
-            frac = (i_split + 0.5) / n_split
-            x = x0 + frac * vx
-            y = y0 + frac * vy
-            z_start_piece = z0_seg + frac * vz
-
-            # far-field exclusion radius
-            if exclude_radius > 0.0:
-                dx_xy = abs(x - x_pixel)
-                dy_xy = abs(y - y_pixel)
-                if dx_xy <= exclude_radius and dy_xy <= exclude_radius:
-                    continue
-
-            drift_distance = detector.V_DRIFT * t
-            if z_start_piece > z_anode:
-                z = z_start_piece - drift_distance
-                if z < z_anode:
-                    continue
-            else:
-                z = z_start_piece + drift_distance
-                if z > z_anode:
-                    continue
-
-            dx = x - x_pixel
-            dy = y - y_pixel
-            dz = z - z_anode
-
             C = ff_induction.DIPOLE_SCALE
-            C *= 0.01 # something something units
-            dWdz = C * image_lattice_dWdz(
-                dx, dy, dz, l,
-                ff_induction.LATTICE_LX, ff_induction.LATTICE_LY,
-                ff_induction.DIPOLE_N_TERMS, ff_induction.LATTICE_N_TERMS_XY)
+            dWdz = C * dipole_dWdz(dx, dy, dz, l, ff_induction.DIPOLE_N_TERMS)
 
             total_current += -q_piece * detector.V_DRIFT * dWdz
 
@@ -416,121 +281,6 @@ def dipole_dWdz(dx: float, dy: float, dz: float, l: float, n_terms: int) -> floa
             term_sum += (r_m_sq - 3.0*dz_m*dz_m) / (r_m_sq*r_m_sq*r_m)
     # Total z-component of weighting field gradient (Eq. 3.21)
     return term0 + term_sum
-
-
-@nb.njit
-def image_lattice_dWdz(dx: float, dy: float, dz: float, l: float,
-                        Lx: float, Ly: float, n_terms_z: int,
-                        n_terms_xy: int) -> float:
-    """
-    Box-aware dipole field calculation: combines a cathode image series
-    with additional image reflections off grounded side walls at
-    x=+/-Lx, y=+/-Ly.
-
-    The pixel/dipole sits at the box center (x=y=0 in pixel-relative
-    coordinates), so reflecting off a wall pair a distance L away
-    generates images at x = 2*j*L for every integer j, with alternating
-    sign (-1)**j (j=0 recovers the un-reflected term). Combining
-    independent reflections off the x- and y-walls gives a 2D lattice
-    of images with sign (-1)**(j+k), applied to *every* z-image.
-
-    Args:
-        (dx, dy, dz): Vector from electron to pixel (test point
-            relative to the dipole), with the pixel taken as the box
-            center in x, y
-        l: Drift length (anode-cathode separation)
-        Lx, Ly: Box half-widths -- grounded walls at x=+/-Lx, y=+/-Ly
-        n_terms_z: Degree of the cathode image series (images at
-            dz + 2*n*l for n = -n_terms_z .. n_terms_z)
-        n_terms_xy: Degree of the side-wall image lattice in each of
-            x and y (total (2*n_terms_xy+1)**2 lattice points per
-            z-image)
-
-    Returns:
-        Calculated Shockley-Ramo weighting field for the current
-        induced on the pixel, including both cathode and side-wall
-        image reflections
-    """
-    total = 0.0
-    for j in range(-n_terms_xy, n_terms_xy + 1):
-        dx_j = dx - 2 * j * Lx
-        for k in range(-n_terms_xy, n_terms_xy + 1):
-            dy_k = dy - 2 * k * Ly
-            sign = 1.0 if (j + k) % 2 == 0 else -1.0
-
-            # Cathode (z) image series, linear 2*n*l spacing (matches
-            # far_field_image_lattice_potential), reflected off the
-            # same x/y wall lattice
-            for n in range(-n_terms_z, n_terms_z + 1):
-                dz_n = dz + 2 * n * l
-                r_sq = dx_j*dx_j + dy_k*dy_k + dz_n*dz_n
-                if r_sq > 1e-20:
-                    r = math.sqrt(r_sq)
-                    total += sign * (r_sq - 3.0*dz_n*dz_n) / (r_sq*r_sq*r)
-    return total
-
-
-@nb.njit
-def _corner_angle_dz(a: float, b: float, zpos: float) -> float:
-    """d/dzpos of _corner_angle(a, b, zpos), holding a, b fixed.
-
-    _corner_angle(a, b, zpos) = arctan2(u, v) with u = a*b (independent
-    of zpos) and v = zpos*r, r = sqrt(a^2+b^2+zpos^2). Using
-    d/dt atan2(u, v) = (v u' - u v') / (u^2 + v^2), and u' = 0 here,
-    this reduces to -u v' / (u^2 + v^2), with
-    v' = dv/dzpos = r + zpos^2/r = (a^2+b^2+2*zpos^2) / r.
-    """
-    r = math.sqrt(a**2 + b**2 + zpos**2)
-    u = a * b
-    v = zpos * r
-    dv_dzpos = (a**2 + b**2 + 2.0 * zpos**2) / r
-    return -u * dv_dzpos / (u**2 + v**2)
-
-
-@nb.njit
-def _patch_solid_angle_potential_dz(x: float, y: float, z: float,
-                                    wx: float, wy: float) -> float:
-    """d/dzpos of _patch_solid_angle_potential(x, y, zpos, wx, wy),
-    for zpos > 0 (same convention/singularity guard as that function)."""
-    x1, x2 = -wx - x, wx - x
-    y1, y2 = -wy - y, wy - y
-    domega = (_corner_angle_dz(x2, y2, z)
-              - _corner_angle_dz(x1, y2, z)
-              - _corner_angle_dz(x2, y1, z)
-              + _corner_angle_dz(x1, y1, z))
-    return domega / (2.0 * np.pi)
-
-
-@nb.njit
-def near_field_dWdz(dx: float, dy: float, dz: float,
-                    wx: float, wy: float, l: float, n_terms: int) \
-                    -> float:
-    """Analytic dW/dz of near_field_potential -- the z-component of the
-    exact finite-size-pixel weighting field, for direct use in place of
-    finite-differencing near_field_potential.
-
-    Derivation: _patch_signed(x,y,z,wx,wy,z_src) = sign(zz) * g(|zz|)
-    with zz = z - z_src and g = _patch_solid_angle_potential(x,y,.,wx,wy).
-    Since d|zz|/dz = sign(zz), the chain rule gives
-        d/dz [sign(zz) * g(|zz|)] = sign(zz) * g'(|zz|) * sign(zz)
-                                   = g'(|zz|)
-    i.e. the sign(zz) factors cancel and the derivative is just the
-    *unsigned* zpos-derivative of the solid-angle formula (see
-    _patch_solid_angle_potential_dz), evaluated at |zz|, for every
-    image term -- no explicit sign/odd-extension bookkeeping needed
-    here (verified numerically against central differences of
-    near_field_potential to ~1e-10 relative error, both within and
-    across image planes).
-
-    Only the z-component is provided (no dW/dx, dW/dy), matching
-    dipole_dWdz / image_lattice_dWdz in larndsim_ffe_signal.py, since
-    the simulated drift is purely along z.
-    """
-    total = 0
-    for n in range(-n_terms, n_terms + 1):
-        total += _patch_solid_angle_potential_dz(
-            dx, dy, abs(dz - 2 * n * l), wx, wy)
-    return total
 
 
 def launch_ffe_kernel(
@@ -600,8 +350,6 @@ def launch_ffe_kernel(
             match sim.FARFIELD_SIGNAL_MODEL:
                 case 'infinite_plane':
                     launch_segments(calculate_ff_segments)
-                case 'box_lattice':
-                    launch_segments(calculate_ff_segments_box_lattice)
                 case _:
                     e = f"Invalid farfield_signal_model '{sim.FARFIELD_SIGNAL_MODEL}'"
                     raise RuntimeError(e)
