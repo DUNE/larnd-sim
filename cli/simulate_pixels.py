@@ -686,7 +686,7 @@ def run_simulation(input_filename,
     importlib.reload(fee)
 
     if sim.FARFIELD_ENABLED:
-        print("Far-field mode:", sim.FARFIELD_MODE)
+        print("Far-field mode:", ff_induction.FARFIELD_MODE)
         if farfield_properties:
             print(f"Far-field properties file: {farfield_properties}")
         else:
@@ -697,7 +697,7 @@ def run_simulation(input_filename,
         else:
             print("No far-field properties file specified; using default properties")
 
-        print("Dipole method:", sim.FARFIELD_SIGNAL_MODEL)
+        print("Dipole method:", ff_induction.FARFIELD_SIGNAL_MODEL)
 
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
@@ -1291,7 +1291,7 @@ def run_simulation(input_filename,
             if sim.FARFIELD_ENABLED:
                 classification_cache = \
                     pixel_classifier.get_classification_cache(all_selected_tracks)
-                if sim.FARFIELD_MODE == 'voxels':
+                if ff_induction.FARFIELD_MODE == 'voxels':
                     voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
             RangePop()
 

@@ -39,8 +39,6 @@ MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
 MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
 FARFIELD_ENABLED = False
-FARFIELD_MODE = 'segments'      # 'segments' or 'voxels'; latter unvalidated
-FARFIELD_SIGNAL_MODEL = 'infinite_plane'
 
 def set_simulation_properties(simprop_file):
     """
@@ -73,8 +71,6 @@ def set_simulation_properties(simprop_file):
     global MC_TRUTH_THRESHOLD
 
     global FARFIELD_ENABLED
-    global FARFIELD_MODE
-    global FARFIELD_SIGNAL_MODEL
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -98,15 +94,3 @@ def set_simulation_properties(simprop_file):
     MC_TRUTH_THRESHOLD = simprop.get('mc_truth_threshold', MC_TRUTH_THRESHOLD)
 
     FARFIELD_ENABLED = bool(simprop.get('farfield_enabled', FARFIELD_ENABLED))
-
-    FARFIELD_MODE = simprop.get('farfield_mode', FARFIELD_MODE)
-    options = ['segments', 'voxels']
-    if FARFIELD_MODE not in options:
-        raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
-                            f"must be one of {options}")
-
-    FARFIELD_SIGNAL_MODEL = simprop.get('farfield_signal_model', FARFIELD_SIGNAL_MODEL)
-    options = ['infinite_plane']
-    if FARFIELD_SIGNAL_MODEL not in options:
-        raise RuntimeError(f"Invalid farfield_signal_model {FARFIELD_SIGNAL_MODEL}; " +
-                            f"must be one of {options}")

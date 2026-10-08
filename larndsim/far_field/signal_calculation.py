@@ -343,18 +343,18 @@ def launch_ffe_kernel(
             pixel_x, pixel_y,
             z_anode, z_cathode, output)
 
-    match sim.FARFIELD_MODE:
+    match ff_induction.FARFIELD_MODE:
         case 'voxels':
             launch_voxels()
         case 'segments':
-            match sim.FARFIELD_SIGNAL_MODEL:
+            match ff_induction.FARFIELD_SIGNAL_MODEL:
                 case 'infinite_plane':
                     launch_segments(calculate_ff_segments)
                 case _:
-                    e = f"Invalid farfield_signal_model '{sim.FARFIELD_SIGNAL_MODEL}'"
+                    e = f"Invalid farfield_signal_model '{ff_induction.FARFIELD_SIGNAL_MODEL}'"
                     raise RuntimeError(e)
         case _:
-            e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"
+            e = f"Invalid farfield_mode '{ff_induction.FARFIELD_MODE}'"
             raise RuntimeError(e)
 
     return output

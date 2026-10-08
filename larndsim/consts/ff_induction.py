@@ -6,6 +6,12 @@ import yaml
 
 from .units import cm
 
+#: Whether to use segments or voxels for FFE
+FARFIELD_MODE = 'segments'
+
+#: Model to use for the induced current
+FARFIELD_SIGNAL_MODEL = 'infinite_plane'
+
 ###################
 # Voxel Resolution
 ###################
@@ -42,7 +48,7 @@ INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 DIPOLE_N_TERMS = 5
 
 # Normalization constant for dipole; found empirically
-# ~1.50 for infinite-plane dipole
+# ~1.50 for infinite-plane dipole in FSD Cube
 DIPOLE_SCALE = 1.5
 
 
@@ -52,6 +58,8 @@ def set_ff_induction_properties(ffprop_file: str):
     Args:
         ffprop_file: YAML filename
     """
+    global FARFIELD_MODE
+    global FARFIELD_SIGNAL_MODEL
     global COARSE_VOXEL_SIZE_X
     global COARSE_VOXEL_SIZE_Y
     global COARSE_VOXEL_SIZE_Z
@@ -65,6 +73,18 @@ def set_ff_induction_properties(ffprop_file: str):
 
     with open(ffprop_file) as df:
         ffprop = yaml.load(df, Loader=yaml.FullLoader)
+
+    FARFIELD_MODE = ffprop.get('farfield_mode', FARFIELD_MODE)
+    options = ['segments', 'voxels']
+    if FARFIELD_MODE not in options:
+        raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
+                            f"must be one of {options}")
+
+    FARFIELD_SIGNAL_MODEL = ffprop.get('farfield_signal_model', FARFIELD_SIGNAL_MODEL)
+    options = ['infinite_plane']
+    if FARFIELD_SIGNAL_MODEL not in options:
+        raise RuntimeError(f"Invalid farfield_signal_model {FARFIELD_SIGNAL_MODEL}; " +
+                            f"must be one of {options}")
 
     COARSE_VOXEL_SIZE_X = ffprop.get('coarse_voxel_size_x', COARSE_VOXEL_SIZE_X)
     COARSE_VOXEL_SIZE_Y = ffprop.get('coarse_voxel_size_y', COARSE_VOXEL_SIZE_Y)
