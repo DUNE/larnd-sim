@@ -692,11 +692,6 @@ def run_simulation(input_filename,
         else:
             print("No far-field properties file specified; using default properties")
 
-        if farfield_properties:
-            print(f"Far-field properties file: {farfield_properties}")
-        else:
-            print("No far-field properties file specified; using default properties")
-
         print("Dipole method:", ff_induction.FARFIELD_SIGNAL_MODEL)
 
 
