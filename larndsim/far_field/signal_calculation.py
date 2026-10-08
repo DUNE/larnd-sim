@@ -1,7 +1,7 @@
 """
 Signal calculation module for far field
 
-  consts.sim.FARFIELD_DIPOLE_MODE : str
+  consts.sim.FARFIELD_SIGNAL_MODEL : str
       'infinite_plane' (default/current behavior, dipole_dWdz -- two
       infinite grounded planes, anode + cathode only) or 'box_lattice'
       (image_lattice_dWdz -- adds grounded side-wall reflections).
@@ -283,7 +283,7 @@ def calculate_ff_segments_box_lattice(
     dW/dz calculation, which additionally reflects images off grounded
     side walls at x=+/-ff_induction.LATTICE_LX, y=+/-ff_induction.LATTICE_LY
     (see image_lattice_dWdz docstring). Selected via
-    sim.FARFIELD_DIPOLE_MODE = 'box_lattice' in launch_ffe_kernel().
+    sim.FARFIELD_SIGNAL_MODEL = 'box_lattice' in launch_ffe_kernel().
 
     Args:
         tracks: structured track array (fields: x_start, y_start, z_start,
@@ -597,13 +597,13 @@ def launch_ffe_kernel(
         case 'voxels':
             launch_voxels()
         case 'segments':
-            match sim.FARFIELD_DIPOLE_MODE:
+            match sim.FARFIELD_SIGNAL_MODEL:
                 case 'infinite_plane':
                     launch_segments(calculate_ff_segments)
                 case 'box_lattice':
                     launch_segments(calculate_ff_segments_box_lattice)
                 case _:
-                    e = f"Invalid farfield_dipole_mode '{sim.FARFIELD_DIPOLE_MODE}'"
+                    e = f"Invalid farfield_signal_model '{sim.FARFIELD_SIGNAL_MODEL}'"
                     raise RuntimeError(e)
         case _:
             e = f"Invalid farfield_mode '{sim.FARFIELD_MODE}'"

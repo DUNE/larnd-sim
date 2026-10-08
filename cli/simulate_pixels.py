@@ -697,7 +697,7 @@ def run_simulation(input_filename,
         else:
             print("No far-field properties file specified; using default properties")
 
-        print("Dipole method:", sim.FARFIELD_DIPOLE_MODE)
+        print("Dipole method:", sim.FARFIELD_SIGNAL_MODEL)
 
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:

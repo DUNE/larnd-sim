@@ -39,9 +39,9 @@ MAX_MC_TRUTH_IDS = 0 # higher is better, but file size increases
 MC_TRUTH_THRESHOLD = 0.1 # pe/us lower is better, but memory usage increases
 
 FARFIELD_ENABLED = False
-FARFIELD_MODE = 'segments'
-# Dipole approximation to use: 'infinite_plane' or 'box_lattice'
-FARFIELD_DIPOLE_MODE = 'infinite_plane'
+FARFIELD_MODE = 'segments'      # 'segments' or 'voxels'; latter unvalidated
+# Far-field model to use ('infinite_plane', 'box_lattice')
+FARFIELD_SIGNAL_MODEL = 'infinite_plane'
 
 def set_simulation_properties(simprop_file):
     """
@@ -75,7 +75,7 @@ def set_simulation_properties(simprop_file):
 
     global FARFIELD_ENABLED
     global FARFIELD_MODE
-    global FARFIELD_DIPOLE_MODE
+    global FARFIELD_SIGNAL_MODEL
 
     with open(simprop_file) as df:
         simprop = yaml.load(df, Loader=yaml.FullLoader)
@@ -106,8 +106,8 @@ def set_simulation_properties(simprop_file):
         raise RuntimeError(f"Invalid farfield_mode {FARFIELD_MODE}; " +
                             f"must be one of {options}")
 
-    FARFIELD_DIPOLE_MODE = simprop.get('farfield_dipole_mode', FARFIELD_DIPOLE_MODE)
+    FARFIELD_SIGNAL_MODEL = simprop.get('farfield_signal_model', FARFIELD_SIGNAL_MODEL)
     options = ['infinite_plane', 'box_lattice']
-    if FARFIELD_DIPOLE_MODE not in options:
-        raise RuntimeError(f"Invalid farfield_dipole_mode {FARFIELD_DIPOLE_MODE}; " +
+    if FARFIELD_SIGNAL_MODEL not in options:
+        raise RuntimeError(f"Invalid farfield_signal_model {FARFIELD_SIGNAL_MODEL}; " +
                             f"must be one of {options}")
