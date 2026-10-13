@@ -5,7 +5,7 @@ import subprocess
 
 dependencies = [
     "cupy",
-    "numpy",
+    "numpy>=2.0,<2.5", # capped at <2.5 until we update numba-cuda to numba-cuda-mlir
     "numba>=0.52",
     "pytest",
     "larpix-control @ git+https://github.com/larpix/larpix-control.git@release",
