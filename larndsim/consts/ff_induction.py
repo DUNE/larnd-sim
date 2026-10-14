@@ -48,8 +48,8 @@ INDUCTION_SIGNAL_THRESHOLD = 2000.0  # e-
 DIPOLE_N_TERMS = 5
 
 # Normalization constant for dipole; found empirically
-# ~1.50 for infinite-plane dipole in FSD Cube
-DIPOLE_SCALE = 1.5
+# ~0.0150 for infinite-plane dipole in FSD Cube
+DIPOLE_SCALE = 0.015
 
 
 def set_ff_induction_properties(ffprop_file: str):
