@@ -491,6 +491,9 @@ def run_simulation(input_filename,
 
     if simulation_properties is None:
         simulation_properties = cfg['SIM_PROPERTIES']
+
+    farfield_properties = cfg.get('FARFIELD_PROPERTIES')
+
     if light_simulated is None:
         try:
             light_simulated = cfg['LIGHT_SIMULATED']
@@ -636,7 +639,7 @@ def run_simulation(input_filename,
             light_lut_filename = light_lut_filename[0]
 
         RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties)
+        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties, farfield_properties)
         from larndsim.consts import light, detector, physics, sim
         RangePop()
 
@@ -667,6 +670,8 @@ def run_simulation(input_filename,
     else:
         consts.light.set_light_properties(detector_properties)
         consts.sim.set_simulation_properties(simulation_properties)
+        if farfield_properties:
+            consts.ff_induction.set_ff_induction_properties(farfield_properties)
         from larndsim.consts import light, physics, sim
 
     # set the value for the global variable MOD2MOD_VARIATION
@@ -681,7 +686,14 @@ def run_simulation(input_filename,
     importlib.reload(fee)
 
     if sim.FARFIELD_ENABLED:
-        print("Far-field mode:", sim.FARFIELD_MODE)
+        print("Far-field mode:", ff_induction.FARFIELD_MODE)
+        if farfield_properties:
+            print(f"Far-field properties file: {farfield_properties}")
+        else:
+            print("No far-field properties file specified; using default properties")
+
+        print("Dipole method:", ff_induction.FARFIELD_SIGNAL_MODEL)
+
 
     #if light.LIGHT_TRIG_MODE == 1 and not sim.IS_SPILL_SIM:
     #    raise ValueError("The simulation property indicates it is not beam simulation, but the light trigger mode is set to the beam trigger mode!")
@@ -1274,7 +1286,7 @@ def run_simulation(input_filename,
             if sim.FARFIELD_ENABLED:
                 classification_cache = \
                     pixel_classifier.get_classification_cache(all_selected_tracks)
-                if sim.FARFIELD_MODE == 'voxels':
+                if ff_induction.FARFIELD_MODE == 'voxels':
                     voxel_cache = voxelization.get_voxel_cache(all_selected_tracks)
             RangePop()
 
@@ -1288,6 +1300,7 @@ def run_simulation(input_filename,
                     tqdm(pixel_ranges, delay=1,
                          desc='  Simulating event %i batches...' % ievd,
                          leave=False, ncols=80):
+
                 RangePush("setup_pixel_batch")
                 selected_pix = all_unique_pix[start_pix:stop_pix]
 
@@ -1492,8 +1505,6 @@ def run_simulation(input_filename,
 
                     RangePop()
                 
-                # np.savez(f'sig_{ievd}_{start_pix}_nf.npz', signals=pixels_signals, pixels=unique_pix)
-
                 RangePush("get_adc_values", 3)
 
                 # Here we simulate the electronics response (the self-triggering cycle) and the signal digitization

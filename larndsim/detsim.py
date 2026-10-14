@@ -247,38 +247,37 @@ def sum_pixel_signals(pixels_signals, signals, track_t0, pixel_index_map, track_
 
     # size of signals
     itrk, ipix, itick = cuda.grid(3)
+    if itrk >= signals.shape[0] or ipix >= signals.shape[1] or itick >= signals.shape[2]:
+        return
+
+    pixel_index = pixel_index_map[itrk][ipix]
+    if pixel_index < 0:
+        return
+
+    cuda.atomic.add(pixels_signals,
+                    (pixel_index, itick + track_t0[itrk]),
+                    signals[itrk][ipix][itick])
 
     # equivalent to num_backtrack.sum()
     total_backtracks = offset_backtrack[-1] + num_backtrack[-1]
 
-    if itrk < signals.shape[0] and ipix < signals.shape[1]:
+    # index into the jagged pixels_tracks_signals array for this pixel and tick
+    # account track t0 in the backtracking
+    base_idx = total_backtracks * (itick + track_t0[itrk]) + offset_backtrack[pixel_index]
 
-        pixel_index = pixel_index_map[itrk][ipix]
-        # index into the jagged pixels_tracks_signals array for this pixel and tick
-        # account track t0 in the backtracking
-        base_idx = total_backtracks * (itick + track_t0[itrk]) + offset_backtrack[pixel_index]
+    flag = 1
+    for track_idx in range(track_pixel_map[pixel_index].shape[0]):
+        if int(track_pixel_map[pixel_index][track_idx]) == -1:
+            break
+        if itrk == int(track_pixel_map[pixel_index][track_idx]):
+            cuda.atomic.add(pixels_tracks_signals,
+                            base_idx + track_idx,
+                            signals[itrk][ipix][itick])
+            flag = 0
+            break
 
-        if pixel_index >= 0:
-            counter = -99
-            for track_idx in range(track_pixel_map[pixel_index].shape[0]):
-                if int(track_pixel_map[pixel_index][track_idx]) == -1:
-                    break
-                if itrk == int(track_pixel_map[pixel_index][track_idx]):
-                    counter = track_idx
-                    if counter >= 0 and itick < signals.shape[2]:
-                        if itick < pixels_signals.shape[1] and itick > -1:
-                            # account track t0 here
-                            cuda.atomic.add(pixels_signals,
-                                            (pixel_index, itick + track_t0[itrk]),
-                                            signals[itrk][ipix][itick])
-                            cuda.atomic.add(pixels_tracks_signals,
-                                            base_idx + counter,
-                                            signals[itrk][ipix][itick])
-                    break
-
-            if counter < 0:
-                # The overflow_flag is for both overflow (too many segments for backtracking) and underflow (no backtracking the pixel is considered too far from the segments)
-                overflow_flag[pixel_index] = 1
+    # The overflow_flag is for both overflow (too many segments for backtracking) and underflow (no backtracking the pixel is considered too far from the segments)
+    overflow_flag[pixel_index] = flag
 
 @cuda.jit
 def get_track_pixel_map(track_pixel_map, unique_pix, pixels):
