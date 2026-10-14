@@ -33,7 +33,7 @@ COARSE_VOXEL_SIZE_Z = 0.5 * cm  # cm, matches XY default
 CHARGE_COLLECTION_RADIUS = 1  # pixels
 
 # Neighbor pixel radius
-CHARGE_NEIGHBOR_RADIUS = 2  # pixels
+CHARGE_NEIGHBOR_RADIUS = 4  # pixels
 
 # Maximum induction consideration distance
 INDUCTION_CUTOFF_RADIUS = 50 # cm
