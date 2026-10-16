@@ -26,6 +26,8 @@ jobs:
   build-docs:
     name: Build Sphinx documentation
     runs-on: ubuntu-latest
+    env:
+      SKIP_CUPY_INSTALL: 1
 
     steps:
       - name: Checkout repository
