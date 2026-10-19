@@ -1506,8 +1506,6 @@ def run_simulation(input_filename,
                         if not np.any(tpc_mask):
                             continue
 
-                        assert np.all(tpc_mask) # fsdcube
-
                         if save_signals:
                             from pathlib import Path
                             bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_pixbatch}.npz'
