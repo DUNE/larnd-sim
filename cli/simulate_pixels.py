@@ -409,7 +409,8 @@ def run_simulation(input_filename,
                    pixel_pedestals_id=None,
                    rand_seed=None,
                    compression=None,
-                   save_memory=None):
+                   save_memory=None,
+                   save_signals=None):
     """
     Command-line interface to run the simulation of a pixelated LArTPC
 
@@ -1507,15 +1508,16 @@ def run_simulation(input_filename,
 
                         assert np.all(tpc_mask) # fsdcube
 
-                        from pathlib import Path
-                        bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_pixbatch}.npz'
-                        bt_path.parent.mkdir(exist_ok=True)
-                        np.savez(bt_path,
-                                 tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
-                                 n_ticks=np.array([signals_ticks_t0]),
-                                 pixels_tracks_signals=pixels_tracks_signals,
-                                 num_backtrack=num_backtrack,
-                                 track_pixel_map=track_pixel_map)
+                        if save_signals:
+                            from pathlib import Path
+                            bt_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/bt_signals.{ievd:02d}.{i_pixbatch}.npz'
+                            bt_path.parent.mkdir(exist_ok=True)
+                            np.savez(bt_path,
+                                    tracks=all_selected_tracks, pixel_x=pixel_x, pixel_y=pixel_y,
+                                    n_ticks=np.array([signals_ticks_t0]),
+                                    pixels_tracks_signals=pixels_tracks_signals,
+                                    num_backtrack=num_backtrack,
+                                    track_pixel_map=track_pixel_map)
 
                         ff_signals_tpc = signal_calculation.launch_ffe_kernel(
                             tpc_idx=tpc_idx,
@@ -1556,15 +1558,16 @@ def run_simulation(input_filename,
                 results_acc['traj_pixel_map'].append(traj_pixel_map)
                 results_acc['track_pixel_map'].append(track_pixel_map)
 
-            from pathlib import Path
-            sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.npz'
-            sig_path.parent.mkdir(exist_ok=True)
-            if saved_pixels_near:
-                np.savez(sig_path,
-                         pixels_near=np.concatenate(saved_pixels_near),
-                         signals_near=concat_pad_fast(saved_signals_near),
-                         mask_ff_plus=np.concatenate(saved_mask_ff_plus),
-                         signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
+            if save_signals:
+                from pathlib import Path
+                sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/nf_signals.{ievd:02d}.npz'
+                sig_path.parent.mkdir(exist_ok=True)
+                if saved_pixels_near:
+                    np.savez(sig_path,
+                            pixels_near=np.concatenate(saved_pixels_near),
+                            signals_near=concat_pad_fast(saved_signals_near),
+                            mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                            signals_ff_plus=concat_pad_fast(saved_signals_ff_plus))
 
             # ~~~ Far-field-only induction pixels (not processed above) ~~~
             if sim.FARFIELD_ENABLED:
@@ -1631,17 +1634,18 @@ def run_simulation(input_filename,
                     offset_backtrack = cp.zeros(len(induction_pix_ids), dtype=cp.int32)
                     pixels_tracks_signals = cp.zeros(1, dtype=cp.float32)
 
-                    from pathlib import Path
-                    sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.npz'
-                    sig_path.parent.mkdir(exist_ok=True)
-                    if saved_pixels_near:
-                        np.savez(sig_path,
-                                 pixels_near=np.concatenate(saved_pixels_near),
-                                 signals_near=concat_pad_fast(saved_signals_near),
-                                 mask_ff_plus=np.concatenate(saved_mask_ff_plus),
-                                 signals_ff_plus=concat_pad_fast(saved_signals_ff_plus),
-                                 pixels_ff_only=cp.asnumpy(induction_pix_ids),
-                                 signals_ff_only=cp.asnumpy(pixels_signals))
+                    if save_signals:
+                        from pathlib import Path
+                        sig_path = Path(output_filename).parent / f'{Path(output_filename).name}_signals/signals.{ievd:02d}.npz'
+                        sig_path.parent.mkdir(exist_ok=True)
+                        if saved_pixels_near:
+                            np.savez(sig_path,
+                                    pixels_near=np.concatenate(saved_pixels_near),
+                                    signals_near=concat_pad_fast(saved_signals_near),
+                                    mask_ff_plus=np.concatenate(saved_mask_ff_plus),
+                                    signals_ff_plus=concat_pad_fast(saved_signals_ff_plus),
+                                    pixels_ff_only=cp.asnumpy(induction_pix_ids),
+                                    signals_ff_only=cp.asnumpy(pixels_signals))
 
                     digitize_and_update(unique_eventIDs=unique_eventIDs,
                                         unique_pix=induction_pix_ids,
