@@ -1259,7 +1259,7 @@ def run_simulation(input_filename,
 
             all_active_pixels = cp.full((all_selected_tracks.shape[0], all_max_pixels[0]), -1, dtype=np.int32)
             all_neighboring_pixels = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
-            all_neighboring_radius = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.int32)
+            all_neighboring_radius = cp.full((all_selected_tracks.shape[0], all_max_neighboring_pixels), -1, dtype=np.float32)
             all_n_pixels_list = cp.zeros(shape=(all_selected_tracks.shape[0]))
 
             if not all_active_pixels.shape[1] or not all_neighboring_pixels.shape[1]:
