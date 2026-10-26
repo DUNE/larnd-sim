@@ -483,16 +483,25 @@ def load_response(response_file):
     # shape it to be consistent with detector drift length
     # by either pad or chop the values at the beginning (the side further away from the cathode)
     f_res = cp.load(response_file)
-    response = f_res['response']
-    res_drift_length = float(f_res['drift_length'])
-    drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
+    # res_drift_length = float(f_res['drift_length'])
+    # drift_ticks_diff = round((res_drift_length - DRIFT_LENGTH) / V_DRIFT / RESPONSE_SAMPLING) # time difference of the response file vs. the TPC in terms of response time ticks
+
+    res0 = f_res['response']
+    res0_nticks = res0.shape[2]
+    i_last = np.where(res0[0, 0, :] != 0)[0][-1]
+    n_end_zeros = (res0_nticks - 1) - i_last
+    response = res0[:, :, :-n_end_zeros]
+    res_nticks = response.shape[2]
+
+    exp_nticks = int(DRIFT_LENGTH / V_DRIFT / RESPONSE_SAMPLING)
+    drift_ticks_diff = res_nticks - exp_nticks
 
     if drift_ticks_diff > 0: # response is too long, chop
         response = response[:, :, drift_ticks_diff:]
-        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drift_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
+        # warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses drift_length of {res_drift_length} cm; The response drift_length is too long, chop {drift_ticks_diff} values at the beginning (close to the readout).')
     elif drift_ticks_diff < 0: # response is too short, pad
         response = cp.pad(response, ((0, 0), (0, 0), (abs(drift_ticks_diff), 0)))
-        warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses a drift_length of {res_drift_length} cm; The response drift_length is too short, pad {abs(drift_ticks_diff)} 0s at the beginning (close to the readout).')
+        # warnings.warn(f'The TPC drift_length is {DRIFT_LENGTH} cm and the charge response simulation uses a drift_length of {res_drift_length} cm; The response drift_length is too short, pad {abs(drift_ticks_diff)} 0s at the beginning (close to the readout).')
 
     RESPONSE_MAX_TIME = float(cp.max(cp.nonzero(response)[2]) * RESPONSE_SAMPLING) # axis 0,1 are pixel plane bins, and axis 2 is the time axis
 
