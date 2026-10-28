@@ -105,7 +105,7 @@ ndlar_mpvmpr_ffe:
     SIM_PROPERTIES: singles_sim_ndlar_ffe.yaml
     FARFIELD_PROPERTIES: ff_ndlar.yaml
     RESPONSE: [/dvs_ro/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_ndlar_basedOnFSDCube250Vcm_9x9pixel_500Vcm.npz]
-    LIGHT_LUT: /dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm_fp16.npz
+    LIGHT_LUT: [/dvs_ro/cfs/cdirs/dune/www/data/2x2/simulation/larndsim_data/light_LUT/lightLUT_FSD_250123_time_norm_fp16.npz]
     LIGHT_SIMULATED: True
 
 ndlar_light_lut_fp16:
