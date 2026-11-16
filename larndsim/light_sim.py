@@ -673,7 +673,7 @@ def zero_suppress_waveform_truth(waveforms_true_track_id, waveforms_true_photons
     idx0, idx1, idx2, idx3 = np.nonzero(waveforms_true_track_id != -1)
     num_idx = len(idx0) # Total number of non-default entries
 
-    truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i4'), ('segment_id','i8'), ('pe_current','f8')])
+    truth_dtype = np.dtype([('trigger_id', 'i4'), ('op_channel_id','i4'), ('tick','i4'), ('event_id','i8'), ('segment_id','i8'), ('pe_current','f8')])
     truth_data = np.empty(num_idx, dtype=truth_dtype)
 
     truth_data['trigger_id'] = i_trig + idx0
