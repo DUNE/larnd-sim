@@ -91,6 +91,12 @@ ndlar: &ndlarmain
     LIGHT_DET_NOISE: 4Mod_LNoise_Mod1_2fftx192_MR5-ish.npy
     LIGHT_SIMULATED: False
     MOD2MOD_VARIATION: True
+
+ndlar_ffe: &ndlar_ffe
+    <<: *ndlarmain
+    SIM_PROPERTIES: NDLAr_LBNF_sim_ffe.yaml
+    FARFIELD_PROPERTIES: ff_ndlar.yaml
+    RESPONSE: [/dvs_ro/cfs/projectdirs/dune/www/data/2x2/simulation/larndsim_data/pixel_response/response_ndlar_basedOnFSDCube250Vcm_9x9pixel_500Vcm.npz]
     
 ndlar_mpvmpr:
     <<: *ndlarmain
