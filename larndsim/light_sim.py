@@ -97,9 +97,19 @@ def sum_light_signals(segments, segment_voxel, segment_track_id, light_inc, op_c
                     if light.ENABLE_LUT_SMEARING:
                         time_profile = lut[voxel[0],voxel[1],voxel[2],idet_lut]['time_dist'] # normalised
 
+                        # Narrow iprof to bins that can fall in (start_tick_time, end_tick_time),
+                        # padded by +/-1 bin so float rounding cannot clip an edge bin.
+                        prof_bin = units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                        iprof_lo = int(floor((start_tick_time - track_time) / prof_bin)) - 1
+                        iprof_hi = int(ceil((end_tick_time - track_time) / prof_bin)) + 1
+                        if iprof_lo < 0:
+                            iprof_lo = 0
+                        if iprof_hi > time_profile.shape[0]:
+                            iprof_hi = time_profile.shape[0]
+
                         # add photons to time tick
-                        for iprof in range(time_profile.shape[0]):
-                            profile_time = track_time + iprof * units.ns / units.mus # FIXME: assumes light LUT time profile bins are 1ns (might not be true in general)
+                        for iprof in range(iprof_lo, iprof_hi):
+                            profile_time = track_time + iprof * prof_bin
                             if profile_time < end_tick_time and profile_time > start_tick_time:
                                 photons = light_inc['n_photons_det'][itrk,op_channel[idet]] * float32(time_profile[iprof]) / light.LIGHT_TICK_SIZE
                                 light_sample_inc[idet,itick] += photons
