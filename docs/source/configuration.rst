@@ -142,3 +142,24 @@ The named keyword configurations (``module0``, ``2x2``, …) are defined in
 ``larndsim/config/config.yaml``.  Each entry maps a keyword to a complete
 set of the file paths described above.  You can add custom entries to this
 file or override individual fields via the command-line interface.
+
+Detector systematics demo
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``ndlar_birks_up_demo`` and ``ndlar_birks_custom_demo`` presets demonstrate
+a run-wide Birks A_b variation.
+The ``ndlar_birks_down_efield_up_demo`` preset combines Birks A_b down with
+electric field up by 2%, recalculating drift velocity and maximum drift time.
+The field shift is applied relative to each module's nominal field.
+They use ``DETECTOR_SYSTEMATICS`` and a detector-specific uncertainty registry
+in ``larndsim/config/systematics.yaml``. The same resolver supports temperature,
+electron lifetime, longitudinal/transverse diffusion, Birks coefficients,
+ionisation work function, Box coefficients and recombination-model selection.
+Only field and Birks A_b uncertainties are supplied in the example registry.
+Nominal physics inputs are in ``larndsim/config/physics.yaml``; an optional
+``PHYSICS_PROPERTIES`` preset entry selects a physics override file.
+Properties are read and resolved before the setters calculate derived quantities.
+The driver then centrally refreshes compiled consumers; no extra configuration
+arguments are required by the quenching or drifting kernels.
+The registered 2.5% Birks uncertainty is illustrative, not approved for production. See
+``docs/detector_systematics_proposal.md`` for the design, examples and limitations.

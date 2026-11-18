@@ -5,7 +5,6 @@ import warnings
 
 import numpy as np
 import cupy as cp
-import yaml
 
 from collections import defaultdict
 from larpix.packet import Packet_v2, Packet_v3
@@ -23,27 +22,29 @@ LARPIX_REGISTRY = {
     }
 
 from . import ff_induction, sim
+from ..config.properties import read_defaults, read_property_file
 from .units import mm, cm, mV, V, kV, e
 
 ###################
 # LArTPC drift
 ###################
 #: Detector temperature in K
-TEMPERATURE = 87.17
+_DEFAULTS = read_defaults()['detector']
+TEMPERATURE = _DEFAULTS['temperature']
 #: Liquid argon density in :math:`g/cm^3`
 LAR_DENSITY = 1.38 # g/cm^3
 #: Electric field magnitude in :math:`kV/cm`
-E_FIELD = 0.50 # kV/cm
+E_FIELD = _DEFAULTS['e_field']
 #: Drift velocity in :math:`cm/\mu s`
 V_DRIFT = 0.1596 # cm / us,
 #: Electron mobility constants
 ELECTRON_MOBILITY_PARAMS = 551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053
 #: Electron lifetime in :math:`\mu s`
-ELECTRON_LIFETIME = 2.2e3 # us,
+ELECTRON_LIFETIME = _DEFAULTS['lifetime']
 #: Longitudinal diffusion coefficient in :math:`cm^2/\mu s`
-LONG_DIFF = 4.0e-6 # cm * cm / us
+LONG_DIFF = _DEFAULTS['long_diff']
 #: Transverse diffusion coefficient in :math:`cm^2/\mu s`
-TRAN_DIFF = 8.8e-6 # cm * cm / us
+TRAN_DIFF = _DEFAULTS['tran_diff']
 
 ###################
 # TPC geometry
@@ -203,11 +204,9 @@ def get_n_modules(detprop_file):
     stores the constants as global variables
 
     Args:
-        detprop_file (str): detector properties YAML
-            filename
+        detprop_file (str or dict): detector properties YAML filename or loaded properties
     """
-    with open(detprop_file) as df:
-        detprop = yaml.load(df, Loader=yaml.FullLoader)
+    detprop = read_property_file(detprop_file)
                 
     return list(detprop['module_to_tpcs'].keys())
 
@@ -220,9 +219,8 @@ def set_multi_properties(bucket, n_mod, i_module, message=""):
         prop = float(bucket[0])
         if len(bucket) > 1:
             warnings.warn(f'Module variation seems to be not activated, but the {message} is provided as a list. Taking the first given value.')
-    elif i_module > len(bucket):
+    elif len(bucket) == 1:
         prop = float(bucket[0])
-        warnings.warn(f'Module variation seems to be activated, but the {message} is not specified per module. Taking the first given value.')
     else:
         prop = float(bucket[i_module-1])
     return prop
@@ -234,10 +232,10 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     as global variables
 
     Args:
-        detprop_file (str): detector properties YAML filename
+        detprop_file (str or dict): detector properties YAML filename or loaded properties
                             It is acceptable to provide a single value or a list with one element
                             for electric field and electron lifetime.
-        pixel_file (str): pixel layout YAML filename
+        pixel_file (str or dict): pixel layout YAML filename or loaded layout
         i_module (int): module id, default value i_module = -1.
                         i_module < 0 means all module share the same detector configuration.
     """
@@ -298,8 +296,8 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
     global DIFF_N_SIGMAS
     global NEIGHBORING_PIX_DIST
 
-    with open(detprop_file) as df:
-        detprop = yaml.load(df, Loader=yaml.FullLoader)
+    detprop = dict(_DEFAULTS)
+    detprop.update(read_property_file(detprop_file))
 
     MOD_IDS = get_n_modules(detprop_file)
 
@@ -315,8 +313,7 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             pixel_file = pixel_file[0]
         else:
             pixel_file = pixel_file[i_module-1]
-    with open(pixel_file, 'r') as pf:
-        tile_layout = yaml.load(pf, Loader=yaml.FullLoader)
+    tile_layout = read_property_file(pixel_file)
 
     PIXEL_PITCH = tile_layout['pixel_pitch'] * mm / cm
     chip_channel_to_position = tile_layout['chip_channel_to_position']
@@ -441,19 +438,19 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             PACKET_TYPE = LARPIX_REGISTRY[LARPIX_VERSION]['packet_type']
             LARPIX_HDF5_VERSION = LARPIX_REGISTRY[LARPIX_VERSION]['hdf5_version']
 
-        e_field_bucket = detprop.get('e_field', E_FIELD)
+        e_field_bucket = detprop['e_field']
         E_FIELD = set_multi_properties(e_field_bucket, n_mod, i_module, message="electric field")
-        TEMPERATURE = detprop.get('temperature', TEMPERATURE)
+        TEMPERATURE = set_multi_properties(detprop['temperature'], n_mod, i_module, message="temperature")
         V_DRIFT = E_FIELD * electron_mobility(E_FIELD, TEMPERATURE)
 
         # Recalculate max drift time since v_drift was recalculated
         DRIFT_MAX_TIME = DRIFT_LENGTH / V_DRIFT
 
-        lifetime_bucket = detprop.get('lifetime', ELECTRON_LIFETIME)
+        lifetime_bucket = detprop['lifetime']
         ELECTRON_LIFETIME = set_multi_properties(lifetime_bucket, n_mod, i_module, message="electron lifetime")
 
-        LONG_DIFF = float(detprop.get('long_diff', LONG_DIFF))
-        TRAN_DIFF = float(detprop.get('tran_diff', TRAN_DIFF))
+        LONG_DIFF = set_multi_properties(detprop['long_diff'], n_mod, i_module, message="longitudinal diffusion")
+        TRAN_DIFF = set_multi_properties(detprop['tran_diff'], n_mod, i_module, message="transverse diffusion")
 
         if 'max_radius' in detprop:
             if detprop['max_radius'] != MAX_RADIUS:
@@ -475,6 +472,12 @@ def set_detector_properties(detprop_file, pixel_file, response_file=None, i_modu
             for j in range(MAX_RADIUS + 1):
                 NEIGHBORING_PIX_DIST.append(np.sqrt(i*i + j*j))
         NEIGHBORING_PIX_DIST = np.unique(np.array(NEIGHBORING_PIX_DIST, dtype=np.float32))
+
+def derived_properties():
+    """Return calculated transport quantities for output provenance."""
+    return {'V_DRIFT': V_DRIFT, 'DRIFT_LENGTH': DRIFT_LENGTH,
+            'DRIFT_MAX_TIME': DRIFT_MAX_TIME}
+
 
 def load_response(response_file):
     global RESPONSE_MAX_TIME

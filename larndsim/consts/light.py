@@ -1,12 +1,12 @@
 """
 Sets ligth-related constants
 """
-import yaml
 import numpy as np
 import os
 import numbers
 
 from . import detector
+from ..config.properties import read_property_file
 
 LIGHT_SIMULATED = True
 
@@ -69,7 +69,7 @@ def set_light_properties(detprop_file):
     and stores the light-related constants as global variables
 
     Args:
-        detprop_file (str): detector properties YAML filename
+        detprop_file (str or dict): detector properties YAML filename or loaded properties
 
     """
     global LIGHT_SIMULATED
@@ -102,8 +102,7 @@ def set_light_properties(detprop_file):
     global LIGHT_DIGIT_SAMPLE_SPACING
     global LIGHT_NBIT
 
-    with open(detprop_file) as df:
-        detprop = yaml.load(df, Loader=yaml.FullLoader)
+    detprop = read_property_file(detprop_file)
 
     try:
         LIGHT_SIMULATED = bool(detprop.get('light_simulated', LIGHT_SIMULATED))

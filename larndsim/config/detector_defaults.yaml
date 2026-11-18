@@ -1,0 +1,6 @@
+# Fallback nominal inputs, not values inherited from a previous simulation.
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
+lifetime: 2.2e+3 # us
+long_diff: 4.0e-6 # cm^2/us
+tran_diff: 8.8e-6 # cm^2/us

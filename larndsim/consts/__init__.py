@@ -1,25 +1,29 @@
-"""
-Set global variables with detector and physics properties
-"""
-from . import detector, light, sim, ff_induction
+"""Install effective properties and calculate dependent detector state."""
 
-def load_properties(detprop_file, pixel_file, response_file, sim_file, farfield_file=None):
-    """
-    The function loads the detector properties,
-    the pixel geometry, and the simulation YAML files
-    and stores the constants as global variables
+from . import detector, light, sim, ff_induction, physics
+from ..config.properties import read_properties, resolve_properties
 
-    Args:
-        detprop_file (str): detector properties YAML filename
-        pixel_file (str): pixel layout YAML filename
-        response_file (str): pixel response filename
-        sim_file (str): simulation properties YAML filename
-        farfield_file (str, optional): far-field induction properties YAML filename
+
+def set_properties(properties, pixel_file, response_file, i_module=-1):
+    """Install resolved inputs. No systematics are interpreted here."""
+    physics.set_physics_properties(properties['physics'])
+    detector.set_detector_properties(
+        properties['detector'], pixel_file, response_file, i_module=i_module)
+    light.set_light_properties(properties['detector'])
+    return {'detector': detector.derived_properties()}
+
+
+def load_properties(detprop_file, pixel_file, response_file, sim_file, farfield_file=None,
+                    systematics_config=None, i_module=-1, physics_file=None):
+    """Compatibility entry point: read, resolve, then install properties.
+
+    Callers must prepare simulation consumers after loading and before launching
+    compiled functions. The CLI does this through prepare_simulation().
     """
-    sim.set_simulation_properties(sim_file) # must be first!
+    nominal = read_properties(detprop_file, physics_file)
+    effective, metadata = resolve_properties(nominal, systematics_config, i_module)
+    sim.set_simulation_properties(sim_file)  # Must precede detector setup.
     if farfield_file:
         ff_induction.set_ff_induction_properties(farfield_file)
-
-    detector.set_detector_properties(detprop_file, pixel_file, response_file)
-    light.set_light_properties(detprop_file)
-
+    set_properties(effective, pixel_file, response_file, i_module)
+    return metadata

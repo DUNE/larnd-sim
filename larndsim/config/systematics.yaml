@@ -1,0 +1,73 @@
+# Independent inputs only. Derived values such as V_DRIFT are not overrides.
+parameters:
+    detector.E_FIELD:
+        section: detector
+        key: e_field
+        units: kV/cm
+        minimum_exclusive: 0
+        per_module: true
+    detector.TEMPERATURE:
+        section: detector
+        key: temperature
+        units: K
+        minimum_exclusive: 0
+        per_module: true
+    detector.ELECTRON_LIFETIME:
+        section: detector
+        key: lifetime
+        units: us
+        minimum_exclusive: 0
+        per_module: true
+    detector.LONG_DIFF:
+        section: detector
+        key: long_diff
+        units: cm^2/us
+        minimum: 0
+        per_module: true
+    detector.TRAN_DIFF:
+        section: detector
+        key: tran_diff
+        units: cm^2/us
+        minimum: 0
+        per_module: true
+    physics.BIRKS_Ab:
+        section: physics
+        key: BIRKS_Ab
+        units: dimensionless
+        minimum_exclusive: 0
+        maximum: 1
+    physics.BIRKS_kb:
+        section: physics
+        key: BIRKS_kb
+        units: (kV/cm)(g/cm^2)/MeV
+        minimum_exclusive: 0
+    physics.W_ION:
+        section: physics
+        key: W_ION
+        units: MeV
+        minimum_exclusive: 0
+    physics.BOX_ALPHA:
+        section: physics
+        key: BOX_ALPHA
+        units: dimensionless
+        minimum_exclusive: 0
+    physics.BOX_BETA:
+        section: physics
+        key: BOX_BETA
+        units: (kV/cm)(g/cm^2)/MeV
+        minimum_exclusive: 0
+    physics.RECOMBINATION_MODEL:
+        section: physics
+        key: RECOMBINATION_MODEL
+        units: model
+        choices: [birks, box]
+
+profiles:
+    ndlar:
+        detector.E_FIELD:
+            relative_uncertainty: 0.02
+            description: +/-2% electric field uncertainty supplied for this demo.
+        physics.BIRKS_Ab:
+            relative_uncertainty: 0.025
+            demonstration: true
+            description: Illustrative +/-2.5% only; requires physics approval before production.

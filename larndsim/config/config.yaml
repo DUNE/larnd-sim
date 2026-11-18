@@ -96,6 +96,26 @@ ndlar_mpvmpr:
     <<: *ndlarmain
     SIM_PROPERTIES: singles_sim_ndlar.yaml
     
+# Demonstration presets
+ndlar_birks_up_demo:
+    <<: *ndlarmain
+    SYSTEMATICS_PROFILE: ndlar
+    DETECTOR_SYSTEMATICS:
+        physics.BIRKS_Ab: up
+
+ndlar_birks_down_efield_up_demo:
+    <<: *ndlarmain
+    SYSTEMATICS_PROFILE: ndlar
+    DETECTOR_SYSTEMATICS:
+        physics.BIRKS_Ab: down
+        detector.E_FIELD: up
+
+ndlar_birks_custom_demo:
+    <<: *ndlarmain
+    DETECTOR_SYSTEMATICS:
+        physics.BIRKS_Ab:
+            value: 0.780
+
 ndlar_light:
     <<: *ndlarmain
     LIGHT_SIMULATED: True

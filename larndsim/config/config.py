@@ -13,6 +13,7 @@ CONFIG_DIR = dict(
     SIM_PROPERTIES=f'{MODULE_DIR}/simulation_properties/',
     PIXEL_LAYOUT=f'{MODULE_DIR}/pixel_layouts/',
     DET_PROPERTIES=f'{MODULE_DIR}/detector_properties/',
+    PHYSICS_PROPERTIES=f'{MODULE_DIR}/config/',
     FARFIELD_PROPERTIES=f'{MODULE_DIR}/farfield_properties',
     RESPONSE=f'{MODULE_DIR}/bin',
     LIGHT_LUT=f'{MODULE_DIR}/bin',
@@ -32,7 +33,7 @@ def test_configs():
     for cfg_name,cfg_map in CONFIG_MAP.items():
 
         for key in CONFIG_DIR.keys():
-            if key in ['PIXEL_THRESHOLDS_FILE','PIXEL_PEDESTALS_FILE', 'FARFIELD_PROPERTIES']:
+            if key in ['PIXEL_THRESHOLDS_FILE','PIXEL_PEDESTALS_FILE', 'FARFIELD_PROPERTIES', 'PHYSICS_PROPERTIES']:
                 # Don't throw an error for optional keys
                 continue
             if not key in cfg_map.keys():
@@ -57,7 +58,7 @@ def get_config(keyname):
 
     for key in cfg_map.keys():
         if key not in CONFIG_DIR.keys():
-            res[key] = cfg_map[key]
+            res[key] = copy.deepcopy(cfg_map[key])
         else:
             if isinstance(cfg_map[key], str):
                 if cfg_map[key] == "None":

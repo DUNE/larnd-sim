@@ -7,6 +7,7 @@ from time import time
 import warnings
 from collections import defaultdict
 import os
+import json
 from typing import Any, Optional
 
 import numpy as np
@@ -38,10 +39,10 @@ from tqdm import tqdm
 from larndsim import _version
 from larndsim import consts
 from larndsim import active_volume, quenching, drifting, detsim, pixels_from_track, fee, lightLUT, light_sim
-import importlib
 
 from larndsim.util import CudaDict, batching, memory_logger
-from larndsim.config import get_config
+from larndsim.config import get_config, read_properties, read_property_file, resolve_properties
+from larndsim.config.runtime import prepare_simulation
 from larndsim.far_field import voxelization, signal_calculation, pixel_classifier
 from larndsim.consts import ff_induction
 
@@ -446,6 +447,7 @@ def run_simulation(input_filename,
 
     # Set the input (meta data) files
     cfg = get_config(config)
+    property_metadata = {}
     if mod2mod_variation is None:
         try:
             mod2mod_variation = cfg['MOD2MOD_VARIATION']
@@ -564,7 +566,8 @@ def run_simulation(input_filename,
         print('Memory resource log will not be recorded')
 
     # Get number of modules in the simulation
-    mod_ids = consts.detector.get_n_modules(detector_properties)
+    nominal_properties = read_properties(detector_properties, cfg.get('PHYSICS_PROPERTIES'))
+    mod_ids = consts.detector.get_n_modules(nominal_properties['detector'])
     n_modules = len(mod_ids)
 
     if mod2mod_variation is True:
@@ -603,6 +606,14 @@ def run_simulation(input_filename,
     RangePop()
 
     RangePush("load_properties")
+    layouts = {
+        filename: read_property_file(filename)
+        for filename in (pixel_layout if isinstance(pixel_layout, list) else [pixel_layout])
+    }
+    cp.cuda.Device().synchronize()
+    consts.sim.set_simulation_properties(simulation_properties)
+    if farfield_properties:
+        consts.ff_induction.set_ff_induction_properties(farfield_properties)
 
     # if n_modules == 1, mod2mod_variation would have already been set to False
     if not mod2mod_variation:
@@ -639,7 +650,9 @@ def run_simulation(input_filename,
             light_lut_filename = light_lut_filename[0]
 
         RangePush("load_detector_properties")
-        consts.load_properties(detector_properties, pixel_layout, response_file, simulation_properties, farfield_properties)
+        effective_properties, metadata = resolve_properties(nominal_properties, cfg)
+        derived = consts.set_properties(effective_properties, layouts[pixel_layout], response_file)
+        property_metadata['all_modules'] = dict(parameters=metadata, derived=derived)
         from larndsim.consts import light, detector, physics, sim
         RangePop()
 
@@ -668,22 +681,16 @@ def run_simulation(input_filename,
             pixel_pedestals_lut = CudaDict.load(pixel_pedestals_file, 512)
         RangePop()
     else:
-        consts.light.set_light_properties(detector_properties)
-        consts.sim.set_simulation_properties(simulation_properties)
-        if farfield_properties:
-            consts.ff_induction.set_ff_induction_properties(farfield_properties)
-        from larndsim.consts import light, physics, sim
+        effective_properties, metadata = resolve_properties(
+            nominal_properties, cfg, i_module=mod_ids[0])
+        consts.set_properties(effective_properties, layouts[pixel_layout[0]],
+                              response_file[0], i_module=mod_ids[0])
+        from larndsim.consts import light, detector, physics, sim
 
     # set the value for the global variable MOD2MOD_VARIATION
     sim.MOD2MOD_VARIATION = mod2mod_variation
 
-    # reload after the variables been defined (has been loaded for the first time at the top)
-    importlib.reload(pixels_from_track)
-    importlib.reload(active_volume)
-    importlib.reload(detsim)
-    importlib.reload(light_sim)
-    importlib.reload(lightLUT)
-    importlib.reload(fee)
+    prepare_simulation()
 
     if sim.FARFIELD_ENABLED:
         print("Far-field mode:", ff_induction.FARFIELD_MODE)
@@ -909,7 +916,8 @@ def run_simulation(input_filename,
     # If mod2mod variation, we load detector properties to get detector.TPC_BORDERS
     # For this purpose, it doesn't matter which pixel_layout to use
     if mod2mod_variation:
-        consts.detector.set_detector_properties(detector_properties, pixel_layout[0], geo_only=True)
+        consts.detector.set_detector_properties(
+            nominal_properties['detector'], layouts[pixel_layout[0]], geo_only=True)
         from larndsim.consts import detector
 
     # Sub-select segments in active volumes and that's not too "late"
@@ -938,23 +946,19 @@ def run_simulation(input_filename,
     for i_mod in mod_ids:
         if mod2mod_variation:
             print(f'Simulating module {i_mod-1}')
-            consts.detector.set_detector_properties(detector_properties, pixel_layout, response_file[i_mod-1], i_mod)
-            # Currently shouldn't be necessary to reload light props, but if
-            # someone later updates `set_light_properties` to use stuff from the
-            # `consts.detector` module, we'll be glad for this line:
-            consts.light.set_light_properties(detector_properties)
+            cp.cuda.Device().synchronize()
+            effective_properties, metadata = resolve_properties(
+                nominal_properties, cfg, i_module=i_mod)
+            derived = consts.set_properties(
+                effective_properties, layouts[pixel_layout[i_mod-1]],
+                response_file[i_mod-1], i_module=i_mod)
+            property_metadata[str(i_mod)] = dict(parameters=metadata, derived=derived)
             from larndsim.consts import detector
-            # reload after the variables been defined/updated; first imported at the top
-            importlib.reload(pixels_from_track)
-            importlib.reload(active_volume)
-            importlib.reload(detsim)
-            importlib.reload(light_sim)
-            importlib.reload(lightLUT)
-            importlib.reload(fee)
 
             RangePush("load_module_induction_response")
             response = consts.detector.load_response(response_file[i_mod-1])
             RangePop()
+            prepare_simulation()
 
             RangePush("load_pixel_thresholds")
             pixel_thresholds_lut = None
@@ -994,11 +998,15 @@ def run_simulation(input_filename,
         RangePush("quench_electrons")
         # We calculate the number of electrons after recombination (quenching module)
         # and the position and number of electrons after drifting (drifting module)
+        if cfg.get('DETECTOR_SYSTEMATICS'):
+            print("Effective properties:", json.dumps(
+                property_metadata[str(i_mod) if mod2mod_variation else 'all_modules'],
+                sort_keys=True))
         print("Quenching electrons..." , end="")
         logger.start()
         logger.take_snapshot()
         start_quenching = time()
-        quenching.quench[BPG,TPB](tracks, physics.BIRKS)
+        quenching.quench[BPG,TPB](tracks, physics.recombination_mode())
         end_quenching = time()
         logger.take_snapshot()
         logger.archive(f'quenching_mod{i_mod}')
@@ -1792,6 +1800,11 @@ def run_simulation(input_filename,
             output_file.create_dataset("mc_stack", data=mc_stack, compression=compression)
 
     with h5py.File(output_filename, 'a') as output_file:
+        if 'configs' not in output_file:
+            output_file.create_group('configs')
+        output_file['configs'].attrs['detector_systematics'] = json.dumps(
+            {'schema_version': 1, 'modules': property_metadata},
+            sort_keys=True)
         if 'configs' in output_file.keys():
             output_file['configs'].attrs['pixel_layout'] = pixel_layout
 

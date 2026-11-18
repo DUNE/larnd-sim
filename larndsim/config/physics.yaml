@@ -1,0 +1,7 @@
+# Nominal recombination and ionisation inputs. Original central values retained.
+BOX_ALPHA: 0.93
+BOX_BETA: 0.207 # (kV/cm)(g/cm^2)/MeV
+BIRKS_Ab: 0.800
+BIRKS_kb: 0.0486 # (kV/cm)(g/cm^2)/MeV
+W_ION: 23.6e-6 # MeV
+RECOMBINATION_MODEL: birks
